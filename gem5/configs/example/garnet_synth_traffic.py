@@ -111,6 +111,13 @@ if options.inj_vnet > 2:
           "or 2 (5-flit) or -1 (random)" % (options.inj_vnet))
     sys.exit(1)
 # file initialization
+if not(os.path.exists("../run_info")): 
+      os.system("mkdir ../run_info")
+if not(os.path.exists("../run_info/node_recv")): 
+      os.system("mkdir ../run_info/node_recv")
+if not(os.path.exists("../run_info/cur_pic_num")): 
+      os.system("mkdir ../run_info/cur_pic_num")
+      
 node_recv_path = "../run_info/node_recv/"
 node_cur_pic_path = "../run_info/cur_pic_num/"
 
