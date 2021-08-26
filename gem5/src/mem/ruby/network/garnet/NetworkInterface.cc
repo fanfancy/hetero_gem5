@@ -35,6 +35,8 @@
 #include <cassert>
 #include <cmath>
 
+#include<fstream>
+#include<iostream>
 #include "base/cast.hh"
 #include "debug/RubyNetwork.hh"
 #include "mem/ruby/network/MessageBuffer.hh"
@@ -51,7 +53,22 @@ NetworkInterface::NetworkInterface(const Params *p)
     m_deadlock_threshold(p->garnet_deadlock_threshold),
     vc_busy_counter(m_virtual_networks, 0)
 {
-    std::cout<<"fanxi in ni.cc, a ni is newed"<<std::endl;
+    num_recv_packet = 0;   
+    // read the network config and update num_cpus
+    std::string file;
+	file = "./current_NoC_Configs.txt";
+	ifstream infile; 
+    infile.open(file.data());  
+    assert(infile.is_open());   
+
+    string s_num_cpus,s_if_debug;
+    getline(infile,s_num_cpus);
+    getline(infile,s_if_debug);
+
+    infile.close();             //关闭文件输入流 
+    num_cpus=atoi(s_num_cpus.c_str());
+    if_debug=atoi(s_if_debug.c_str());
+    
     m_stall_count.resize(m_virtual_networks);
     niOutVcs.resize(0);
 }
@@ -180,11 +197,20 @@ NetworkInterface::incrementStats(flit *t_flit)
  * into the protocol buffer. It also checks for credits being sent by the
  * downstream router.
  */
+void NetworkInterface::update_recv_packets(int id,int num_recv_packet)
+{
+	std::string file;
+	file = "./../run_info/node_recv/"+std::to_string(id)+".txt";
+	ofstream OutFile(file);
+	OutFile << std::to_string(num_recv_packet); 
+    if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets ing, id= " << id <<" packets="<<num_recv_packet<<std::endl;
+	OutFile.close();        
+}
+
 
 void
 NetworkInterface::wakeup()
 {
-    std::cout << "fanxiadded ni wake up ing !" << std::endl;
     std::ostringstream oss;
     for (auto &oPort: outPorts) {
         oss << oPort->routerID() << "[" << oPort->printVnets() << "] ";
@@ -248,7 +274,11 @@ NetworkInterface::wakeup()
                     iPort->sendCredit(cFlit);
                     // Update stats and delete flit pointer
                     incrementStats(t_flit);
-                    std::cout << "fanxiadded ni recv a packet!" << std::endl;
+                    num_recv_packet ++;
+                    if (if_debug==1) std::cout <<  "NI = "  << m_id << " num_recv_packet = " << num_recv_packet << std::endl;
+                    // # received packets ++ here
+				    update_recv_packets(m_id-num_cpus, num_recv_packet); 
+                    
                     delete t_flit;
                 } else {
                     // No space available- Place tail flit in stall queue and

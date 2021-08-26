@@ -52,6 +52,8 @@ class flitBuffer;
 class NetworkInterface : public ClockedObject, public Consumer
 {
   public:
+    int num_cpus;
+    int if_debug;
     typedef GarnetNetworkInterfaceParams Params;
     NetworkInterface(const Params *p);
     ~NetworkInterface() = default;
@@ -62,6 +64,7 @@ class NetworkInterface : public ClockedObject, public Consumer
 
     void dequeueCallback();
     void wakeup();
+    void update_recv_packets(int id,int num_recv_packet);
     void addNode(std::vector<MessageBuffer *> &inNode,
                  std::vector<MessageBuffer *> &outNode);
 
@@ -70,6 +73,7 @@ class NetworkInterface : public ClockedObject, public Consumer
     void init_net_ptr(GarnetNetwork *net_ptr) { m_net_ptr = net_ptr; }
 
     uint32_t functionalWrite(Packet *);
+    int num_recv_packet;
 
     void scheduleFlit(flit *t_flit);
 
