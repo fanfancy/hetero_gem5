@@ -33,17 +33,43 @@
 #include <set>
 #include <string>
 #include <vector>
-
+#include <iostream>
+#include <fstream>
+#include <cassert>
+#include <sstream>  
 #include "base/logging.hh"
 #include "base/random.hh"
 #include "base/statistics.hh"
 #include "debug/GarnetSyntheticTraffic.hh"
+#include "mem/mem_object.hh"
 #include "mem/packet.hh"
 #include "mem/port.hh"
 #include "mem/request.hh"
 #include "sim/sim_events.hh"
 #include "sim/stats.hh"
 #include "sim/system.hh"
+#include <unistd.h>
+
+// CPU satus
+# define IDLE               (int(0))
+# define WORKIING           (int(1)) 
+# define FINISH             (int(2)) 
+// CPU working status
+# define WORK_WAIT          (int(3))
+# define WORK_CAL           (int(4))
+# define WORK_SEND          (int(5))
+# define WORK_IDLE          (int(6))
+# define WORK_WAIT_CMD      (int(7))
+
+std::string all_status[8] =
+{   "IDLE",
+    "WORK",
+    "FINISH",
+    "WORK_WAIT",
+    "WORK_CAL",
+    "WORK_SEND",
+    "WORK_IDLE",
+    "WORK_WAIT_CMD" };
 
 using namespace std;
 
@@ -88,6 +114,8 @@ GarnetSyntheticTraffic::GarnetSyntheticTraffic(const Params *p)
       trafficType(p->traffic_type),
       injRate(p->inj_rate),
       injVnet(p->inj_vnet),
+      if_debug(p->if_debug),
+      dnn_task(p->dnn_task),
       precision(p->precision),
       responseLimit(p->response_limit),
       requestorId(p->system->getRequestorId(this))
@@ -116,10 +144,36 @@ GarnetSyntheticTraffic::getPort(const std::string &if_name, PortID idx)
         return ClockedObject::getPort(if_name, idx);
 }
 
+void init_recv_packet_files(int id){
+    std::string file;
+	file = "./../recv/"+std::to_string(id)+".txt";
+	ofstream OutFile(file);
+	OutFile << std::to_string(0); 
+    OutFile.close();    
+}
 void
 GarnetSyntheticTraffic::init()
 {
+    cpu_status = IDLE;
+    cpu_work_stats = WORK_IDLE;
     numPacketsSent = 0;
+    current_line_num = 0;
+    cur_pic = 0;
+    num_recv_cmd_packet = 0;
+    init_recv_packet_files(id);
+    time_cal = 0;
+    time_wait = 0;
+    time_wait_cmd = 0;
+    time_send = 0;
+    total_packet_recv_previous = 0;
+
+    // get current working path 
+    char cwd[100];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+       std::cout <<"Current working dir:  "<< cwd << std::endl;
+    } else {
+       std::cout << "getcwd() error" << std::endl;
+    }
 }
 
 
@@ -137,9 +191,269 @@ GarnetSyntheticTraffic::completeRequest(PacketPtr pkt)
 }
 
 
+int GarnetSyntheticTraffic::recv_packets(int id)
+{
+	std::string file;
+	file = "./../run_info/node_recv/"+std::to_string(id)+".txt";
+	ifstream infile; 
+    infile.open(file.data());  
+    assert(infile.is_open());   
+
+    string s;
+    while(getline(infile,s))
+    {
+        if(if_debug==1) 
+            std::cout<<"node " << id <<" is recv_packets ing, packets="<< s <<std::endl;
+    }
+    infile.close();             //关闭文件输入流 
+    return atoi(s.c_str());
+}
+
+
+int GarnetSyntheticTraffic::check_downstream(int id)
+{
+	std::string file;
+	file = "./../run_info/cur_pic_num/"+std::to_string(id)+".txt";
+	ifstream infile; 
+    infile.open(file.data());  
+    assert(infile.is_open());   
+
+    string s;
+    while(getline(infile,s))
+    {
+        if(if_debug==1) 
+            std::cout<<"node " << id <<" is checked pic id ="<< s <<std::endl;
+    }
+    infile.close();             //关闭文件输入流 
+    return atoi(s.c_str());
+}
+
+
+void GarnetSyntheticTraffic::update_cur_pic(int id, int cur_pic_id)
+{
+    std::string file;
+	file = "./../run_info/cur_pic_num/"+std::to_string(id)+".txt";
+    ofstream OutFile(file);
+	OutFile << std::to_string(cur_pic_id); 
+    OutFile.close();   
+}
+
+// 1代表读到task 0 代表没有读到，文件结束
+int GarnetSyntheticTraffic::get_task(int id,int line_num)
+{
+	std::string file;
+	file = "./../dnn_task/"+dnn_task+"/"+std::to_string(id)+".txt";
+	ifstream infile; 
+    infile.open(file.data());  
+    assert(infile.is_open());   
+
+    int read_line_num=0;
+    while(getline(infile,current_task_line))
+    {
+        if (read_line_num == line_num){
+            break;
+        }
+        read_line_num += 1;
+    }
+    infile.close();             //关闭文件输入流 
+    if (read_line_num < line_num || current_task_line == ""){ //文件最后会有个空行
+        return 0;
+    }
+    else {
+        if (if_debug==1) std::cout<<"node " << id <<" start do linenum = " <<line_num << " the task = "<< current_task_line << " @ " << curTick() <<std::endl;
+        return 1;   
+    }
+
+}
+
+vector<string> split(const string &str, const string &pattern)
+{
+    vector<string> res;
+    if(str == "")
+        return res;
+    //在字符串末尾也加入分隔符，方便截取最后一段
+    string strs = str + pattern;
+    size_t pos = strs.find(pattern);
+
+    while(pos != strs.npos)
+    {
+        string temp = strs.substr(0, pos);
+        res.push_back(temp);
+        //去掉已分割的字符串,在剩下的字符串中进行分割
+        strs = strs.substr(pos+1, strs.size());
+        pos = strs.find(pattern);
+    }
+
+    return res;
+}
+
+// current not used 
+void GarnetSyntheticTraffic::tell_mem_send_data(std::string src_mem_index,std::string num_wait_packets,int id) 
+{
+	std::string file;
+	file = "./../dnn_task/"+dnn_task+"/"+src_mem_index+".txt";
+    fstream f;
+
+    std::string message_to_write = "send ";
+    message_to_write.append(std::to_string(id));
+    message_to_write.append(" ");
+    message_to_write.append(num_wait_packets);
+    //追加写入,在原来基础上加了ios::app 
+	f.open(file,ios::out|ios::app);
+    f<<message_to_write<<endl; 
+    f.close(); 
+    if(if_debug==1) std::cout<<"node "<< id << "is tell_mem_send_data ing" <<  std::endl;
+}
+
+
+
 void
 GarnetSyntheticTraffic::tick()
 {
+    bool sendAllowedThisCycle = false;
+    if (traffic == DNN_) {
+        if(if_debug==1) std::cout << "node "<<id<<"\tstatus: " << all_status[cpu_status] \
+                                  << "\twork_stats: " << all_status[cpu_work_stats] \
+                                  << "\tline_num:"<< current_line_num << "\t@"<< curTick() << std::endl;
+
+        int if_get_task;
+
+        // idle status : read task file
+        if (cpu_status == IDLE){
+            if_get_task = get_task(id, current_line_num);
+
+
+            if (if_get_task == 0){
+                cpu_status = IDLE;
+            }
+
+            else{// 解析task_line
+                current_line_num += 1;
+                vector<string>  current_task;
+                current_task  = split(current_task_line," ");
+
+                if (current_task[0] == "wait"){
+                    if(if_debug==1) std::cout << "node " << id  << "current_task == wait" << num_packet_wait <<  std::endl;
+                    cpu_status = WORKIING;
+                    cpu_work_stats = WORK_WAIT;
+                    num_packet_wait = atoi(current_task[1].c_str());
+                    std::string str_num_wait_packets = current_task[1];
+                    // std::string str_src_mem_index = current_task[2];
+                    // tell_mem_send_data(str_src_mem_index,  str_num_wait_packets,  id);
+                }
+                else if (current_task[0] == "cal"){
+                    if(if_debug==1) std::cout << "node " << id  << " current_task == cal" << std::endl;
+                    cpu_status = WORKIING;
+                    cpu_work_stats = WORK_CAL;
+
+                    stringstream stream;            //声明一个stringstream变量
+                    stream << current_task[1];      //向stream中插入字符串"1234"
+                    stream >> cal_cycles;           // 初始化cal_cycles 
+                    cycles_caled = 0;
+                }
+                else if (current_task[0] == "send"){
+                    if(if_debug==1) std::cout << "node " << id << " current_task == send" << std::endl;
+                    cpu_status = WORKIING;
+                    cpu_work_stats = WORK_SEND;
+                    packets_to_send = atoi(current_task[2].c_str());
+                    send_dst = atoi(current_task[1].c_str());
+                    packets_sent = 0;
+                }
+                else if (current_task[0] == "wait_cmd"){
+                    if(if_debug==1) std::cout << "node " << id << " current_task == wait_cmd" << std::endl;
+                    cpu_status = WORKIING;
+                    cpu_work_stats = WORK_WAIT_CMD;
+                    downstream_id = atoi(current_task[1].c_str());       
+                }
+                else if ( current_task[0] == "start_pic" ) { // 最后一行current_task[0]会多一个终结符
+                    if(if_debug==1) std::cout << "node " << id <<  " current_task == start_pic" << std::endl;
+                    cur_pic += 1;
+                    cpu_status = IDLE;
+                    cpu_work_stats = WORK_IDLE;
+                    std::cout << "cpu "<< id << " finished all " << "@ "<< curTick() << " cur_pic=" << cur_pic \
+                     << " time cal=" << time_cal << " wait=" << time_wait << " wait_cmd=" <<time_wait_cmd <<" send=" <<  time_send << std::endl;
+                    update_cur_pic(id, cur_pic);
+                    time_cal = 0;
+                    time_wait = 0;
+                    time_wait_cmd = 0;
+                    time_send = 0;
+                }
+                else if (current_task[0] == "repeat"){
+                    Repeat_Start_line = current_line_num;
+                    cpu_status = IDLE;
+                    cpu_work_stats = WORK_IDLE;
+                }
+                else if (strstr(current_task[0].c_str(), "finish") != NULL ) { // 最后一行current_task[0]会多一个终结符
+                    std::cout << "node " << id <<  " current_task == finish" << "@ "<< curTick() - time_send  \
+                      << " time cal=" << time_cal << " wait=" << time_wait << " wait_cmd=" << time_wait_cmd <<" send=" <<  time_send << "realTick =" << curTick() << std::endl;
+                    cpu_status = WORKIING;
+                    cpu_work_stats = WORK_IDLE;
+                    // current_line_num = Repeat_Start_line; // 0610修改 
+                    // cur_pic += 1;
+                    // std::cout << "cpu "<< id << " finished all " << "@ "<< curTick() << " cur_pic=" << cur_pic 
+                    //  << " time cal=" << time_cal << " wait=" << time_wait << " wait_cmd=" <<time_wait_cmd <<" send=" <<  time_send << std::endl;
+                    // update_cur_pic(id, cur_pic);
+                    // time_cal = 0;
+                    // time_wait = 0;
+                    // time_wait_cmd = 0;
+                    // time_send = 0;
+                }
+                else if (current_task[0] == "idle"){
+                    cpu_status = WORKIING;
+                    cpu_work_stats = WORK_IDLE;
+                }
+            }
+        }
+
+        // working status
+        if (cpu_status == WORKIING){
+            if (cpu_work_stats == WORK_WAIT){
+                time_wait += 1;
+                int packet_recv = recv_packets(id) - total_packet_recv_previous;
+                if (packet_recv >= num_packet_wait){
+                    cpu_work_stats = WORK_IDLE;
+                    cpu_status = IDLE;
+                    total_packet_recv_previous += packet_recv;
+                }
+                if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT"  \
+                                  << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;
+                // 否则维持wait状态
+            }
+            else if (cpu_work_stats == WORK_WAIT_CMD){
+                time_wait_cmd += 1;
+                int downstream_cur_pic = check_downstream(downstream_id);
+                assert ( downstream_cur_pic <= cur_pic );
+                if (downstream_cur_pic >= cur_pic-1){
+                    cpu_work_stats = WORK_IDLE; //继续读下一条指令
+                    cpu_status = IDLE;
+                }
+            }
+            else if (cpu_work_stats == WORK_SEND){
+                time_send+=1;
+                if (packets_sent == packets_to_send){  
+                    cpu_work_stats = WORK_IDLE;
+                    cpu_status = IDLE;
+                }
+                else {
+                    sendAllowedThisCycle = true;
+                }
+            }
+
+            else if (cpu_work_stats == WORK_CAL){
+                if(if_debug==1) std::cout << "node " << id  << " cycles_caled " << cycles_caled << " cal_cycles " << cal_cycles << "@" << curCycle() << std::endl;
+                time_cal +=1;
+                cycles_caled += 1;
+                if (cycles_caled >= cal_cycles){
+                    cpu_work_stats = WORK_IDLE;
+                    cpu_status = IDLE;
+                }
+                else {
+                    cycles_caled = cycles_caled;
+                }
+            }
+        }
+    } // end of DNN traffic
+
     if (++noResponseCycles >= responseLimit) {
         fatal("%s deadlocked at cycle %d\n", name(), curTick());
     }
@@ -148,13 +462,15 @@ GarnetSyntheticTraffic::tick()
     // (injection rate's range depends on precision)
     // - generate a random number between 0 and 10^precision
     // - send pkt if this number is < injRate*(10^precision)
-    bool sendAllowedThisCycle;
-    double injRange = pow((double) 10, (double) precision);
-    unsigned trySending = random_mt.random<unsigned>(0, (int) injRange);
-    if (trySending < injRate*injRange)
-        sendAllowedThisCycle = true;
-    else
-        sendAllowedThisCycle = false;
+
+    if (traffic != DNN_) {
+        double injRange = pow((double) 10, (double) precision);
+        unsigned trySending = random_mt.random<unsigned>(0, (int) injRange);
+        if (trySending < injRate*injRange)
+            sendAllowedThisCycle = true;
+        else
+            sendAllowedThisCycle = false;
+    }
 
     // always generatePkt unless fixedPkts or singleSender is enabled
     if (sendAllowedThisCycle) {
@@ -165,10 +481,14 @@ GarnetSyntheticTraffic::tick()
 
         if (singleSender >= 0 && id != singleSender)
             senderEnable = false;
-
-        if (senderEnable)
-            generatePkt();
-    }
+        if (senderEnable) {
+             if (traffic == DNN_) {
+                packets_sent += 1;
+                generatePkt(send_dst);
+            }
+            else generatePkt(0);    
+            }    
+        }
 
     // Schedule wakeup
     if (curTick() >= simCycles)
@@ -180,7 +500,7 @@ GarnetSyntheticTraffic::tick()
 }
 
 void
-GarnetSyntheticTraffic::generatePkt()
+GarnetSyntheticTraffic::generatePkt(int send_dst)
 {
     int num_destinations = numDestinations;
     int radix = (int) sqrt(num_destinations);
@@ -196,6 +516,9 @@ GarnetSyntheticTraffic::generatePkt()
         destination = singleDest;
     } else if (traffic == UNIFORM_RANDOM_) {
         destination = random_mt.random<unsigned>(0, num_destinations - 1);
+         while (destination == id){
+            destination = random_mt.random<unsigned>(0, num_destinations - 1); 
+        }
     } else if (traffic == BIT_COMPLEMENT_) {
         dest_x = radix - src_x - 1;
         dest_y = radix - src_y - 1;
@@ -235,6 +558,8 @@ GarnetSyntheticTraffic::generatePkt()
         dest_x = (src_x + (int) ceil(radix/2) - 1) % radix;
         dest_y = src_y;
         destination = dest_y*radix + dest_x;
+    } else if (traffic == DNN_) {
+        destination = send_dst;
     }
     else {
         fatal("Unknown Traffic Type: %s!\n", traffic);
@@ -281,12 +606,19 @@ GarnetSyntheticTraffic::generatePkt()
     // Vnet 2 is for data packets (5-flit)
     int injReqType = injVnet;
 
-    if (injReqType < 0 || injReqType > 2)
+    // 依据节点数目+src+dst确定注入的Vnet id
+
+    if (injReqType==-1) // -1 代表random(0,2),其他代表自己本身
     {
         // randomly inject in any vnet
         injReqType = random_mt.random(0, 2);
     }
+     if (injReqType==-2) // -2 代表random(2,所有vnets)
+    {
+        injReqType = random_mt.random(2, 9); //fanxitodo:传输参数进来
+    }
 
+    requestType = MemCmd::ReadReq;
     if (injReqType == 0) {
         // generate packet for virtual network 0
         requestType = MemCmd::ReadReq;
@@ -333,6 +665,7 @@ GarnetSyntheticTraffic::initTrafficType()
     trafficStringToEnum["tornado"] = TORNADO_;
     trafficStringToEnum["transpose"] = TRANSPOSE_;
     trafficStringToEnum["uniform_random"] = UNIFORM_RANDOM_;
+    trafficStringToEnum["DNN"] = DNN_;
 }
 
 void

@@ -48,12 +48,38 @@ enum TrafficType {BIT_COMPLEMENT_ = 0,
                   TORNADO_ = 5,
                   TRANSPOSE_ = 6,
                   UNIFORM_RANDOM_ = 7,
+                  DNN_ = 8,
                   NUM_TRAFFIC_PATTERNS_};
 
 class Packet;
 class GarnetSyntheticTraffic : public ClockedObject
 {
   public:
+  int cal_cycles;
+    int packets_to_send ;
+    int send_dst;
+    int send_cmd_dst;
+    int packets_sent;
+    int cpu_status;
+    int num_packet_wait;
+    int downstream_id;
+    int cycles_caled;
+    int total_packet_recv_previous;
+    int cpu_work_stats;
+    std::string current_task_line;
+    int current_line_num;
+    int Repeat_Start_line;
+    int cur_pic;
+    int num_recv_cmd_packet;
+    int get_task(int id,int line_num);
+    int check_downstream(int id);
+    void update_cur_pic(int id, int cur_pic_id);
+    void tell_mem_send_data(std::string src_mem_index,std::string num_wait_packets,int id);
+    int time_cal  ;
+    int time_wait  ;
+    int time_wait_cmd  ;
+    int time_send ;
+    
     typedef GarnetSyntheticTrafficParams Params;
     GarnetSyntheticTraffic(const Params *p);
 
@@ -126,6 +152,8 @@ class GarnetSyntheticTraffic : public ClockedObject
     TrafficType traffic; // enum from string
     double injRate;
     int injVnet;
+    int if_debug;
+    std::string dnn_task;
     int precision;
 
     const Cycles responseLimit;
@@ -133,8 +161,9 @@ class GarnetSyntheticTraffic : public ClockedObject
     RequestorID requestorId;
 
     void completeRequest(PacketPtr pkt);
+     int recv_packets(int id);
 
-    void generatePkt();
+    void generatePkt(int send_dst);
     void sendPkt(PacketPtr pkt);
     void initTrafficType();
 
