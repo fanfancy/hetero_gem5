@@ -51,7 +51,7 @@ Options.addNoISAOptions(parser)
 parser.add_option("--synthetic", type="choice", default="uniform_random",
                   choices=['uniform_random', 'tornado', 'bit_complement', \
                            'bit_reverse', 'bit_rotation', 'neighbor', \
-                            'shuffle', 'transpose'])
+                            'shuffle', 'transpose','DNN'])
 
 parser.add_option("-i", "--injectionrate", type="float", default=0.1,
                   metavar="I",
@@ -83,6 +83,17 @@ parser.add_option("--inj-vnet", type="int", default=-1,
                         0 and 1 are 1-flit, 2 is 5-flit.\
                         Set to -1 to inject randomly in all vnets.")
 
+parser.add_option("--link_width_bits", type="int", default=128,
+                  help="default = 128 bit")
+
+
+
+
+parser.add_option("--if_debug", type="int", default=0)
+
+parser.add_option("--dnn_task", type="string", default="lenet_16")
+
+
 #
 # Add the ruby specific and protocol specific options
 #
@@ -99,7 +110,33 @@ if options.inj_vnet > 2:
     print("Error: Injection vnet %d should be 0 (1-flit), 1 (1-flit) "
           "or 2 (5-flit) or -1 (random)" % (options.inj_vnet))
     sys.exit(1)
+# file initialization
+node_recv_path = "../run_info/node_recv/"
+node_cur_pic_path = "../run_info/cur_pic_num/"
 
+for i in os.listdir(node_recv_path):
+   path_file = os.path.join(node_recv_path,i)
+   if os.path.isfile(path_file):
+      os.remove(path_file)
+
+for node in range(0, options.num_cpus):
+    f = open (node_recv_path + str(node)+".txt",'w')
+    f.close()
+
+for i in os.listdir(node_cur_pic_path):
+   path_file = os.path.join(node_cur_pic_path,i)
+   if os.path.isfile(path_file):
+      os.remove(path_file)
+
+for node in range(0, options.num_cpus):
+    f = open (node_cur_pic_path + str(node)+".txt",'w')
+    f.write("0")
+    f.close()
+
+with open ("./current_NoC_Configs.txt","w") as f:
+      f.write(str(options.num_cpus)+"\n")
+      f.write(str(options.if_debug)+"\n")
+      f.close()
 
 cpus = [ GarnetSyntheticTraffic(
                      num_packets_max=options.num_packets_max,
@@ -110,6 +147,8 @@ cpus = [ GarnetSyntheticTraffic(
                      inj_rate=options.injectionrate,
                      inj_vnet=options.inj_vnet,
                      precision=options.precision,
+                     if_debug = options.if_debug,
+                     dnn_task = options.dnn_task,
                      num_dest=options.num_dirs) \
          for i in range(options.num_cpus) ]
 
@@ -140,7 +179,7 @@ for ruby_port in system.ruby._cpu_ports:
 # -----------------------
 # run simulation
 # -----------------------
-print ("fanxi added in synthtraffic.py, now run simulation")
+
 root = Root(full_system = False, system = system)
 root.system.mem_mode = 'timing'
 
