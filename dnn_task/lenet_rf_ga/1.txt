@@ -1,0 +1,32 @@
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+send 10 1
+send 11 1
+send 9 1
+cal 67
+finish

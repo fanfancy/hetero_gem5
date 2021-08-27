@@ -1,0 +1,21 @@
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+send 12 1
+send 13 1
+cal 344
+wait 90
+finish

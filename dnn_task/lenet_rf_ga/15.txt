@@ -1,0 +1,3 @@
+cal 6
+wait 9
+finish

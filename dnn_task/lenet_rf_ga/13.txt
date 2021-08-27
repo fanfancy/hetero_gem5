@@ -1,0 +1,10 @@
+send 14 1
+send 14 1
+send 14 1
+send 14 1
+send 14 1
+send 14 1
+send 14 1
+cal 110
+wait 27
+finish
