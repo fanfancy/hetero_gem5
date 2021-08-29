@@ -1,8 +1,8 @@
 ./build/Garnet_standalone/gem5.opt \
 	configs/example/garnet_synth_traffic.py \
-	--topology=hetero_mesh \
-	--num-cpus=16 \
-	--num-dirs=16 \
+	--topology=hetero_mesh_nopRouter \
+	--num-cpus=20 \
+	--num-dirs=20 \
 	--mesh-rows=4 \
 	--synthetic=DNN \
 	--dnn_task=lenet_rf_ga \

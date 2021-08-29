@@ -1,0 +1,13 @@
+#layer_name, layer_type(CONV,POOL,FC), i_H, i_W, i_ch, 
+#kernel_size, stride, padding, o_ch
+layer1 CONV 227 227 3 11 4 0 96
+layer2 POOL 54 54 96 3 2 0 96
+layer3 CONV 27 27 96 5 1 2 256
+layer4 POOL 27 27 256 3 2 0 256
+layer5 CONV 13 13 256 3 1 1 384
+layer6 CONV 13 13 384 3 1 1 384
+layer7 CONV 13 13 384 3 1 1 256
+layer8 POOL 13 13 256 3 2 0 256
+layer9 FC 6 6 256 6 1 0 4096
+layer10 FC 1 1 4096 1 1 0 4096
+layer11 FC 1 1 4096 1 1 0 1000
