@@ -226,9 +226,9 @@ class AddrRange
         // interleaved range
         if (ranges.size() > 1) {
 
-            if (ranges.size() != (ULL(1) << masks.size()))
-                fatal("Got %d ranges spanning %d interleaving bits\n",
-                      ranges.size(), masks.size());
+            // if (ranges.size() != (ULL(1) << masks.size()))
+            //     fatal("Got %d ranges spanning %d interleaving bits\n",
+            //           ranges.size(), masks.size());
 
             uint8_t match = 0;
             for (const auto& r : ranges) {

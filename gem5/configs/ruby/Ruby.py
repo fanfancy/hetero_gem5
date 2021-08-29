@@ -109,7 +109,7 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
     crossbars = []
 
     if options.numa_high_bit:
-        dir_bits = int(math.log(options.num_dirs, 2))
+        dir_bits = int(math.ceil(math.log(options.num_dirs, 2)))## modified by fanxi,bug?
         intlv_size = 2 ** (options.numa_high_bit - dir_bits + 1)
     else:
         # if the numa_bit is not specified, set the directory bits as the
@@ -131,7 +131,7 @@ def setup_memory_controllers(system, ruby, dir_cntrls, options):
         for r in system.mem_ranges:
             mem_type = ObjectList.mem_list.get(options.mem_type)
             dram_intf = MemConfig.create_mem_intf(mem_type, r, index,
-                options.num_dirs, int(math.log(options.num_dirs, 2)),
+                options.num_dirs, int(math.ceil(math.log(options.num_dirs, 2))),
                 intlv_size, options.xor_low_bit)
             mem_ctrl = m5.objects.MemCtrl(dram = dram_intf)
 
