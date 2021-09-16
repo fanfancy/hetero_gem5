@@ -9,6 +9,7 @@ from run_configs import *
 
 # mesh 4*4
 F = {}
+bw_scales = {}
 for src in range (NOC_NODE_NUM):
     for dst in range (NOC_NODE_NUM):
         local = src + 1000
@@ -21,9 +22,11 @@ for src in range (NOC_NODE_NUM):
         if (src_x == dst_x) :
             if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
                 F[(src,dst)] = 0
+                bw_scales[(src,dst)] = 1
         elif (src_y == dst_y) :
             if (src_x - dst_x == 1) or (src_x - dst_x == -1):
                 F[(src,dst)] = 0
+                bw_scales[(src,dst)] = 1
 
 # print ("F",F)
 
@@ -68,6 +71,12 @@ for src in range (1000,1000+NOC_NODE_NUM):
         if (src!=dst):
             route_table[(src,dst)].append((noc_dst,dst))
             route_table[(src,dst)].insert(0,(src,noc_src))
+            F[(noc_dst,dst)] = 0
+            F[(src,noc_src)] = 0
+            bw_scales[(src,noc_src)] = 1
+            bw_scales[(noc_dst,dst)] = 1
+
+
 
 
 for item in route_table:

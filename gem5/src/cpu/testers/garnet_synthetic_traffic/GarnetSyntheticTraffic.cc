@@ -384,8 +384,8 @@ GarnetSyntheticTraffic::tick()
                     cpu_work_stats = WORK_IDLE;
                 }
                 else if (strstr(current_task[0].c_str(), "finish") != NULL ) { // 最后一行current_task[0]会多一个终结符
-                    std::cout << "node " << id <<  " current_task == finish" << "@ "<< curTick() - time_send  \
-                      << " time cal=" << time_cal << " wait=" << time_wait << " wait_cmd=" << time_wait_cmd <<" send=" <<  time_send << "realTick =" << curTick() << std::endl;
+                    std::cout << "node " << id <<  " current_task == finish" << "@ "<< curTick()  \
+                      << " time cal=" << time_cal << " wait=" << time_wait << " wait_cmd=" << time_wait_cmd <<" send=" <<  time_send << " realTick =" << curTick() << std::endl;
                     cpu_status = WORKIING;
                     cpu_work_stats = WORK_IDLE;
                     // current_line_num = Repeat_Start_line; // 0610修改 
@@ -413,7 +413,7 @@ GarnetSyntheticTraffic::tick()
                 if (packet_recv >= num_packet_wait){
                     cpu_work_stats = WORK_IDLE;
                     cpu_status = IDLE;
-                    total_packet_recv_previous += packet_recv;
+                    total_packet_recv_previous += num_packet_wait;
                 }
                 if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT"  \
                                   << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;

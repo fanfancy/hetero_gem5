@@ -32,3 +32,7 @@ min_node_num = 4
 
 debug = 0
 congestion_ratio = 0
+
+#### single engine 
+NoC_w = 5
+NOC_NODE_NUM = 20
