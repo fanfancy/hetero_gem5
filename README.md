@@ -1,3 +1,8 @@
+# TODO List
+- [ ] 修改了garnet的tester file,对多引擎仿真要做对应的改动(task file 减去send时间)
+- [ ] 单引擎：read output partial sum
+- [ ] 单引擎：output位于非innerCP点的情况的check
+---
 # hetero_gem5
 ## Support on noc+nop simulation
 - gem5/configs/topologies/hetero_mesh.py 支持仿真link wdith不同的mesh，实际仿真中无效果。
