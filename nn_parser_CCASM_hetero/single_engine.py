@@ -75,6 +75,7 @@ if_out_final = {}
 
 ol1_need = K0; al1_need= C0; wl1_need = K0*C0; cal =1
 
+# ------------------ 计算3个buffer存储需求&每级for循环循环次数 ------------------
 
 for id in range(len(data_flow)):
     param = data_flow[id]
@@ -91,17 +92,15 @@ for id in range(len(data_flow)):
 
 repeat = 1
 repeat_num = {}
-def new_func(param, repeat, repeat_num):
-    repeat_num[param] = repeat
-
+    
 for id in range(len(data_flow)):
     real_id = len(data_flow) - id -1
     param = data_flow[real_id] 
     repeat = repeat * all_param[real_id]
-    new_func(param, repeat, repeat_num)
+    repeat_num[param] = repeat
 
 
-# 决定存储临界点
+# ------------------ 决定存储临界点 ------------------
 for id in range(len(data_flow)):
     param = data_flow[id]
     if OL1_need[param] > OL1_mem: 
@@ -129,13 +128,14 @@ for id in range(len(data_flow)):
     al1_cp = "top"
     al1_cp_id = id
 
-
 print ("OL1_need",OL1_need)
 print ("AL1_need",AL1_need)
 print ("WL1_need",WL1_need)
 print ("repeat_num",repeat_num)
 print ("cal_cycles",cal_cycles)
 print ("ol1_cp=",ol1_cp,"al1_cp=",al1_cp,"wl1_cp=",wl1_cp)
+
+# ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 
 pkt_num_wr = 0
 pkt_num_rd_same = 0
@@ -171,12 +171,6 @@ cc_node_info = {}
 F_cur=F.copy()
 
 # 对每个cc node 构建其通信需求
-out_folder = Path(output_folder_name+'overall')
-if out_folder.is_dir():
-    os.system('rm '+output_folder_name+'overall/*')
-else:
-    os.system('mkdir '+output_folder_name+'overall')
-
 
 wr_packet_all = pkt_num_wr
 rd_packet_all = pkt_num_rd_uniq + pkt_num_rd_same
@@ -203,31 +197,27 @@ for cc_id in cc_node_list:
     else:
         degrade_ratio = max(F_cur.values()) 
 
-# --------------------- generate the detail task files ---------------------
-# all_param = [Q1,    P1,     C1,     K1,     S0,     R0,     Q2,     P2,     1]
+# --------------------- 生成用于仿真的指令 ---------------------
 
-# 最小和最大的循环单位
+# 寻找最小的循环单位
 inner_cp_id = min(al1_cp_id,wl1_cp_id,ol1_cp_id)
-outer_cp_id = max(al1_cp_id,wl1_cp_id,ol1_cp_id)
 inner_cp = data_flow[inner_cp_id]
-outer_cp = data_flow[outer_cp_id]
-full_task_num = int(repeat_num[inner_cp]/repeat_num[outer_cp])       # 14
 ol1_repeat_interval = int(repeat_num[inner_cp] / repeat_num[ol1_cp]) # 1
 al1_repeat_interval = int(repeat_num[inner_cp] / repeat_num[al1_cp]) # 1
 wl1_repeat_interval = int(repeat_num[inner_cp] / repeat_num[wl1_cp]) # 14
 cal_cycle_per_run = cal_cycles[data_flow[inner_cp_id-1]]
-print ("full_task_num",full_task_num,"ol1_repeat_interval",ol1_repeat_interval, \
+print ("ol1_repeat_interval",ol1_repeat_interval, \
     "al1_repeat_interval",al1_repeat_interval,"wl1_repeat_interval",wl1_repeat_interval)
 
-# 计算最小研究单位中的packet传输数目
+# 计算最小循环单位中的packet传输数目
 out_packet = int(math.ceil(out_data_num/flit_per_pkt/neu_per_flit))
 act_packet = int(math.ceil(act_data_num/flit_per_pkt/neu_per_flit))
 wgt_packet = int(math.ceil(wgt_data_num/flit_per_pkt/neu_per_flit))
 
-# 计算插空packet数目 TODO
-small_wgt_packet =  int ( (wgt_packet  / wl1_repeat_interval) )
-small_act_packet =  int ( (act_packet  / al1_repeat_interval) ) 
-small_out_packet =  int ( (out_packet  / ol1_repeat_interval) ) 
+# 计算插空packet数目
+small_wgt_packet =  round ( (wgt_packet  / wl1_repeat_interval) ) # 四舍五入
+small_act_packet =  round ( (act_packet  / al1_repeat_interval) ) 
+small_out_packet =  round ( (out_packet  / ol1_repeat_interval) ) 
 
 # 清空文件夹
 out_folder = Path(output_folder_name_pipe)
@@ -252,28 +242,7 @@ else:
 for mem_id in mem_node_list:
     mem_wait_packet[mem_id] = 0
 
-# ************************ 旧的方法2 ************************
-#  for i in range (full_task_num): 
-#      id = i + 1
-#      for cal_core_id in cc_node_list:
-#          mem_id = int(cal_core_id /NoC_w)*NoC_w
-#          with open (output_folder_name+'/'+str(cal_core_id)+'.txt','a') as core_file:
-#              if i % ol1_repeat_interval == 0:
-#                  print ("send "+str(mem_id)+" "+str(out_packet), file= core_file)
-#              print ("cal",cal_cycle_per_run, file = core_file)
-#              if id % al1_repeat_interval == 0:
-#                  print ("wait "+str(act_packet), file = core_file)
-#              if id % wl1_repeat_interval == 0:
-#                  print ("wait "+str(wgt_packet), file = core_file)
-#          with open (output_folder_name+'/'+str(mem_id)+'.txt','a') as mem_file:
-#              if i % al1_repeat_interval == 0:
-#                  print ("send "+str(cal_core_id)+" "+str(act_packet), file = mem_file)
-#              if i % wl1_repeat_interval == 0:
-#                  print ("send "+str(cal_core_id)+" "+str(wgt_packet), file = mem_file)
-#              if id % ol1_repeat_interval == 0:
-#                  mem_wait_packet[mem_id] += out_packet
-
-# pipeline 后的task file
+# pipeline仿真 指令
 for cal_core_id in cc_node_list:
     mem_id = int(cal_core_id /NoC_w)*NoC_w        
     with open (output_folder_name_pipe+'/'+str(cal_core_id)+'.txt','a') as core_file:
@@ -290,7 +259,7 @@ for mem_id in mem_node_list:
         print ("wait "+str(mem_wait_packet[mem_id]), file= mem_file)
         print ("finish", file= mem_file)
 
-
+# 启动延迟仿真 指令
 for cal_core_id in cc_node_list:
     mem_id = int(cal_core_id /NoC_w)*NoC_w        
     with open (output_folder_name_start+'/'+str(cal_core_id)+'.txt','a') as core_file:
@@ -304,7 +273,7 @@ for mem_id in mem_node_list:
         print ("finish", file= mem_file)
         
 ## summary 
-print ("------------summary------------")
-print ("remain repeat times = ", repeat_num[inner_cp])
+print ("\n------------summary------------")
+print ("repeat times = ", repeat_num[inner_cp])
 print ("prediced latency = ", compuation_cycles*degrade_ratio, "degrade_ratio = ",degrade_ratio)
 # TODO 广播的处理方式
