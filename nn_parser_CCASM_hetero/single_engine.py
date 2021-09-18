@@ -137,59 +137,58 @@ print ("ol1_cp=",ol1_cp,"al1_cp=",al1_cp,"wl1_cp=",wl1_cp)
 
 # ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 
-pkt_num_wr = 0
-pkt_num_rd_same = 0
-pkt_num_rd_uniq = 0
+pkt_num_wr_opt = 0
+pkt_num_rd_wgt_same = 0
+pkt_num_rd_wgt_uniq = 0
+pkt_num_rd_act_same = 0
+pkt_num_rd_act_uniq = 0
 
 cur = data_flow[ol1_cp_id]; inner = data_flow[ol1_cp_id-1]  
 #  if (if_out_final[cur]!=1): TODO !
 #      print("read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
 #      pkt_num_rd_uniq = pkt_num_rd_uniq + OL1_need[inner]*repeat_num[cur]
 print("write opt mem ", OL1_need[inner],"repeat ",repeat_num[cur])
-pkt_num_wr =  pkt_num_wr + int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
+pkt_num_wr_opt =  pkt_num_wr_opt + int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 out_data_num = OL1_need[inner]
     
 cur = data_flow[al1_cp_id]; inner = data_flow[al1_cp_id-1]  
 print("read act mem ",AL1_need[inner],act_share,"repeat ",repeat_num[cur])
 if act_share==1: 
-    pkt_num_rd_same = pkt_num_rd_same + int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
+    pkt_num_rd_act_same = pkt_num_rd_act_same + int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
 else:
-    pkt_num_rd_uniq = pkt_num_rd_uniq + int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
+    pkt_num_rd_act_uniq = pkt_num_rd_act_uniq + int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
 act_data_num = AL1_need[inner]
 
 cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
 print("read wgt mem ",WL1_need[inner],wgt_share,"repeat ",repeat_num[cur]) 
 if wgt_share==1:
-    pkt_num_rd_same = pkt_num_rd_same + int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
+    pkt_num_rd_wgt_same = pkt_num_rd_wgt_same + int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 else: 
-    pkt_num_rd_uniq = pkt_num_rd_uniq + int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
+    pkt_num_rd_wgt_uniq = pkt_num_rd_wgt_uniq + int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 wgt_data_num = WL1_need[inner]
 
-mem_node_list = [0,5,10,15]
+ol1_node = 0; al1_node = 10; wl1_node = 15
+mem_node_list = [ol1_node,al1_node,wl1_node]
 cc_node_list = [1,2,3,4, 6,7,8,9, 11,12,13,14, 16,17,18,19]
 cc_node_info = {}
 F_cur=F.copy()
 
 # 对每个cc node 构建其通信需求
-
-wr_packet_all = pkt_num_wr
-rd_packet_all = pkt_num_rd_uniq + pkt_num_rd_same
-
-mem_wait_all = {}
-for mem_id in mem_node_list:
-    mem_wait_all[mem_id] = 0
-
 for cc_id in cc_node_list:
-    mem_id = int(cc_id /NoC_w)*NoC_w
 
-    ## form mem to cc node 
-    bw_needed = rd_packet_all * flit_per_pkt  / compuation_cycles # TODO link bandwidth & data width
-    for link in route_table[(mem_id + 1000, cc_id + 1000)]:
+    ## form wgt mem to cc node 
+    bw_needed = (pkt_num_rd_wgt_uniq+pkt_num_rd_wgt_same) * flit_per_pkt  / compuation_cycles # 单位是flits/cycle
+    for link in route_table[(wl1_node + 1000, cc_id + 1000)]:
         F_cur[link] += ( bw_needed / bw_scales[link] )
 
-    ## form cc node to mem
-    bw_needed = wr_packet_all * flit_per_pkt / compuation_cycles # TODO link bandwidth & data width
-    for link in route_table[(cc_id + 1000, mem_id + 1000)]:
+    ## form act mem to cc node 
+    bw_needed = (pkt_num_rd_act_uniq+pkt_num_rd_act_same) * flit_per_pkt  / compuation_cycles  
+    for link in route_table[(wl1_node + 1000, cc_id + 1000)]:
+        F_cur[link] += ( bw_needed / bw_scales[link] )
+
+    ## form cc node to output mem
+    bw_needed = pkt_num_wr_opt * flit_per_pkt / compuation_cycles 
+    for link in route_table[(cc_id + 1000, ol1_node + 1000)]:
         F_cur[link] += ( bw_needed / bw_scales[link] )
 
     if (max(F_cur.values()) < 1):
@@ -243,30 +242,38 @@ for mem_id in mem_node_list:
     mem_wait_packet[mem_id] = 0
 
 # pipeline仿真 指令
-for cal_core_id in cc_node_list:
-    mem_id = int(cal_core_id /NoC_w)*NoC_w        
+for cal_core_id in cc_node_list:  
     with open (output_folder_name_pipe+'/'+str(cal_core_id)+'.txt','a') as core_file:
-        print ("send "+str(mem_id)+" "+str(small_out_packet), file= core_file)
+        if small_out_packet!= 0: print ("send "+str(ol1_node)+" "+str(small_out_packet), file= core_file)
         print ("cal",cal_cycle_per_run, file = core_file)
         print ("wait "+str(small_act_packet + small_wgt_packet), file = core_file)
         print ("finish", file= core_file)
-    with open (output_folder_name_pipe+'/'+str(mem_id)+'.txt','a') as mem_file:
-        print ("send "+str(cal_core_id)+" "+str(small_act_packet + small_wgt_packet), file= mem_file)
-        mem_wait_packet[mem_id] += small_out_packet
+    
+        mem_wait_packet[ol1_node] += small_out_packet
+
+    with open (output_folder_name_pipe+'/'+str(wl1_node)+'.txt','a') as mem_file:
+        if small_wgt_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_wgt_packet), file= mem_file)
+    with open (output_folder_name_pipe+'/'+str(al1_node)+'.txt','a') as mem_file:
+        if small_act_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_act_packet), file= mem_file)
+
+# ol1 node task
+with open (output_folder_name_pipe+'/'+str(ol1_node)+'.txt','a') as mem_file:
+    if mem_wait_packet[ol1_node] != 0: print ("wait "+str(mem_wait_packet[ol1_node]), file= mem_file)
+    
 
 for mem_id in mem_node_list:
     with open (output_folder_name_pipe+'/'+str(mem_id)+'.txt','a') as mem_file:
-        print ("wait "+str(mem_wait_packet[mem_id]), file= mem_file)
         print ("finish", file= mem_file)
 
 # 启动延迟仿真 指令
-for cal_core_id in cc_node_list:
-    mem_id = int(cal_core_id /NoC_w)*NoC_w        
+for cal_core_id in cc_node_list:     
     with open (output_folder_name_start+'/'+str(cal_core_id)+'.txt','a') as core_file:
         print ("wait "+str(act_packet + wgt_packet), file = core_file)
         print ("finish", file= core_file)
-    with open (output_folder_name_start+'/'+str(mem_id)+'.txt','a') as mem_file:
-        print ("send "+str(cal_core_id)+" "+str(act_packet + wgt_packet), file= mem_file)
+    with open (output_folder_name_start+'/'+str(wl1_node)+'.txt','a') as mem_file:
+        print ("send "+str(cal_core_id)+" "+str(wgt_packet), file= mem_file)
+    with open (output_folder_name_start+'/'+str(al1_node)+'.txt','a') as mem_file:
+        print ("send "+str(cal_core_id)+" "+str(act_packet), file= mem_file)
 
 for mem_id in mem_node_list:
     with open (output_folder_name_start+'/'+str(mem_id)+'.txt','a') as mem_file:
