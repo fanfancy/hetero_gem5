@@ -49,8 +49,11 @@ print ("compuation_cycles=",compuation_cycles)
 
 
 # storage size
-L1_mem_size = 2*1024 # Byte
-L1_mem = L1_mem_size/2 # neuron num
+neuron_width  = 16 # bit
+AL1 = 2; OL1 = 2; WL1 = 2 # KByte
+AL1_mem = AL1*8*1024/neuron_width
+OL1_mem = OL1*8*1024/neuron_width
+WL1_mem = WL1*8*1024/neuron_width
 
 L2=999999
 
@@ -101,35 +104,30 @@ for id in range(len(data_flow)):
 # 决定存储临界点
 for id in range(len(data_flow)):
     param = data_flow[id]
-    if L1_need[param] > L1_mem: 
-        l1_cp = param
-        l1_cp_id = id
-        break
-    l1_cp = "top"
-    l1_cp_id = id
-
-print ("l1_cp",l1_cp,"l1_cp_id",l1_cp_id)
-for id in range(l1_cp_id, len(data_flow)):
-    if (ol1_ratio[id] != 1):
-        ol1_cp = data_flow[id]
+    if OL1_need[param] > OL1_mem: 
+        ol1_cp = param
         ol1_cp_id = id
         break
     ol1_cp = "top"
     ol1_cp_id = id
-for id in range(l1_cp_id, len(data_flow)):
-    if (al1_ratio[id] != 1):
-        al1_cp = data_flow[id]
-        al1_cp_id = id
-        break
-    al1_cp = "top"
-    al1_cp_id = id
-for id in range(l1_cp_id, len(data_flow)):
-    if (wl1_ratio[id] != 1):
-        wl1_cp = data_flow[id]
+
+for id in range(len(data_flow)):
+    param = data_flow[id]
+    if WL1_need[param] > WL1_mem: 
+        wl1_cp = param
         wl1_cp_id = id
         break
     wl1_cp = "top"
     wl1_cp_id = id
+
+for id in range(len(data_flow)):
+    param = data_flow[id]
+    if AL1_need[param] > AL1_mem: 
+        al1_cp = param
+        al1_cp_id = id
+        break
+    al1_cp = "top"
+    al1_cp_id = id
 
 
 print ("OL1_need",OL1_need)
@@ -137,8 +135,7 @@ print ("AL1_need",AL1_need)
 print ("WL1_need",WL1_need)
 print ("repeat_num",repeat_num)
 print ("cal_cycles",cal_cycles)
-print ("l1_cp",l1_cp,"ol1_cp=",ol1_cp,"al1_cp=",al1_cp,"wl1_cp=",wl1_cp)
-
+print ("ol1_cp=",ol1_cp,"al1_cp=",al1_cp,"wl1_cp=",wl1_cp)
 
 pkt_num_wr = 0
 pkt_num_rd_same = 0
@@ -227,7 +224,7 @@ out_packet = int(math.ceil(out_data_num/flit_per_pkt/neu_per_flit))
 act_packet = int(math.ceil(act_data_num/flit_per_pkt/neu_per_flit))
 wgt_packet = int(math.ceil(wgt_data_num/flit_per_pkt/neu_per_flit))
 
-# 计算插空packet数目
+# 计算插空packet数目 TODO
 small_wgt_packet =  int ( (wgt_packet  / wl1_repeat_interval) )
 small_act_packet =  int ( (act_packet  / al1_repeat_interval) ) 
 small_out_packet =  int ( (out_packet  / ol1_repeat_interval) ) 
