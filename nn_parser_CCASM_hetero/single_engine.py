@@ -79,7 +79,7 @@ ol1_need = K0; al1_need= C0; wl1_need = K0*C0; cal =1
 
 for id in range(len(data_flow)):
     param = data_flow[id]
-    ol1_need = ol1_need * ol1_ratio[id]
+    ol1_need = ol1_need * ol1_ratio[id] # 单位:neuron
     al1_need = al1_need * al1_ratio[id]
     wl1_need = wl1_need * wl1_ratio[id]
     cal = cal * all_param[id]
@@ -138,15 +138,20 @@ print ("ol1_cp=",ol1_cp,"al1_cp=",al1_cp,"wl1_cp=",wl1_cp)
 # ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 
 pkt_num_wr_opt = 0
+pkt_num_rd_opt = 0
 pkt_num_rd_wgt_same = 0
 pkt_num_rd_wgt_uniq = 0
 pkt_num_rd_act_same = 0
 pkt_num_rd_act_uniq = 0
 
 cur = data_flow[ol1_cp_id]; inner = data_flow[ol1_cp_id-1]  
-#  if (if_out_final[cur]!=1): TODO !
-#      print("read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
-#      pkt_num_rd_uniq = pkt_num_rd_uniq + OL1_need[inner]*repeat_num[cur]
+if (if_out_final[cur]!=1): 
+    print("read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
+    pkt_num_rd_opt = pkt_num_rd_opt + int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) * repeat_num[cur]
+    rd_out_data_num = OL1_need[inner]
+else:
+    pkt_num_rd_opt = 0
+    rd_out_data_num = 0
 print("write opt mem ", OL1_need[inner],"repeat ",repeat_num[cur])
 pkt_num_wr_opt =  pkt_num_wr_opt + int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 out_data_num = OL1_need[inner]
@@ -167,8 +172,8 @@ else:
     pkt_num_rd_wgt_uniq = pkt_num_rd_wgt_uniq + int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 wgt_data_num = WL1_need[inner]
 
-ol1_node = 0; al1_node = 10; wl1_node = 15
-mem_node_list = [ol1_node,al1_node,wl1_node]
+ol1_node = 0; al1_node = 5; wl1_node = 10
+mem_node_list = [ol1_node,al1_node,wl1_node,15]
 cc_node_list = [1,2,3,4, 6,7,8,9, 11,12,13,14, 16,17,18,19]
 cc_node_info = {}
 F_cur=F.copy()
@@ -176,25 +181,31 @@ F_cur=F.copy()
 # 对每个cc node 构建其通信需求
 for cc_id in cc_node_list:
 
-    ## form wgt mem to cc node 
+    ## from wgt mem to cc node 
     bw_needed = (pkt_num_rd_wgt_uniq+pkt_num_rd_wgt_same) * flit_per_pkt  / compuation_cycles # 单位是flits/cycle
     for link in route_table[(wl1_node + 1000, cc_id + 1000)]:
         F_cur[link] += ( bw_needed / bw_scales[link] )
 
-    ## form act mem to cc node 
+    ## from act mem to cc node 
     bw_needed = (pkt_num_rd_act_uniq+pkt_num_rd_act_same) * flit_per_pkt  / compuation_cycles  
-    for link in route_table[(wl1_node + 1000, cc_id + 1000)]:
+    for link in route_table[(al1_node + 1000, cc_id + 1000)]:
         F_cur[link] += ( bw_needed / bw_scales[link] )
 
-    ## form cc node to output mem
+    ## from cc node to output mem
     bw_needed = pkt_num_wr_opt * flit_per_pkt / compuation_cycles 
     for link in route_table[(cc_id + 1000, ol1_node + 1000)]:
         F_cur[link] += ( bw_needed / bw_scales[link] )
+    
+    ## from output mem to cc node
+    bw_needed = pkt_num_rd_opt * flit_per_pkt / compuation_cycles 
+    for link in route_table[(ol1_node + 1000, cc_id + 1000)]:
+        F_cur[link] += ( bw_needed / bw_scales[link] )
 
-    if (max(F_cur.values()) < 1):
-            degrade_ratio = 1
-    else:
-        degrade_ratio = max(F_cur.values()) 
+if (max(F_cur.values()) < 1):
+        degrade_ratio = 1
+else:
+    degrade_ratio = max(F_cur.values()) 
+print ("F_cur",F_cur)
 
 # --------------------- 生成用于仿真的指令 ---------------------
 
@@ -212,11 +223,13 @@ print ("ol1_repeat_interval",ol1_repeat_interval, \
 out_packet = int(math.ceil(out_data_num/flit_per_pkt/neu_per_flit))
 act_packet = int(math.ceil(act_data_num/flit_per_pkt/neu_per_flit))
 wgt_packet = int(math.ceil(wgt_data_num/flit_per_pkt/neu_per_flit))
+rd_out_packet = int (math.ceil(rd_out_data_num/flit_per_pkt/neu_per_flit))
 
 # 计算插空packet数目
 small_wgt_packet =  round ( (wgt_packet  / wl1_repeat_interval) ) # 四舍五入
 small_act_packet =  round ( (act_packet  / al1_repeat_interval) ) 
 small_out_packet =  round ( (out_packet  / ol1_repeat_interval) ) 
+small_rd_out_packet =  round ( (rd_out_packet / ol1_repeat_interval) )
 
 # 清空文件夹
 out_folder = Path(output_folder_name_pipe)
@@ -246,7 +259,7 @@ for cal_core_id in cc_node_list:
     with open (output_folder_name_pipe+'/'+str(cal_core_id)+'.txt','a') as core_file:
         if small_out_packet!= 0: print ("send "+str(ol1_node)+" "+str(small_out_packet), file= core_file)
         print ("cal",cal_cycle_per_run, file = core_file)
-        print ("wait "+str(small_act_packet + small_wgt_packet), file = core_file)
+        print ("wait "+str(small_act_packet + small_wgt_packet + small_rd_out_packet), file = core_file)
         print ("finish", file= core_file)
     
         mem_wait_packet[ol1_node] += small_out_packet
@@ -255,6 +268,8 @@ for cal_core_id in cc_node_list:
         if small_wgt_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_wgt_packet), file= mem_file)
     with open (output_folder_name_pipe+'/'+str(al1_node)+'.txt','a') as mem_file:
         if small_act_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_act_packet), file= mem_file)
+    with open (output_folder_name_pipe+'/'+str(ol1_node)+'.txt','a') as mem_file:
+        if small_rd_out_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_rd_out_packet), file= mem_file)
 
 # ol1 node task
 with open (output_folder_name_pipe+'/'+str(ol1_node)+'.txt','a') as mem_file:
