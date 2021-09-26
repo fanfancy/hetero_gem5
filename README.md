@@ -7,7 +7,7 @@ act_tag =  (int(1002))
 
 out_tag =  (int(1003))
 
-- [ ] 单引擎：read output partial sum
+- [x] 单引擎：read output partial sum
 - [ ] 单引擎：output位于非innerCP点的情况的check
 ---
 # hetero_gem5
