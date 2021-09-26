@@ -2,7 +2,9 @@
 - [ ] 修改了garnet的tester file,对多引擎仿真要做对应的改动(NOTE:目前的task一定要增加一种data tag才能运行)
 
 wgt_tag =  (int(1001))
+
 act_tag =  (int(1002))
+
 out_tag =  (int(1003))
 
 - [ ] 单引擎：read output partial sum
