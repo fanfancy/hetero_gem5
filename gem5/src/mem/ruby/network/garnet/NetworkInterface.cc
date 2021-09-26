@@ -39,6 +39,7 @@
 #include<iostream>
 #include "base/cast.hh"
 #include "debug/RubyNetwork.hh"
+#include "mem/ruby/network/garnet/dnn_data_tag.hh"
 #include "mem/ruby/network/MessageBuffer.hh"
 #include "mem/ruby/network/garnet/Credit.hh"
 #include "mem/ruby/network/garnet/flitBuffer.hh"
@@ -197,10 +198,16 @@ NetworkInterface::incrementStats(flit *t_flit)
  * into the protocol buffer. It also checks for credits being sent by the
  * downstream router.
  */
-void NetworkInterface::update_recv_packets(int id,int num_recv_packet)
+void NetworkInterface::update_recv_packets(int id,int num_recv_packet, int the_recv_tag)
 {
 	std::string file;
-	file = "./../run_info/node_recv/"+std::to_string(id)+".txt";
+    if (the_recv_tag == wgt_tag)
+	    file = "./../run_info/node_recv/"+std::to_string(id)+"_wgt"+".txt";
+    else if (the_recv_tag == act_tag)
+        file = "./../run_info/node_recv/"+std::to_string(id)+"_act"+".txt";
+    else if (the_recv_tag == out_tag)
+        file = "./../run_info/node_recv/"+std::to_string(id)+"_out"+".txt";
+
 	ofstream OutFile(file);
 	OutFile << std::to_string(num_recv_packet); 
     if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets ing, id= " << id <<" packets="<<num_recv_packet<<std::endl;
@@ -277,7 +284,8 @@ NetworkInterface::wakeup()
                     num_recv_packet ++;
                     if (if_debug==1) std::cout <<  "NI = "  << m_id << " num_recv_packet = " << num_recv_packet << std::endl;
                     // # received packets ++ here
-				    update_recv_packets(m_id-num_cpus, num_recv_packet); 
+                    int the_recv_tag = t_flit->get_tag();
+				    update_recv_packets(m_id-num_cpus, num_recv_packet, the_recv_tag); 
                     
                     delete t_flit;
                 } else {
@@ -393,7 +401,18 @@ NetworkInterface::checkStallQueue()
 // Embed the protocol message into flits
 bool
 NetworkInterface::flitisizeMessage(MsgPtr msg_ptr, int vnet)
-{
+{   
+    std::string file;
+    string s_sent_data_tag;
+    int sent_data_tag;
+    file = "./../run_info/node_recv/"+std::to_string(m_id)+"_tag_sent"+".txt";
+    ifstream infile; 
+    infile.open(file.data());  
+    assert(infile.is_open());   
+    getline(infile,s_sent_data_tag);
+    sent_data_tag=atoi(s_sent_data_tag.c_str());
+    if (if_debug) std::cout << "NI：the sent data tag= "<< s_sent_data_tag<< std::endl;
+
     Message *net_msg_ptr = msg_ptr.get();
     NetDest net_msg_dest = net_msg_ptr->getDestination();
 
@@ -466,7 +485,7 @@ NetworkInterface::flitisizeMessage(MsgPtr msg_ptr, int vnet)
             flit *fl = new flit(i, vc, vnet, route, num_flits, new_msg_ptr,
                 m_net_ptr->MessageSizeType_to_int(
                 net_msg_ptr->getMessageSize()),
-                oPort->bitWidth(), curTick());
+                oPort->bitWidth(), curTick(), sent_data_tag);
 
             fl->set_src_delay(curTick() - ticksToCycles(msg_ptr->getTime()));
             niOutVcs[vc].insert(fl);

@@ -63,6 +63,36 @@ flit::flit(int id, int  vc, int vnet, RouteInfo route, int size,
         m_type = BODY_;
 }
 
+flit::flit(int id, int  vc, int vnet, RouteInfo route, int size,
+    MsgPtr msg_ptr, int MsgSize, uint32_t bWidth, Tick curTime, int tag)
+{
+    m_size = size;
+    m_msg_ptr = msg_ptr;
+    m_enqueue_time = curTime;
+    m_dequeue_time = curTime;
+    m_time = curTime;
+    m_id = id;
+    m_vnet = vnet;
+    m_vc = vc;
+    m_route = route;
+    m_stage.first = I_;
+    m_stage.second = curTime;
+    m_width = bWidth;
+    msgSize = MsgSize;
+    m_tag = tag;
+
+    if (size == 1) {
+        m_type = HEAD_TAIL_;
+        return;
+    }
+    if (id == 0)
+        m_type = HEAD_;
+    else if (id == (size - 1))
+        m_type = TAIL_;
+    else
+        m_type = BODY_;
+}
+
 flit *
 flit::serialize(int ser_id, int parts, uint32_t bWidth)
 {

@@ -39,6 +39,7 @@
 #include "sim/sim_exit.hh"
 #include "sim/sim_object.hh"
 #include "sim/stats.hh"
+#include "mem/ruby/network/garnet/dnn_data_tag.hh"
 
 enum TrafficType {BIT_COMPLEMENT_ = 0,
                   BIT_REVERSE_ = 1,
@@ -62,9 +63,17 @@ class GarnetSyntheticTraffic : public ClockedObject
     int packets_sent;
     int cpu_status;
     int num_packet_wait;
+    int wait_data_tag;
+    int send_data_tag;
+    int pkt_num_wgt_recv;
+    int pkt_num_act_recv;
+    int pkt_num_out_recv;
     int downstream_id;
     int cycles_caled;
     int total_packet_recv_previous;
+    int total_packet_recv_previous_wgt;
+    int total_packet_recv_previous_act;
+    int total_packet_recv_previous_out;
     int cpu_work_stats;
     std::string current_task_line;
     int current_line_num;
@@ -161,7 +170,7 @@ class GarnetSyntheticTraffic : public ClockedObject
     RequestorID requestorId;
 
     void completeRequest(PacketPtr pkt);
-     int recv_packets(int id);
+     int recv_packets(int id, int data_tag);
 
     void generatePkt(int send_dst);
     void sendPkt(PacketPtr pkt);

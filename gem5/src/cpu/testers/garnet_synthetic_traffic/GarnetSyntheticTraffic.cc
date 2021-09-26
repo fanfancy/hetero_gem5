@@ -49,6 +49,7 @@
 #include "sim/stats.hh"
 #include "sim/system.hh"
 #include <unistd.h>
+#include "mem/ruby/network/garnet/dnn_data_tag.hh"
 
 // CPU satus
 # define IDLE               (int(0))
@@ -145,11 +146,30 @@ GarnetSyntheticTraffic::getPort(const std::string &if_name, PortID idx)
 }
 
 void init_recv_packet_files(int id){
-    std::string file;
-	file = "./../recv/"+std::to_string(id)+".txt";
-	ofstream OutFile(file);
-	OutFile << std::to_string(0); 
-    OutFile.close();    
+    std::string filewgt;
+	filewgt = "./../recv/"+std::to_string(id)+"_wgt"+".txt";
+	ofstream OutFilewgt (filewgt);
+	OutFilewgt << std::to_string(0); 
+    OutFilewgt.close();    
+
+    // std::string fileout;
+	// fileout = "./../recv/"+std::to_string(id)+"_out"+".txt";
+	// ofstream OutFileout(fileout);
+	// OutFileout << std::to_string(0); 
+    // OutFileout.close();    
+
+    // std::string fileact;
+	// fileact = "./../recv/"+std::to_string(id)+"_act"+".txt";
+	// ofstream OutFileact (fileact);
+	// OutFileact << std::to_string(0); 
+    // OutFileact.close();    
+
+    // // 从当前节点发送出去的data的tag
+    // std::string filetag;
+	// filetag = "./../recv/"+std::to_string(id)+"_tag_sent"+".txt";
+	// ofstream OutFiletag (filetag);
+	// OutFiletag << std::to_string(0); 
+    // OutFiletag.close();    
 }
 void
 GarnetSyntheticTraffic::init()
@@ -165,7 +185,13 @@ GarnetSyntheticTraffic::init()
     time_wait = 0;
     time_wait_cmd = 0;
     time_send = 0;
-    total_packet_recv_previous = 0;
+    total_packet_recv_previous_wgt = 0;
+    total_packet_recv_previous_act = 0;
+    total_packet_recv_previous_out = 0;
+    pkt_num_wgt_recv = 0;
+    pkt_num_act_recv = 0;
+    pkt_num_out_recv = 0;
+    cal_cycles = 0;
 
     // get current working path 
     char cwd[100];
@@ -191,10 +217,18 @@ GarnetSyntheticTraffic::completeRequest(PacketPtr pkt)
 }
 
 
-int GarnetSyntheticTraffic::recv_packets(int id)
+int GarnetSyntheticTraffic::recv_packets(int id, int data_tag)
 {
 	std::string file;
-	file = "./../run_info/node_recv/"+std::to_string(id)+".txt";
+    if (data_tag == wgt_tag)
+	    file = "./../run_info/node_recv/"+std::to_string(id)+"_wgt"+".txt";
+    else if (data_tag == act_tag)
+        file = "./../run_info/node_recv/"+std::to_string(id)+"_act"+".txt";
+    else if (data_tag == out_tag)
+        file = "./../run_info/node_recv/"+std::to_string(id)+"_out"+".txt";
+    else
+        panic("data tag not recognized!");
+
 	ifstream infile; 
     infile.open(file.data());  
     assert(infile.is_open());   
@@ -333,11 +367,12 @@ GarnetSyntheticTraffic::tick()
                 current_task  = split(current_task_line," ");
 
                 if (current_task[0] == "wait"){
+                    num_packet_wait = atoi(current_task[1].c_str());
                     if(if_debug==1) std::cout << "node " << id  << "current_task == wait" << num_packet_wait <<  std::endl;
                     cpu_status = WORKIING;
                     cpu_work_stats = WORK_WAIT;
-                    num_packet_wait = atoi(current_task[1].c_str());
                     std::string str_num_wait_packets = current_task[1];
+                    wait_data_tag = atoi(current_task[2].c_str());
                     // std::string str_src_mem_index = current_task[2];
                     // tell_mem_send_data(str_src_mem_index,  str_num_wait_packets,  id);
                 }
@@ -357,7 +392,17 @@ GarnetSyntheticTraffic::tick()
                     cpu_work_stats = WORK_SEND;
                     packets_to_send = atoi(current_task[2].c_str());
                     send_dst = atoi(current_task[1].c_str());
+                    send_data_tag = atoi(current_task[3].c_str());
+                    if (if_debug==1) std::cout <<"node: the sent data tag = "<< send_data_tag << std::endl;
                     packets_sent = 0;
+
+                     //将data tag写入文件中
+                    std::string data_tag_file;
+	                data_tag_file = "./../run_info/node_recv/"+std::to_string(id)+"_tag_sent.txt";
+	                ofstream OutFile(data_tag_file);
+	                OutFile << std::to_string(send_data_tag); 
+                    OutFile.close();    
+
                 }
                 else if (current_task[0] == "wait_cmd"){
                     if(if_debug==1) std::cout << "node " << id << " current_task == wait_cmd" << std::endl;
@@ -378,13 +423,20 @@ GarnetSyntheticTraffic::tick()
                     time_wait_cmd = 0;
                     time_send = 0;
                 }
-                else if (current_task[0] == "repeat"){
+                else if (current_task[0] == "repeat"){  //目前不用
                     Repeat_Start_line = current_line_num;
                     cpu_status = IDLE;
                     cpu_work_stats = WORK_IDLE;
                 }
                 else if (strstr(current_task[0].c_str(), "finish") != NULL ) { // 最后一行current_task[0]会多一个终结符
-                    std::cout << "node " << id <<  " current_task == finish" << "@ "<< curTick()  \
+                    int finish_cycle;
+                    if (curTick() < cal_cycles) {
+                        finish_cycle = cal_cycles;
+                    }
+                    else{
+                        finish_cycle = curTick();
+                    }
+                    std::cout << "node " << id <<  " current_task == finish" << "@ "<< finish_cycle  \
                       << " time cal=" << time_cal << " wait=" << time_wait << " wait_cmd=" << time_wait_cmd <<" send=" <<  time_send << " realTick =" << curTick() << std::endl;
                     cpu_status = WORKIING;
                     cpu_work_stats = WORK_IDLE;
@@ -409,16 +461,43 @@ GarnetSyntheticTraffic::tick()
         if (cpu_status == WORKIING){
             if (cpu_work_stats == WORK_WAIT){
                 time_wait += 1;
-                int packet_recv = recv_packets(id) - total_packet_recv_previous;
-                if (packet_recv >= num_packet_wait){
-                    cpu_work_stats = WORK_IDLE;
-                    cpu_status = IDLE;
-                    total_packet_recv_previous += num_packet_wait;
+                int packet_recv;
+                if (wait_data_tag == wgt_tag) {
+                    packet_recv = recv_packets(id, wgt_tag) - total_packet_recv_previous_wgt;
+                    if (packet_recv >= num_packet_wait){
+                        cpu_work_stats = WORK_IDLE;
+                        cpu_status = IDLE;
+                        total_packet_recv_previous_wgt += num_packet_wait;
+                    }
+                    if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT wgt"  \
+                       << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;
                 }
-                if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT"  \
-                                  << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;
+                else if (wait_data_tag == act_tag) {
+                    packet_recv = recv_packets(id, act_tag) - total_packet_recv_previous_act;
+                    if (packet_recv >= num_packet_wait){
+                        cpu_work_stats = WORK_IDLE;
+                        cpu_status = IDLE;
+                        total_packet_recv_previous_act += num_packet_wait;
+                    }
+                    if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT act"  \
+                       << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;
+                }
+                else if (wait_data_tag == out_tag) {
+                    packet_recv = recv_packets(id, out_tag) - total_packet_recv_previous_out;
+                    if (packet_recv >= num_packet_wait){
+                        cpu_work_stats = WORK_IDLE;
+                        cpu_status = IDLE;
+                        total_packet_recv_previous_out += num_packet_wait;
+                    }
+                    if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT out"  \
+                       << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;
+                }
+                
+
                 // 否则维持wait状态
             }
+
+
             else if (cpu_work_stats == WORK_WAIT_CMD){
                 time_wait_cmd += 1;
                 int downstream_cur_pic = check_downstream(downstream_id);
@@ -443,7 +522,7 @@ GarnetSyntheticTraffic::tick()
                 if(if_debug==1) std::cout << "node " << id  << " cycles_caled " << cycles_caled << " cal_cycles " << cal_cycles << "@" << curCycle() << std::endl;
                 time_cal +=1;
                 cycles_caled += 1;
-                if (cycles_caled >= cal_cycles){
+                if (1){
                     cpu_work_stats = WORK_IDLE;
                     cpu_status = IDLE;
                 }

@@ -44,9 +44,12 @@ class flit
     flit() {}
     flit(int id, int vc, int vnet, RouteInfo route, int size,
          MsgPtr msg_ptr, int MsgSize, uint32_t bWidth, Tick curTime);
+    flit(int id, int vc, int vnet, RouteInfo route, int size,
+         MsgPtr msg_ptr, int MsgSize, uint32_t bWidth, Tick curTime,int tag);
 
     virtual ~flit(){};
 
+    int get_tag () {return m_tag;}
     int get_outport() {return m_outport; }
     int get_size() { return m_size; }
     Tick get_enqueue_time() { return m_enqueue_time; }
@@ -115,6 +118,7 @@ class flit
     flit_type m_type;
     MsgPtr m_msg_ptr;
     int m_outport;
+    int m_tag;
     Tick src_delay;
     std::pair<flit_stage, Tick> m_stage;
 };

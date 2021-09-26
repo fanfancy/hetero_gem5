@@ -37,6 +37,7 @@
 #include <vector>
 
 #include "mem/ruby/common/Consumer.hh"
+#include "mem/ruby/network/garnet/dnn_data_tag.hh"
 #include "mem/ruby/network/garnet/CommonTypes.hh"
 #include "mem/ruby/network/garnet/Credit.hh"
 #include "mem/ruby/network/garnet/CreditLink.hh"
@@ -64,7 +65,7 @@ class NetworkInterface : public ClockedObject, public Consumer
 
     void dequeueCallback();
     void wakeup();
-    void update_recv_packets(int id,int num_recv_packet);
+    void update_recv_packets(int id,int num_recv_packet, int the_recv_tag);
     void addNode(std::vector<MessageBuffer *> &inNode,
                  std::vector<MessageBuffer *> &outNode);
 

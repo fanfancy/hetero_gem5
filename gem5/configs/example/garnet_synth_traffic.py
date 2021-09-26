@@ -127,8 +127,14 @@ for i in os.listdir(node_recv_path):
       os.remove(path_file)
 
 for node in range(0, options.num_cpus):
-    f = open (node_recv_path + str(node)+".txt",'w')
-    f.close()
+    fwgt = open (node_recv_path + str(node)+"_wgt.txt",'w')
+    fwgt.close()
+    fact = open (node_recv_path + str(node)+"_act.txt",'w')
+    fact.close()
+    fout = open (node_recv_path + str(node)+"_out.txt",'w')
+    fout.close()
+    ftag = open (node_recv_path + str(node)+"_tag_sent.txt",'w')
+    ftag.close()
 
 for i in os.listdir(node_cur_pic_path):
    path_file = os.path.join(node_cur_pic_path,i)
