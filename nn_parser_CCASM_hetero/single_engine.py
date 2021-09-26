@@ -11,6 +11,13 @@ np.set_printoptions(threshold=sys.maxsize)
 from DNN import *
 from pathlib import Path
 
+wgt_tag =  (int(1001))
+act_tag =  (int(1002))
+out_tag =  (int(1003))
+
+method1 = 0
+method2 = 1
+
 NoC_w = 4
 task = "VGG16"  
 if_hetero = 0
@@ -50,10 +57,10 @@ print ("compuation_cycles=",compuation_cycles)
 
 # storage size
 neuron_width  = 16 # bit
-AL1 = 2; OL1 = 2; WL1 = 2 # KByte
-AL1_mem = AL1*8*1024/neuron_width
-OL1_mem = OL1*8*1024/neuron_width
-WL1_mem = WL1*8*1024/neuron_width
+OL1 = 2; AL1 = 2; WL1 = 0.8 # KByte
+AL1_mem = AL1*8*1024/neuron_width/2 # /2是因为ping-pong
+OL1_mem = OL1*8*1024/neuron_width/2 
+WL1_mem = WL1*8*1024/neuron_width/2 
 
 L2=999999
 
@@ -63,8 +70,8 @@ al1_ratio = [Q1,    P1,     C1,     1,      1,      1,      Q2,     P2,     1]
 wl1_ratio = [1,     1,      C1,     K1,     S0,     R0,     1,      1 ,     1]
 all_param = [Q1,    P1,     C1,     K1,     S0,     R0,     Q2,     P2,     1]
 out_final = [0,     0,      0,      0,      0,      1,      1,      1,      1]
-act_share = 1 # depend on the parallel dimension
-wgt_share = 0 
+if_act_share = 1 # depend on the parallel dimension
+if_wgt_share = 0
 
 OL1_need = {}
 AL1_need = {}
@@ -154,23 +161,23 @@ else:
     rd_out_data_num = 0
 print("write opt mem ", OL1_need[inner],"repeat ",repeat_num[cur])
 pkt_num_wr_opt =  pkt_num_wr_opt + int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
-out_data_num = OL1_need[inner]
+out_data_num = OL1_need[inner] # 用于生成仿真指令
     
 cur = data_flow[al1_cp_id]; inner = data_flow[al1_cp_id-1]  
-print("read act mem ",AL1_need[inner],act_share,"repeat ",repeat_num[cur])
-if act_share==1: 
+print("read act mem ",AL1_need[inner],if_act_share,"repeat ",repeat_num[cur])
+if if_act_share==1: 
     pkt_num_rd_act_same = pkt_num_rd_act_same + int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
 else:
     pkt_num_rd_act_uniq = pkt_num_rd_act_uniq + int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
-act_data_num = AL1_need[inner]
+act_data_num = AL1_need[inner] # 用于生成仿真指令
 
 cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
-print("read wgt mem ",WL1_need[inner],wgt_share,"repeat ",repeat_num[cur]) 
-if wgt_share==1:
+print("read wgt mem ",WL1_need[inner],if_wgt_share,"repeat ",repeat_num[cur]) 
+if if_wgt_share==1:
     pkt_num_rd_wgt_same = pkt_num_rd_wgt_same + int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 else: 
     pkt_num_rd_wgt_uniq = pkt_num_rd_wgt_uniq + int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
-wgt_data_num = WL1_need[inner]
+wgt_data_num = WL1_need[inner] # 用于生成仿真指令
 
 ol1_node = 0; al1_node = 5; wl1_node = 10
 mem_node_list = [ol1_node,al1_node,wl1_node,15]
@@ -178,19 +185,72 @@ cc_node_list = [1,2,3,4, 6,7,8,9, 11,12,13,14, 16,17,18,19]
 cc_node_info = {}
 F_cur=F.copy()
 
-# 对每个cc node 构建其通信需求
-for cc_id in cc_node_list:
+def all_full(dict):
+    for item in dict:
+        if dict[item] == True: return False
+    return True
 
+# 对每个cc node 构建其通信需求
+for cc_id in cc_node_list: #单播
     ## from wgt mem to cc node 
-    bw_needed = (pkt_num_rd_wgt_uniq+pkt_num_rd_wgt_same) * flit_per_pkt  / compuation_cycles # 单位是flits/cycle
+    bw_needed = (pkt_num_rd_wgt_uniq) * flit_per_pkt  / compuation_cycles # 单位是flits/cycle
     for link in route_table[(wl1_node + 1000, cc_id + 1000)]:
         F_cur[link] += ( bw_needed / bw_scales[link] )
 
+# 广播操作 from wgt mem to cc node 
+wgt_multicast = []
+if pkt_num_rd_wgt_same != 0:
+    hungry_status = {}
+    for hung_cc_id in cc_node_list:
+        hungry_status[hung_cc_id] = True
+    cur_src_list = [wl1_node]
+    bw_needed = pkt_num_rd_wgt_same * flit_per_pkt  / compuation_cycles
+    while all_full(hungry_status) == False:
+        next_src_list = []
+        for item in route_table:
+            src = item[0]-1000
+            if (src in cur_src_list) and (len(route_table[item])==3): # 可以一跳到达
+                if ((item[1] - 1000) in hungry_status) and hungry_status[item[1]-1000] == True:  # 需要接收
+                    hungry_status[item[1]-1000] = False
+                    for link in route_table[item]: 
+                        F_cur[link] += ( bw_needed / bw_scales[link] )
+                    next_src_list.append(item[1] - 1000)
+                    wgt_multicast.append((src,item[1] - 1000))
+                    # print ("增加传输：",item)
+        cur_src_list = next_src_list
+
+
+for cc_id in cc_node_list: #单播
     ## from act mem to cc node 
-    bw_needed = (pkt_num_rd_act_uniq+pkt_num_rd_act_same) * flit_per_pkt  / compuation_cycles  
+    bw_needed = (pkt_num_rd_act_uniq) * flit_per_pkt  / compuation_cycles  
     for link in route_table[(al1_node + 1000, cc_id + 1000)]:
         F_cur[link] += ( bw_needed / bw_scales[link] )
+# 广播操作 from act mem to cc node 
+act_multicast = []
+if pkt_num_rd_act_same != 0:
+    hungry_status = {}
+    for hung_cc_id in cc_node_list:
+        hungry_status[hung_cc_id] = True
+    cur_src_list = [al1_node]
+    bw_needed = pkt_num_rd_act_same * flit_per_pkt  / compuation_cycles
+    debug_id = 0
+    while all_full(hungry_status) == False:
+        # debug_id+=1; print("debug_id = ",debug_id)
+        next_src_list = []
+        for item in route_table:
+            src = item[0]-1000
+            if (src in cur_src_list) and (len(route_table[item])==3): # 可以一跳到达
+                if ((item[1] - 1000) in hungry_status) and hungry_status[item[1]-1000] == True:  # 需要接收
+                    hungry_status[item[1]-1000] = False
+                    for link in route_table[item]: 
+                        F_cur[link] += ( bw_needed / bw_scales[link] )
+                    next_src_list.append(item[1] - 1000)
+                    act_multicast.append((src,item[1] - 1000))
+                    # print ("增加传输：",item)
+        cur_src_list = next_src_list
 
+
+for cc_id in cc_node_list: #单播
     ## from cc node to output mem
     bw_needed = pkt_num_wr_opt * flit_per_pkt / compuation_cycles 
     for link in route_table[(cc_id + 1000, ol1_node + 1000)]:
@@ -246,10 +306,11 @@ else:
 
 mem_wait_packet = {}
 
-if cal_cycle_per_run > small_out_packet: 
-    cal_cycle_per_run = cal_cycle_per_run - small_out_packet - 1
-else:
-    cal_cycle_per_run = 0
+# cal cycle不再进行处理
+# if cal_cycle_per_run > small_out_packet: 
+#     cal_cycle_per_run = cal_cycle_per_run - small_out_packet - 1
+# else:
+#     cal_cycle_per_run = 0
 
 for mem_id in mem_node_list:
     mem_wait_packet[mem_id] = 0
@@ -257,23 +318,64 @@ for mem_id in mem_node_list:
 # pipeline仿真 指令
 for cal_core_id in cc_node_list:  
     with open (output_folder_name_pipe+'/'+str(cal_core_id)+'.txt','a') as core_file:
-        if small_out_packet!= 0: print ("send "+str(ol1_node)+" "+str(small_out_packet), file= core_file)
+        if small_out_packet!= 0: print ("send "+str(ol1_node)+" "+str(small_out_packet)+" "+str(out_tag), file= core_file)
+        
+        # 方案1
+        if method1 == 1:
+            for i in range (small_wgt_packet):
+                print ("wait "+str(1) +" "+str(wgt_tag),file = core_file)
+                if if_wgt_share == 1 and small_wgt_packet != 0:
+                    for item in wgt_multicast:
+                        if item[0] == cal_core_id:    
+                            print ("send "+str(item[1])+" "+str(1)+" "+str(wgt_tag), file = core_file)
+
+            for i in range (small_act_packet):
+                print ("wait "+str(1) +" "+str(act_tag),file = core_file)
+                if if_act_share == 1 and small_act_packet !=0 :
+                    for item in act_multicast:
+                        if item[0] == cal_core_id:    
+                            print ("send "+str(item[1])+" "+str(1)+" "+str(act_tag), file = core_file)
+        # 方案2
+        if method2 == 1:
+            if if_wgt_share == 1 and small_wgt_packet != 0:
+                for item in wgt_multicast:
+                    if item[0] == cal_core_id:    
+                        print ("send "+str(item[1])+" "+str(small_wgt_packet)+" "+str(wgt_tag), file = core_file)
+                print ("wait "+str(small_wgt_packet) +" "+str(wgt_tag),file = core_file)
+            if if_act_share == 1 and small_act_packet !=0 :
+                for item in act_multicast:
+                    if item[0] == cal_core_id:    
+                        print ("send "+str(item[1])+" "+str(small_act_packet)+" "+str(act_tag), file = core_file)
+                print ("wait "+str(small_act_packet) +" "+str(act_tag),file = core_file)
+
+        print ("wait "+str(small_rd_out_packet) +" "+str(out_tag),file = core_file)
         print ("cal",cal_cycle_per_run, file = core_file)
-        print ("wait "+str(small_act_packet + small_wgt_packet + small_rd_out_packet), file = core_file)
         print ("finish", file= core_file)
     
         mem_wait_packet[ol1_node] += small_out_packet
 
     with open (output_folder_name_pipe+'/'+str(wl1_node)+'.txt','a') as mem_file:
-        if small_wgt_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_wgt_packet), file= mem_file)
+        if small_wgt_packet!= 0 and if_wgt_share != 1: print ("send "+str(cal_core_id)+" "+str(small_wgt_packet)+" "+str(wgt_tag), file= mem_file)
+        
     with open (output_folder_name_pipe+'/'+str(al1_node)+'.txt','a') as mem_file:
-        if small_act_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_act_packet), file= mem_file)
+        if small_act_packet!= 0 and if_act_share != 1: print ("send "+str(cal_core_id)+" "+str(small_act_packet)+" "+str(act_tag), file= mem_file)
+       
     with open (output_folder_name_pipe+'/'+str(ol1_node)+'.txt','a') as mem_file:
-        if small_rd_out_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_rd_out_packet), file= mem_file)
+        if small_rd_out_packet!= 0: print ("send "+str(cal_core_id)+" "+str(small_rd_out_packet)+" "+str(out_tag), file= mem_file)
+
+if small_wgt_packet!= 0 and if_wgt_share == 1: 
+    with open (output_folder_name_pipe+'/'+str(wl1_node)+'.txt','a') as mem_file:
+        for item in wgt_multicast:
+            if item[0] == wl1_node: print ("send "+str(item[1])+" "+str(small_wgt_packet)+" "+str(wgt_tag), file = mem_file)
+
+if small_act_packet!= 0 and if_act_share == 1: 
+    with open (output_folder_name_pipe+'/'+str(al1_node)+'.txt','a') as mem_file:
+        for item in act_multicast:
+            if item[0] == al1_node: print ("send "+str(item[1])+" "+str(small_act_packet)+" "+str(act_tag), file = mem_file)
 
 # ol1 node task
 with open (output_folder_name_pipe+'/'+str(ol1_node)+'.txt','a') as mem_file:
-    if mem_wait_packet[ol1_node] != 0: print ("wait "+str(mem_wait_packet[ol1_node]), file= mem_file)
+    if mem_wait_packet[ol1_node] != 0: print ("wait "+str(mem_wait_packet[ol1_node])+" "+str(out_tag), file= mem_file)
     
 
 for mem_id in mem_node_list:
@@ -283,12 +385,43 @@ for mem_id in mem_node_list:
 # 启动延迟仿真 指令
 for cal_core_id in cc_node_list:     
     with open (output_folder_name_start+'/'+str(cal_core_id)+'.txt','a') as core_file:
-        print ("wait "+str(act_packet + wgt_packet), file = core_file)
+        if if_act_share == 1 and act_packet !=0 :
+            for item in act_multicast:
+                if item[0] == cal_core_id:
+                    print ("wait "+str(act_packet)+" "+str(act_tag), file = core_file)
+                    break
+            for item in act_multicast:
+                if item[0] == cal_core_id:    
+                    print ("send "+str(item[1])+" "+str(act_packet)+" "+str(act_tag), file = core_file)
+        if if_wgt_share == 1 and wgt_packet !=0 :
+            for item in wgt_multicast:
+                if item[0] == cal_core_id:
+                    print ("wait "+str(wgt_packet)+" "+str(wgt_tag), file = core_file)
+                    break
+            for item in wgt_multicast:
+                if item[0] == cal_core_id:    
+                    print ("send "+str(item[1])+" "+str(wgt_packet)+" "+str(wgt_tag), file = core_file)
+
+        if if_act_share == 0: print ("wait "+str(act_packet)+" "+str(act_tag), file = core_file)
+        if if_wgt_share == 0: print ("wait "+str(wgt_packet)+" "+str(wgt_tag), file = core_file)
+
         print ("finish", file= core_file)
     with open (output_folder_name_start+'/'+str(wl1_node)+'.txt','a') as mem_file:
-        print ("send "+str(cal_core_id)+" "+str(wgt_packet), file= mem_file)
+        if if_wgt_share == 0: print ("send "+str(cal_core_id)+" "+str(wgt_packet)+" "+str(wgt_tag), file= mem_file)
+
     with open (output_folder_name_start+'/'+str(al1_node)+'.txt','a') as mem_file:
-        print ("send "+str(cal_core_id)+" "+str(act_packet), file= mem_file)
+        if if_act_share == 0: print ("send "+str(cal_core_id)+" "+str(act_packet)+" "+str(act_tag), file= mem_file)
+
+if wgt_packet!= 0 and if_wgt_share == 1: 
+    with open (output_folder_name_start+'/'+str(wl1_node)+'.txt','a') as mem_file:
+        for item in wgt_multicast:
+            if item[0] == wl1_node: print ("send "+str(item[1])+" "+str(wgt_packet)+" "+str(wgt_tag), file = mem_file)
+
+if act_packet!= 0 and if_act_share == 1: 
+    with open (output_folder_name_start+'/'+str(al1_node)+'.txt','a') as mem_file:
+        for item in act_multicast:
+            if item[0] == al1_node: print ("send "+str(item[1])+" "+str(act_packet)+" "+str(act_tag), file = mem_file)
+
 
 for mem_id in mem_node_list:
     with open (output_folder_name_start+'/'+str(mem_id)+'.txt','a') as mem_file:
