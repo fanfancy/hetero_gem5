@@ -15,10 +15,6 @@ wgt_tag =  (int(1001))
 act_tag =  (int(1002))
 out_tag =  (int(1003))
 
-method1 = 0
-method2 = 1
-
-NoC_w = 4
 task = "VGG16"  
 if_hetero = 0
 
@@ -320,23 +316,7 @@ for cal_core_id in cc_node_list:
     with open (output_folder_name_pipe+'/'+str(cal_core_id)+'.txt','a') as core_file:
         if small_out_packet!= 0: print ("send "+str(ol1_node)+" "+str(small_out_packet)+" "+str(out_tag), file= core_file)
         
-        # 方案1
-        if method1 == 1:
-            for i in range (small_wgt_packet):
-                print ("wait "+str(1) +" "+str(wgt_tag),file = core_file)
-                if if_wgt_share == 1 and small_wgt_packet != 0:
-                    for item in wgt_multicast:
-                        if item[0] == cal_core_id:    
-                            print ("send "+str(item[1])+" "+str(1)+" "+str(wgt_tag), file = core_file)
-
-            for i in range (small_act_packet):
-                print ("wait "+str(1) +" "+str(act_tag),file = core_file)
-                if if_act_share == 1 and small_act_packet !=0 :
-                    for item in act_multicast:
-                        if item[0] == cal_core_id:    
-                            print ("send "+str(item[1])+" "+str(1)+" "+str(act_tag), file = core_file)
-        # 方案2
-        if method2 == 1:
+        if (1):
             if if_wgt_share == 1 and small_wgt_packet != 0:
                 for item in wgt_multicast:
                     if item[0] == cal_core_id:    
