@@ -5,6 +5,7 @@
 
 - [x] 单引擎：read output partial sum
 - [ ] code refactory!
+- [ ] 拓扑：hetero_mesh_nopRouter 参数从脚本中传进来，而不要写死
 ---
 # hetero_gem5
 
