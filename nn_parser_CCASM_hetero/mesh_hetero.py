@@ -36,8 +36,8 @@ for nop_id in range (NOP_SIZE):
 # construct NoP nodes
 for src_nop_id in range (NOP_SIZE):
     for dst_nop_id in range (NOP_SIZE):
-        src =  NOC_NODE_NUM * NoP_w * NoP_w + src_nop_id
-        dst =  NOC_NODE_NUM * NoP_w * NoP_w + dst_nop_id
+        src =  NOC_NODE_NUM * NOP_SIZE + src_nop_id
+        dst =  NOC_NODE_NUM * NOP_SIZE + dst_nop_id
         local = src + 1000
         F[(local,src)] = 0
         F[(src,local)] = 0
@@ -68,6 +68,7 @@ for nop_id in range (NOP_SIZE):
 print ("F",F)
 print ("bw_scales",bw_scales)
 print ("len bw_scales",len(bw_scales))
+print ("----- finish construct the heterogeneous mesh ---- \n\n")
 # print ("F",F)
 
 noc_route_table = {}
@@ -86,7 +87,7 @@ def nop_id (real_id):
     
 for src in range (0,NOC_NODE_NUM*NOP_SIZE):
     for dst in range (0,NOC_NODE_NUM*NOP_SIZE):
-        print ("src = ",src,"dst = ",dst)
+        # print ("src = ",src,"dst = ",dst)
         noc_route_table[(src,dst)] = []
         cur_src = src
         cur_dst = src
@@ -96,7 +97,7 @@ for src in range (0,NOC_NODE_NUM*NOP_SIZE):
                 src_noc_y = int(noc_id(cur_src) / NoC_w)
                 dst_noc_x = noc_id(comm_id(src)) % NoC_w
                 dst_noc_y = int(noc_id(comm_id(src))/ NoC_w)
-                print (comm_id(src),src_noc_x,src_noc_y,dst_noc_x,dst_noc_y)
+                # print (comm_id(src),src_noc_x,src_noc_y,dst_noc_x,dst_noc_y)
                 if (src_noc_x > dst_noc_x):  # go west
                     cur_noc_dst = src_noc_x-1 +  src_noc_y * NoC_w
                 elif (src_noc_x < dst_noc_x): # go east
@@ -154,9 +155,9 @@ for src in range (0,NOC_NODE_NUM*NOP_SIZE):
             noc_route_table[(src,dst)].append((cur_src,cur_dst))
             cur_src = cur_dst
         
-print ("----noc_route_table------")
-for route_item in noc_route_table:
-    print (route_item,noc_route_table[route_item])
+# print ("----noc_route_table------")
+# for route_item in noc_route_table:
+#     print (route_item,noc_route_table[route_item])
 
 route_table = {}
 for src in range (1000,1000+NOC_NODE_NUM*NOP_SIZE):
