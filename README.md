@@ -1,27 +1,30 @@
 # TODO List
-- [ ] 修改了garnet的tester file,对多引擎仿真要做对应的改动(NOTE:目前的task一定要增加一种data tag才能运行)
+- [ ] 修改了garnet的tester file,对多引擎仿真要做对应的改动 （NOTE：目前的task一定要增加一种data tag才能运行）
 
-wgt_tag =  (int(1001))
-
-act_tag =  (int(1002))
-
-out_tag =  (int(1003))
+  wgt_tag=1001; act_tag=1002; out_tag=1003
 
 - [x] 单引擎：read output partial sum
-- [ ] 单引擎：output位于非innerCP点的情况的check
+- [ ] code refactory!
 ---
 # hetero_gem5
-## Support on noc+nop simulation
-- gem5/configs/topologies/hetero_mesh.py 支持仿真link wdith不同的mesh，实际仿真中无效果。
+
+This repo contains 1) gem5 with support of heterogeneous topology, 2) neural network parser and mapping system and 3) prediction function of single-engine & multiple-engine DNN accelerator performance.
+
+## Special Support for noc+nop simulation
+- gem5/configs/topologies/hetero_mesh.py 支持仿真link wdith不同的mesh，实际仿真中无效果。(不再使用了)
 - gem5/configs/topologies/hetero_mesh_nopRouter.py 支持仿真noc+nop router,具体配置信息需要在.py中手动配置。
 
-## Performance prediction & Genetic algorithm
+## File structure
 位于nn_parser_CCASM_hetero文件下：
-- nn_parser_CCASM_hetero/run_configs.py 用于指定workload拆分及mapping策略&拓扑。
-- nn_parser_CCASM_hetero/mesh_hetero.py 带有noc+nop router拓扑的实现。
-- nn_parser_CCASM_hetero/mesh.py 普通mesh实现。
+- run_configs.py 用于指定workload拆分及mapping策略&拓扑。
+- mesh_hetero.py 带有noc+nop router拓扑的实现。
+- mesh.py 普通mesh实现。
+- GAGA_gennew_waitall_fensan_2gene.py 多引擎workload拆分、mapping、性能预测、task file生成代码。
+- single_engine.py 单引擎性能预测&task file生成（under develop).
 
-## how to run
+## How to run
+:bug: 目前没法run，因为garnet源码对单引擎的一些更新
+
 依据需求修改nn_parser_CCASM_hetero/run_configs.py.
 ```
 cd nn_parser_CCASM_hetero
