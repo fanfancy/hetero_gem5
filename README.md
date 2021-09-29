@@ -12,7 +12,12 @@ This repo contains 1) gem5 with support of heterogeneous topology, 2) neural net
 
 ## Special Support for noc+nop simulation
 - gem5/configs/topologies/hetero_mesh.py 支持仿真link wdith不同的mesh，实际仿真中无效果。(不再使用了)
-- gem5/configs/topologies/hetero_mesh_nopRouter.py 支持仿真noc+nop router,具体配置信息需要在.py中手动配置。
+- gem5/configs/topologies/hetero_mesh_nopRouter.py 支持仿真noc+nop router,具体配置信息需要在.py中手动配置。脚本中写法如下:
+```
+	--topology=hetero_mesh_nopRouter \
+	--num-cpus= noc_core_num * nop_size
+	--num-dirs= noc_core_num * nop_size \
+```
 
 ## File structure
 位于nn_parser_CCASM_hetero文件下：
