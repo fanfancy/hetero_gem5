@@ -190,7 +190,7 @@ def printParseDict(dict):
 
 # para1是activation的组数，para2是weight的组数
 def getPEDistribution(para1, para2):
-	assert(para1*para2 == 16)
+	#assert(para1*para2 == 16)
 	act_PE_dict = {}
 	wgt_PE_dict = {}
 	act_PE_dict["send"] = {0:[mem["a"]]}
@@ -198,13 +198,13 @@ def getPEDistribution(para1, para2):
 	if para1 == 1:
 		act_PE_dict["recv"] = set_1_e_16[0]
 	elif para1 == 2:
-		ran = random.randint(0,1)
+		ran = random.randint(0,len(set_2_e_8)-1)
 		act_PE_dict["recv"] = set_2_e_8[ran]
 	elif para1 == 4:
-		ran = random.randint(0,1)
-		act_PE_dict["recv"] = set_4_e_4[ran]
+		ran = random.randint(0,len(set_4_e_4_1)-1)
+		act_PE_dict["recv"] = set_4_e_4_1[ran]
 	elif para1 == 8:
-		ran = random.randint(0,1)
+		ran = random.randint(0,len(set_8_e_2)-1)
 		act_PE_dict["recv"] = set_8_e_2[ran]
 	elif para1 == 16:
 		act_PE_dict["recv"] = set_16_e_1[0]
@@ -216,7 +216,7 @@ def getPEDistribution(para1, para2):
 	elif para2 == 2:
 		wgt_PE_dict["recv"] = set_2_e_8[ran]
 	elif para2 == 4:
-		wgt_PE_dict["recv"] = set_4_e_4[1-ran]
+		wgt_PE_dict["recv"] = set_4_e_4_2[ran]
 	elif para2 == 8:
 		wgt_PE_dict["recv"] = set_8_e_2[ran]
 	elif para2 == 16:
