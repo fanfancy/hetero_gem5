@@ -36,3 +36,6 @@ congestion_ratio = 0
 #### single engine 
 NoC_w = 5
 NOC_NODE_NUM = 20
+NoP_w = 5
+NOP_SIZE = 20
+CORE_NUM = NOC_NODE_NUM*NOP_SIZE
