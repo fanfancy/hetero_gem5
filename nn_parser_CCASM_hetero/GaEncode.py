@@ -189,12 +189,12 @@ def printParseDict(dict):
 		print(line)
 
 # para1是activation的组数，para2是weight的组数
-def getPEDistribution(para1, para2):
-	#assert(para1*para2 == 16)
+def getPEDistribution16(para1, para2):
+	assert(para1*para2 == 16)
 	act_PE_dict = {}
 	wgt_PE_dict = {}
-	act_PE_dict["send"] = {0:[mem["a"]]}
-	wgt_PE_dict["send"] = {0:[mem["w"]]}
+	act_PE_dict["send"] = {0:[mem_16["a"]]}
+	wgt_PE_dict["send"] = {0:[mem_16["w"]]}
 	if para1 == 1:
 		act_PE_dict["recv"] = set_1_e_16[0]
 	elif para1 == 2:
@@ -225,6 +225,34 @@ def getPEDistribution(para1, para2):
 		print("act parallel error!!!")
 	return act_PE_dict, wgt_PE_dict
 
+def getPEDistribution4(para1, para2):
+	assert(para1*para2 == 4)
+	act_PE_dict = {}
+	wgt_PE_dict = {}
+	act_PE_dict["send"] = {0:[mem_4["a"]]}
+	wgt_PE_dict["send"] = {0:[mem_4["w"]]}
+	if para1 == 1:
+		act_PE_dict["recv"] = set_1_e_4[0]
+	elif para1 == 2:
+		ran = random.randint(0,len(set_2_e_2_1)-1)
+		act_PE_dict["recv"] = set_2_e_2_1[ran]
+	elif para1 == 4:
+		ran = random.randint(0,len(set_4_e_1)-1)
+		act_PE_dict["recv"] = set_4_e_1[ran]
+	else:
+		print("act parallel error!!!")
+	
+	if para2 == 1:
+		wgt_PE_dict["recv"] = set_1_e_4[0]
+	elif para2 == 2:
+		wgt_PE_dict["recv"] = set_2_e_2_2[ran]
+	elif para2 == 4:
+		wgt_PE_dict["recv"] = set_4_e_1[ran]
+	else:
+		print("act parallel error!!!")
+	return act_PE_dict, wgt_PE_dict
+
+
 def dictAddInt(dict, num):
 	send = dict["send"]
 	recv = dict["recv"]
@@ -242,11 +270,15 @@ def dictAddInt(dict, num):
 def dictChipletChange(dict, flag1, flag2):
 	send = dict["send"]
 	recv = dict["recv"]
+	if Chiplets == 16:
+		NoP2NoCnode = NoP2NoCnode_16
+	elif Chiplets == 4:
+		NoP2NoCnode = NoP2NoCnode_4
 	for i in send:
 		for x in range(len(send[i])):
 			num = send[i][x]
+			print(num)
 			send[i][x] = NoP2NoCnode[num] + A_W_offset[flag1]
-
 	for i in recv:
 		for x in range(len(recv[i])):
 			num = recv[i][x]
@@ -259,6 +291,10 @@ def dictChipletChange(dict, flag1, flag2):
 def getPEExtent(dict, type=0, flag1 = 0, flag2 = 0):
 	list = []
 	#list.append(dict)
+	if Chiplets == 16:
+		NoC_node_offset = NoC_node_offset_16
+	elif Chiplets == 4:
+		NoC_node_offset = NoC_node_offset_4
 	if type == 0:
 		for i in NoC_node_offset:
 			dict1 = copy.deepcopy(dict)
@@ -271,10 +307,18 @@ def getPEExtent(dict, type=0, flag1 = 0, flag2 = 0):
 	return list
 # 获得输出特征图的数据节点通信关系
 def getOutputDict():
-	rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
-	wr_out_PE_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
-	rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
-	wr_out_Chiplet_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
+	if PEs == 16:
+		rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
+		wr_out_PE_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
+	elif PEs == 4:
+		rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
+		wr_out_PE_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
+	if Chiplets == 16:
+		rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
+		wr_out_Chiplet_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
+	elif Chiplets == 4:
+		rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
+		wr_out_Chiplet_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
 	rd_out_PE_dict = getPEExtent(rd_out_PE_dict_temp)
 	wr_out_PE_dict = getPEExtent(wr_out_PE_dict_temp)
 	rd_out_Chiplet_dict = getPEExtent(rd_out_Chiplet_dict_temp,1,"o","o")
@@ -364,9 +408,14 @@ def parseChange(parse):
 	wl1_ratio.append(1)
 	all_param.append(1)
 	out_final.append(1)
-
-	act_PE_dict_temp, wgt_PE_dict_temp = getPEDistribution(act_share_PE[0],wgt_share_PE[0])
-	act_Chiplet_dict_temp, wgt_Chiplet_dict_temp = getPEDistribution(act_share_Chiplet[0],wgt_share_Chiplet[0])
+	if PEs == 16:
+		act_PE_dict_temp, wgt_PE_dict_temp = getPEDistribution16(act_share_PE[0],wgt_share_PE[0])
+	elif PEs == 4:
+		act_PE_dict_temp, wgt_PE_dict_temp = getPEDistribution4(act_share_PE[0],wgt_share_PE[0])
+	if Chiplets == 16:
+		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp = getPEDistribution16(act_share_Chiplet[0],wgt_share_Chiplet[0])
+	elif Chiplets == 4:
+		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp = getPEDistribution4(act_share_Chiplet[0],wgt_share_Chiplet[0])
 	act_PE_dict = getPEExtent(act_PE_dict_temp)
 	wgt_PE_dict = getPEExtent(wgt_PE_dict_temp)
 	act_Chiplet_dict = getPEExtent(act_Chiplet_dict_temp,1,"o","a")
