@@ -42,10 +42,10 @@ from topologies.BaseTopology import SimpleTopology
 
 noc_link_width = 16 # todo modify this to parameters
 nop_link_width = 8
-noc_w = 2
-nop_w = 2
-noc_node_num = noc_w*noc_w
-nop_size = nop_w*nop_w
+noc_w = 5
+nop_w = 3
+noc_node_num = 20
+nop_size = 6
 core_num = noc_node_num*nop_size
 router_num = core_num + nop_size
 
@@ -129,7 +129,7 @@ class hetero_mesh_nopRouter(SimpleTopology):
         # --------------- Create the noc links. ---------------
         
         int_links = []
-        noc_num_rows= noc_w
+        noc_num_rows= int(noc_node_num / noc_w)
         noc_num_columns = noc_w
         
         for chip_id in range (nop_size):
@@ -199,7 +199,7 @@ class hetero_mesh_nopRouter(SimpleTopology):
                         link_count += 1
 
         # --------------- Create the nop links. ---------------
-        nop_num_rows= nop_w
+        nop_num_rows= int(nop_size / nop_w) 
         nop_num_columns = nop_w
         id_offset = core_num 
 
