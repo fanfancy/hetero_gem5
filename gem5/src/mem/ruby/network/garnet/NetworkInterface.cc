@@ -54,7 +54,10 @@ NetworkInterface::NetworkInterface(const Params *p)
     m_deadlock_threshold(p->garnet_deadlock_threshold),
     vc_busy_counter(m_virtual_networks, 0)
 {
-    num_recv_packet = 0;   
+    num_recv_packet_act = 0; 
+    num_recv_packet_out = 0;
+    num_recv_packet_wgt = 0;  
+    send_tag_line_id = 0;
     // read the network config and update num_cpus
     std::string file;
 	file = "./current_NoC_Configs.txt";
@@ -198,20 +201,33 @@ NetworkInterface::incrementStats(flit *t_flit)
  * into the protocol buffer. It also checks for credits being sent by the
  * downstream router.
  */
-void NetworkInterface::update_recv_packets(int id,int num_recv_packet, int the_recv_tag)
+void NetworkInterface::update_recv_packets(int id, int the_recv_tag)
 {
 	std::string file;
-    if (the_recv_tag == wgt_tag)
+    if (the_recv_tag == wgt_tag) {
+        num_recv_packet_wgt ++;
 	    file = "./../run_info/node_recv/"+std::to_string(id)+"_wgt"+".txt";
-    else if (the_recv_tag == act_tag)
+        ofstream OutFile(file);
+        OutFile << std::to_string(num_recv_packet_wgt); 
+        if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets wgt ing, id= " << id <<" packets="<<num_recv_packet_wgt<<std::endl;
+        OutFile.close();     
+    }
+    else if (the_recv_tag == act_tag) {
+        num_recv_packet_act ++;
         file = "./../run_info/node_recv/"+std::to_string(id)+"_act"+".txt";
-    else if (the_recv_tag == out_tag)
+        ofstream OutFile(file);
+        OutFile << std::to_string(num_recv_packet_act); 
+        if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets act ing, id= " << id <<" packets="<<num_recv_packet_act<<std::endl;
+        OutFile.close();     
+    }
+    else if (the_recv_tag == out_tag) {
+        num_recv_packet_out ++;
         file = "./../run_info/node_recv/"+std::to_string(id)+"_out"+".txt";
-
-	ofstream OutFile(file);
-	OutFile << std::to_string(num_recv_packet); 
-    if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets ing, id= " << id <<" packets="<<num_recv_packet<<std::endl;
-	OutFile.close();        
+        ofstream OutFile(file);
+        OutFile << std::to_string(num_recv_packet_out); 
+        if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets out ing, id= " << id <<" packets="<<num_recv_packet_out<<std::endl;
+        OutFile.close();     
+    }  
 }
 
 
@@ -241,6 +257,9 @@ NetworkInterface::wakeup()
             msg_ptr = b->peekMsgPtr();
             if (flitisizeMessage(msg_ptr, vnet)) {
                 b->dequeue(curTime);
+                if (if_debug==1)  std::cout << "NI " << m_id <<  " flitisizeMessage is called successfully!" << std::endl;
+                send_tag_line_id += 1;
+                // flitisizeMessage 被成功调用的次数=NI 发送的packet数目
             }
         }
     }
@@ -281,11 +300,9 @@ NetworkInterface::wakeup()
                     iPort->sendCredit(cFlit);
                     // Update stats and delete flit pointer
                     incrementStats(t_flit);
-                    num_recv_packet ++;
-                    if (if_debug==1) std::cout <<  "NI = "  << m_id << " num_recv_packet = " << num_recv_packet << std::endl;
                     // # received packets ++ here
                     int the_recv_tag = t_flit->get_tag();
-				    update_recv_packets(m_id-num_cpus, num_recv_packet, the_recv_tag); 
+				    update_recv_packets(m_id-num_cpus, the_recv_tag); 
                     
                     delete t_flit;
                 } else {
@@ -298,6 +315,7 @@ NetworkInterface::wakeup()
 
                     outNode_ptr[vnet]->registerDequeueCallback([this]() {
                         dequeueCallback(); });
+                    if (m_id - num_cpus == 25) std::cout << "node 25 buffered a tail flit!" << std::endl;
                 }
             } else {
                 // Non-tail flit. Send back a credit but not VC free signal.
@@ -409,9 +427,14 @@ NetworkInterface::flitisizeMessage(MsgPtr msg_ptr, int vnet)
     ifstream infile; 
     infile.open(file.data());  
     assert(infile.is_open());   
-    getline(infile,s_sent_data_tag);
+    int read_line_id;
+    read_line_id = 0;
+    while(getline(infile,s_sent_data_tag))
+    {
+        if (read_line_id == send_tag_line_id) break;
+        else read_line_id += 1;
+    }
     sent_data_tag=atoi(s_sent_data_tag.c_str());
-    if (if_debug) std::cout << "NI：the sent data tag= "<< s_sent_data_tag<< std::endl;
 
     Message *net_msg_ptr = msg_ptr.get();
     NetDest net_msg_dest = net_msg_ptr->getDestination();
@@ -486,11 +509,10 @@ NetworkInterface::flitisizeMessage(MsgPtr msg_ptr, int vnet)
                 m_net_ptr->MessageSizeType_to_int(
                 net_msg_ptr->getMessageSize()),
                 oPort->bitWidth(), curTick(), sent_data_tag);
-
             fl->set_src_delay(curTick() - ticksToCycles(msg_ptr->getTime()));
             niOutVcs[vc].insert(fl);
         }
-
+        if (if_debug) std::cout << "NI "<< m_id <<" send flit dest= " << destID << " sent data tag= "<< sent_data_tag<< std::endl;
         m_ni_out_vcs_enqueue_time[vc] = curTick();
         outVcState[vc].setState(ACTIVE_, curTick());
     }

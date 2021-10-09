@@ -65,7 +65,7 @@ class NetworkInterface : public ClockedObject, public Consumer
 
     void dequeueCallback();
     void wakeup();
-    void update_recv_packets(int id,int num_recv_packet, int the_recv_tag);
+    void update_recv_packets(int id, int the_recv_tag);
     void addNode(std::vector<MessageBuffer *> &inNode,
                  std::vector<MessageBuffer *> &outNode);
 
@@ -74,7 +74,10 @@ class NetworkInterface : public ClockedObject, public Consumer
     void init_net_ptr(GarnetNetwork *net_ptr) { m_net_ptr = net_ptr; }
 
     uint32_t functionalWrite(Packet *);
-    int num_recv_packet;
+    int num_recv_packet_wgt;
+    int num_recv_packet_out;
+    int num_recv_packet_act;
+    int send_tag_line_id; 
 
     void scheduleFlit(flit *t_flit);
 

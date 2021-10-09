@@ -196,7 +196,7 @@ GarnetSyntheticTraffic::init()
     // get current working path 
     char cwd[100];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
-       std::cout <<"Current working dir:  "<< cwd << std::endl;
+       //std::cout <<"Current working dir:  "<< cwd << std::endl;
     } else {
        std::cout << "getcwd() error" << std::endl;
     }
@@ -394,14 +394,7 @@ GarnetSyntheticTraffic::tick()
                     send_dst = atoi(current_task[1].c_str());
                     send_data_tag = atoi(current_task[3].c_str());
                     if (if_debug==1) std::cout <<"node: the sent data tag = "<< send_data_tag << std::endl;
-                    packets_sent = 0;
-
-                     //将data tag写入文件中
-                    std::string data_tag_file;
-	                data_tag_file = "./../run_info/node_recv/"+std::to_string(id)+"_tag_sent.txt";
-	                ofstream OutFile(data_tag_file);
-	                OutFile << std::to_string(send_data_tag); 
-                    OutFile.close();    
+                    packets_sent = 0;    
 
                 }
                 else if (current_task[0] == "wait_cmd"){
@@ -515,6 +508,13 @@ GarnetSyntheticTraffic::tick()
                 }
                 else {
                     sendAllowedThisCycle = true;
+                     //将data tag写入文件中
+                    std::string data_tag_file;
+	                data_tag_file = "./../run_info/node_recv/"+std::to_string(id)+"_tag_sent.txt";
+	                ofstream OutFile;
+                    OutFile.open(data_tag_file,ios::app);
+	                OutFile << std::to_string(send_data_tag) << std::endl; 
+                    OutFile.close();
                 }
             }
 
