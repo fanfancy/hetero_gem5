@@ -41,12 +41,12 @@ neuron_width  = 16 # bit
 OL1 = 1; AL1 = 1; WL1 = 1 # KByte
 OL2 = 64; AL2 = 64; WL2 = 64 # KByte
 # 卷积配置
-P = Q = 224; K=1024; C=64; R=S=3
+P = Q = 224; K=256; C=64; R=S=3
 # 映射方案 (目前只实现了K维度有并行度)
 # P3 Q3 PP3  PQ3  PK3 | P2 Q2  PP2  PQ2  PK2 |R  S  K1  C1  P1  Q1 | PC0 PK0
 PP3, P3, PP2, P2, P1 = 1, 14, 1, 4, 4
 PQ3, Q3, PQ2, Q2, Q1 = 1, 14, 1, 4, 4
-PK3, PK2, K1, PK0 = 16, 16, 1, 4
+PK3, PK2, K1, PK0 = 4, 16, 1, 4
 C1, PC0 = 16 ,4
 R0, S0 = 3, 3
 
@@ -172,9 +172,9 @@ out_core_dict[12] = [36]; out_core_dict[13] = [37]; out_core_dict[14] = [38]; ou
 
 dram_node  = 0
 act_chip_dict = {}; out_chip_dict = {}; wgt_chip_dict = {}
-out_chip_dict[0] = [20,40,60,80, 120,140,160,180, 220,240,260,280, 320,340,360,380]
-act_chip_dict[0] = [25,45,65,85, 125,145,165,185, 225,245,265,285, 325,345,365,385]
-wgt_chip_dict[0] = [30,50,70,90, 130,150,170,190, 230,250,270,290, 330,350,370,390]
+out_chip_dict[0] = [20,40,80,100]
+act_chip_dict[0] = [25,45,85,105]
+wgt_chip_dict[0] = [30,50,90,110]
 
 # 依据信息构建 mem_node_list 和 cc_node_list 
 mem_node_list = [ol2_node,al2_node,wl2_node,dram_node]
@@ -430,7 +430,7 @@ for item in wgt_chip_dict:
     dst_list = wgt_chip_dict[item]
     for dst in dst_list:
         with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as wl2_file:
-            print ("wait "+str(chip_small_wgt_packet) +" "+str(act_tag),file = wl2_file)
+            print ("wait "+str(chip_small_wgt_packet) +" "+str(wgt_tag),file = wl2_file)
         with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
             print ("send "+str(dst)+" "+str(chip_small_wgt_packet)+" "+str(wgt_tag), file= dram_file)
 
@@ -439,7 +439,7 @@ for item in out_chip_dict:
     dst_list = out_chip_dict[item]
     for dst in dst_list:
         with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
-            print ("wait "+str(chip_small_out_packet) +" "+str(act_tag),file = ol2_file)
+            print ("wait "+str(chip_small_out_packet) +" "+str(out_tag),file = ol2_file)
         with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
             print ("send "+str(dst)+" "+str(chip_small_out_packet)+" "+str(out_tag), file= dram_file)
 
@@ -447,7 +447,9 @@ for sim_node in range (all_sim_node_num):
     with open (output_folder_name_pipe+'/'+str(sim_node)+'.txt','a') as node_file:
         print ("finish",file = node_file)
 # 启动延迟仿真 指令
-        
+
+# todo 增加额外的nop router的task file，否则gem5无法运行
+
 ## summary 
 print ("\n------------summary------------")
 print ("repeat times = ", repeat_num[inner_cp])
