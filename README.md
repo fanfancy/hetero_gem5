@@ -19,6 +19,8 @@ This repo contains 1) gem5 with support of heterogeneous topology, 2) neural net
 	--num-cpus= noc_core_num * nop_size + nop_size \
 	--num-dirs= noc_core_num * nop_size + nop_size \
 ```
+## The baseline heterogeneous single-engine accelerator
+![Image text](https://github.com/fanfancy/hetero_gem5/blob/main/img/baseline_noc_nop.png)
 
 ## File structure
 位于nn_parser_CCASM_hetero文件下：
