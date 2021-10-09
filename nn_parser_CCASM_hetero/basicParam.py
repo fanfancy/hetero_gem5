@@ -7,18 +7,17 @@ import copy
 from enum import Enum
 
 # Parameter
-
 # architecture parameter
 Chiplets = 4
 PEs = 16
 C0 = 4
-K0 = 2
+K0 = 4
 
 # network parameter
-P = 100
-Q = 200
+P = 224
+Q = 224
 C = 64
-K = 128
+K = 1024
 R = 3
 S = 3
 C_new = math.ceil(C/C0)
@@ -88,3 +87,4 @@ NoP2NoCnode_16 = [0,20,40,60,80,0,120,140,160,180,0,220,240,260,280,0,320,340,36
 NoC_node_offset_4 = [20,40,80,100]
 NoP2NoCnode_4 = [0,20,40,0,80,100]
 A_W_offset = {"o":0, "a":5, "w":10}
+
