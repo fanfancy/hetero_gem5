@@ -7,6 +7,34 @@ import copy
 from enum import Enum
 from basicParam import *
 
+# 质因数分解
+def getZhiyinShu(num, list):
+	isZhishu = True
+	i = 2
+	square = int(math.sqrt(num)) + 1
+	while i <= square:
+		if num % i == 0:
+			list.append(i)
+			isZhishu = False
+			getZhiyinShu(num / i , list)
+			i += 1
+			break
+		i += 1
+	if isZhishu:
+		list.append(int(num))
+
+# 将一个数拆成三个整数相乘
+def setPartition_1(num, dim):
+	par_list = []
+	getZhiyinShu(num, par_list)
+	print(par_list)
+	par_dim = [1, 1, 1]
+	for i in par_list:
+		ran = random.randint(1, dim)
+		par_dim[ran-1] *= i
+	return par_dim
+
+
 # 将num拆分为dim个整数相乘（大于等于）
 def setPartition(num, dim):
 	list = []
@@ -49,9 +77,11 @@ def setParallelNum(P_num):
 def getPartitionChild():
 	size_i = []
 	parallel_num_set = []
+	parallel_dim_set = []
 	for i in range(4):
 		size_i.append(size[i])
 
+	#---并行度拆分（空间并行）---
 	if Par_type == 4:
 		d1, d2, p1, p2 = setParallel(PEs)
 		parallel_dim_set.append(d1)
@@ -83,10 +113,19 @@ def getPartitionChild():
 		size_i[3] = math.ceil(size_i[3]/p1)
 		size_i[2] = math.ceil(size_i[2]/p2)
 
-	Pset = setPartition(size_i[0], 3)
-	Qset = setPartition(size_i[1], 3)
-	Cset = setPartition(size_i[2], 3)
-	Kset = setPartition(size_i[3], 3)
+	#---维度拆分（时间并行）---
+	ran1 = random.randint(0,2)
+	print("random1 = ", ran1)
+	if ran1 == 0:
+		Pset = setPartition_1(size_i[0], 3)
+		Qset = setPartition_1(size_i[1], 3)
+		Cset = setPartition_1(size_i[2], 3)
+		Kset = setPartition_1(size_i[3], 3)
+	else:
+		Pset = setPartition(size_i[0], 3)
+		Qset = setPartition(size_i[1], 3)
+		Cset = setPartition(size_i[2], 3)
+		Kset = setPartition(size_i[3], 3)
 	code = parallel_dim_set + parallel_num_set + Pset + Qset + Cset + Kset # [Kp1,CP1,Kp2,Cp2,C1~C3,K1~K3,P1~P3,Q1~Q3]
 	return code
 
@@ -102,7 +141,7 @@ def getOrderCode():
 	code = list1 + list2 + list3
 	return code
 
-# 获得GA code
+# 获得GA code（for拆分+for_loop顺序）
 def getChild():
 	code1 = getPartitionChild()
 	code2 = getOrderCode()
@@ -119,7 +158,7 @@ def codeParse(code):
 	for_code[0] = code[8:11]
 	for_code[1] = code[11:14]
 	for_code[2] = code[14:17]
-	for_code[3] = code[17:21]
+	for_code[3] = code[17:20]
 	line_num = 0
 	for i in range(3):
 		ii = 3 - i
@@ -133,16 +172,15 @@ def codeParse(code):
 				else:
 					num = for_code[dim][i]
 				
-				if num > 1:
-					parse_dict[line_num] = [0,dim,num]
-					line_num += 1
+				parse_dict[line_num] = [0,dim,num]
+				line_num += 1
 		else:
 			for j in range(4):
 				dim = loop_order[i*4+2 + j]
 				num = for_code[dim][i]
-				if num > 1:
-					parse_dict[line_num] = [0,dim,num]
-					line_num += 1
+
+				parse_dict[line_num] = [0,dim,num]
+				line_num += 1
 
 		if i == 0:
 			if parallel_code[0] > 1:
@@ -185,16 +223,22 @@ def printParseDict(dict):
 		type = dict[i][0]
 		dim = dict[i][1]
 		num = dict[i][2]
-		line = type_list[type] + " " + dim_list[dim] + " in [0 : " + str(num) + "):"
-		print(line)
+		if num > 1:
+			line = type_list[type] + " " + dim_list[dim] + " in [0 : " + str(num) + "):"
+			print(line)
 
+# 获得计算核心对于act与wgt的共享情况
 # para1是activation的组数，para2是weight的组数
 def getPEDistribution16(para1, para2):
 	assert(para1*para2 == 16)
 	act_PE_dict = {}
 	wgt_PE_dict = {}
+
+	#---act + wgt send节点列表---
 	act_PE_dict["send"] = {0:[mem_16["a"]]}
 	wgt_PE_dict["send"] = {0:[mem_16["w"]]}
+
+	#---act recv节点列表---
 	if para1 == 1:
 		act_PE_dict["recv"] = set_1_e_16[0]
 	elif para1 == 2:
@@ -211,6 +255,7 @@ def getPEDistribution16(para1, para2):
 	else:
 		print("act parallel error!!!")
 	
+	#---wgt recv节点列表---
 	if para2 == 1:
 		wgt_PE_dict["recv"] = set_1_e_16[0]
 	elif para2 == 2:
@@ -229,8 +274,12 @@ def getPEDistribution4(para1, para2):
 	assert(para1*para2 == 4)
 	act_PE_dict = {}
 	wgt_PE_dict = {}
+
+	#---act + wgt send节点列表---
 	act_PE_dict["send"] = {0:[mem_4["a"]]}
 	wgt_PE_dict["send"] = {0:[mem_4["w"]]}
+
+	#---act recv节点列表---
 	if para1 == 1:
 		act_PE_dict["recv"] = set_1_e_4[0]
 	elif para1 == 2:
@@ -238,21 +287,23 @@ def getPEDistribution4(para1, para2):
 		act_PE_dict["recv"] = set_2_e_2_1[ran]
 	elif para1 == 4:
 		ran = random.randint(0,len(set_4_e_1)-1)
-		act_PE_dict["recv"] = set_4_e_1[ran]
+		act_PE_dict["recv"] = set_4_e_1[0]
 	else:
 		print("act parallel error!!!")
 	
+	#---wgt recv节点列表---
 	if para2 == 1:
 		wgt_PE_dict["recv"] = set_1_e_4[0]
 	elif para2 == 2:
 		wgt_PE_dict["recv"] = set_2_e_2_2[ran]
 	elif para2 == 4:
-		wgt_PE_dict["recv"] = set_4_e_1[ran]
+		wgt_PE_dict["recv"] = set_4_e_1[0]
 	else:
 		print("act parallel error!!!")
 	return act_PE_dict, wgt_PE_dict
 
-
+# 给dict的每个元素加上固定偏移量num
+# dict = {"send":{0:[],...},"recv":{0:[]...}}
 def dictAddInt(dict, num):
 	send = dict["send"]
 	recv = dict["recv"]
@@ -267,6 +318,7 @@ def dictAddInt(dict, num):
 	#print(send)
 	return dict1
 
+# 转换为chiplet
 def dictChipletChange(dict, flag1, flag2):
 	send = dict["send"]
 	recv = dict["recv"]
@@ -305,6 +357,7 @@ def getPEExtent(dict, type=0, flag1 = 0, flag2 = 0):
 		dict1 = dictChipletChange(dict1,flag1,flag2)
 		return dict1
 	return list
+
 # 获得输出特征图的数据节点通信关系
 def getOutputDict():
 	if PEs == 16:
@@ -342,6 +395,7 @@ def parseChange(parse):
 	wgt_share_PE = [1,1]
 	act_share_Chiplet = [1,1]
 	wgt_share_Chiplet = [1,1]
+	parallel_dim_list = {0:[1,1,1],1:[1,1,1]}
 	
 	for i in range(len(parse)):
 		for_type = parse[i][0]
@@ -367,6 +421,13 @@ def parseChange(parse):
 				wl1_ratio.append(1)
 			all_param.append(num)
 		elif for_type == 1:
+			if dim == 0:
+				parallel_dim_list[0][0] = num
+			elif dim == 1:
+				parallel_dim_list[0][1] = num
+			elif dim == 3:
+				parallel_dim_list[0][2] = num
+
 			if A_correlation[dim] == 0:
 				if_act_share_PE = 1
 				act_share_PE[1] *= num
@@ -379,6 +440,13 @@ def parseChange(parse):
 			else:
 				wgt_share_PE[0] *= num
 		elif for_type == 2:
+			if dim == 0:
+				parallel_dim_list[1][0] = num
+			elif dim == 1:
+				parallel_dim_list[1][1] = num
+			elif dim == 3:
+				parallel_dim_list[1][2] = num
+
 			if A_correlation[dim] == 0:
 				if_act_share_Chiplet = 1
 				act_share_Chiplet[1] *= num
@@ -401,7 +469,6 @@ def parseChange(parse):
 			out_final.append(0)
 		else:
 			out_final.append(1)
-	
 	data_flow.append("top")
 	ol1_ratio.append(1)
 	al1_ratio.append(1)
@@ -420,7 +487,36 @@ def parseChange(parse):
 	wgt_PE_dict = getPEExtent(wgt_PE_dict_temp)
 	act_Chiplet_dict = getPEExtent(act_Chiplet_dict_temp,1,"o","a")
 	wgt_Chiplet_dict = getPEExtent(wgt_Chiplet_dict_temp,1,"o","w")
-	return data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict
+	return data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, parallel_dim_list
+
+def printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict):
+	print("data_flow = ",for_list[0])
+	print("ol1_ratio = ",for_list[1])
+	print("al1_ratio = ",for_list[2])
+	print("wl1_ratio = ",for_list[3])
+	print("all_param = ",for_list[4])
+	print("out_final = ",for_list[5])
+	print("if_act_share_PE = ",for_list[6])
+	print("if_wgt_share_PE = ",for_list[7])
+	print("if_act_share_Chiplet = ",for_list[8])
+	print("if_wgt_share_Chiplet = ",for_list[9])
+	print("parallel_dim_list = ",parallel_dim_list)
+	print("")
+	print("act_PE_dict = ",act_wgt_dict["act_core"])
+	print("")
+	print("wgt_PE_dict = ",act_wgt_dict["wgt_core"])
+	print("")
+	print("act_Chiplet_dict = ",act_wgt_dict["act_chiplet"])
+	print("")
+	print("wgt_Chiplet_dict = ",act_wgt_dict["wgt_chiplet"])
+	print("")
+	print("rd_out_PE_dict = ",out_dict["rd_core"])
+	print(" ")
+	print("wr_out_PE_dict = ",out_dict["wr_core"])
+	print(" ")
+	print("rd_out_Chiplet_dict = ",out_dict["rd_chip"])
+	print(" ")
+	print("wr_out_Chiplet_dict = ",out_dict["wr_chip"])
 
 # act_PE_dict = {0:[],1:[]}，列表内为act复用的PE list， 0、1代表不同的组
 def GaGetChild():
@@ -428,36 +524,30 @@ def GaGetChild():
 	code = getChild()
 	parse = codeParse(code)
 	printParseDict(parse)
-	data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict = parseChange(parse)
-	rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict = getOutputDict()
 
-	print("data_flow = ",data_flow)
-	print("ol1_ratio = ",ol1_ratio)
-	print("al1_ratio = ",al1_ratio)
-	print("wl1_ratio = ",wl1_ratio)
-	print("all_param = ",all_param)
-	print("out_final = ",out_final)
-	print("if_act_share_PE = ",if_act_share_PE)
-	print("if_wgt_share_PE = ",if_wgt_share_PE)
-	print("if_act_share_Chiplet = ",if_act_share_Chiplet)
-	print("if_wgt_share_Chiplet = ",if_wgt_share_Chiplet)
-	print("")
-	print("act_PE_dict = ",act_PE_dict)
-	print("")
-	print("wgt_PE_dict = ",wgt_PE_dict)
-	print("")
-	print("act_Chiplet_dict = ",act_Chiplet_dict)
-	print("")
-	print("wgt_Chiplet_dict = ",wgt_Chiplet_dict)
-	print("")
-	print("rd_out_PE_dict = ",rd_out_PE_dict)
-	print(" ")
-	print("wr_out_PE_dict = ",wr_out_PE_dict)
-	print(" ")
-	print("rd_out_Chiplet_dict = ",rd_out_Chiplet_dict)
-	print(" ")
-	print("wr_out_Chiplet_dict = ",wr_out_Chiplet_dict)
+	#---获得PQKC的拆分---
+	partition_list = {"P":[],"Q":[],"K":[],"C":[]}
+	partition_list["P"] = code[8:11]
+	partition_list["Q"] = code[11:14]
+	partition_list["C"] = code[14:17]
+	partition_list["K"] = code[17:20]
 
-	return data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict
+	#---data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet---
+	for_list = {}
+	#---act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict---
+	act_wgt_dict = {}
+	for_list[0], for_list[1], for_list[2], for_list[3], for_list[4], for_list[5], for_list[6], for_list[7], for_list[8], for_list[9], act_wgt_dict["act_core"], act_wgt_dict["wgt_core"], act_wgt_dict["act_chiplet"], act_wgt_dict["wgt_chiplet"], parallel_dim_list = parseChange(parse)
+	#data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, parallel_dim_list = parseChange(parse)
+	
+	#---rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict---
+	out_dict = {}
+	out_dict["rd_core"], out_dict["wr_core"], out_dict["rd_chip"], out_dict["wr_chip"] = getOutputDict()
+	#rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict = getOutputDict()
 
-data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict = GaGetChild()
+	printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict)
+
+	return for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list
+	#return data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict
+
+#for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
+#print(parallel_dim_list)
