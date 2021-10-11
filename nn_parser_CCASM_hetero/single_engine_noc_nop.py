@@ -185,7 +185,7 @@ for item in wgt_core_dict:
         if core_id not in cc_node_list:
             cc_node_list.append(core_id)
 
-all_sim_node_num = CORE_NUM
+all_sim_node_num = CORE_NUM + NOP_SIZE
 
 # ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 # L1 用于统计通信总量 & prediction
@@ -297,29 +297,29 @@ for item in out_core_dict:
 # 对chip构建通信需求
 # 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
 bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
-for item in act_core_dict:
-    dst_list = act_core_dict[item]
+for item in act_chip_dict:
+    dst_list = act_chip_dict[item]
     for dst in dst_list:
         for link in route_table[(dram_node + 1000, dst + 1000)]:
             F_cur[link] += ( bw_needed / bw_scales[link] )
 
 bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
-for item in wgt_core_dict:
-    dst_list = wgt_core_dict[item]
+for item in wgt_chip_dict:
+    dst_list = wgt_chip_dict[item]
     for dst in dst_list:
         for link in route_table[(dram_node + 1000, dst + 1000)]:
             F_cur[link] += ( bw_needed / bw_scales[link] )
 
 bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
-for item in out_core_dict:
-    dst_list = out_core_dict[item]
+for item in out_chip_dict:
+    dst_list = out_chip_dict[item]
     for dst in dst_list:
         for link in route_table[(dram_node + 1000, dst + 1000)]:
             F_cur[link] += ( bw_needed / bw_scales[link] )
 
 bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
-for item in out_core_dict:
-    dst_list = out_core_dict[item]
+for item in out_chip_dict:
+    dst_list = out_chip_dict[item]
     for dst in dst_list:
         for link in route_table[(dst + 1000, dram_node+1000)]:
             F_cur[link] += ( bw_needed / bw_scales[link] )
@@ -434,21 +434,41 @@ for item in wgt_chip_dict:
         with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
             print ("send "+str(dst)+" "+str(chip_small_wgt_packet)+" "+str(wgt_tag), file= dram_file)
 
-# chiplet traffic: dram -> ol2 L2
+# chiplet traffic: dram -> out L2 (send part)
 for item in out_chip_dict:
-    dst_list = out_chip_dict[item]
-    for dst in dst_list:
-        with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
-            print ("wait "+str(chip_small_out_packet) +" "+str(out_tag),file = ol2_file)
-        with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
-            print ("send "+str(dst)+" "+str(chip_small_out_packet)+" "+str(out_tag), file= dram_file)
+	dst_list = out_chip_dict[item]
+	for dst in dst_list:
+		with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
+			print ("send "+str(dst)+" "+str(chip_small_rd_out_packet)+" "+str(out_tag), file= dram_file)
 
+# chiplet traffic: out L2 -> dram (send part)
+for item in out_chip_dict:
+	dst_list = out_chip_dict[item]
+	for dst in dst_list:
+		with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
+			print ("send "+str(dram_node)+" "+str(chip_small_out_packet) +" "+str(out_tag),file = ol2_file)
+		mem_wait_packet[dram_node] += chip_small_out_packet
+
+# chiplet traffic: out L2 -> dram (wait part)
+with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
+	print ("wait "+str(mem_wait_packet[dram_node])+" "+str(out_tag), file= dram_file)
+
+# chiplet traffic: dram -> out L2 (wait part)
+for item in out_chip_dict:
+	dst_list = out_chip_dict[item]
+	for dst in dst_list:
+		with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
+			print ("wait "+str(chip_small_rd_out_packet) +" "+str(out_tag),file = ol2_file)
+		
+# core traffic ol2 node task (wait part)
+with open (output_folder_name_pipe+'/'+str(ol2_node)+'.txt','a') as mem_file:
+	if mem_wait_packet[ol2_node] != 0: print ("wait "+str(mem_wait_packet[ol2_node])+" "+str(out_tag), file= mem_file)
+	
+# all finish
 for sim_node in range (all_sim_node_num):   
-    with open (output_folder_name_pipe+'/'+str(sim_node)+'.txt','a') as node_file:
-        print ("finish",file = node_file)
+	with open (output_folder_name_pipe+'/'+str(sim_node)+'.txt','a') as node_file:
+		print ("finish",file = node_file)
 # 启动延迟仿真 指令
-
-# todo 增加额外的nop router的task file，否则gem5无法运行
 
 ## summary 
 print ("\n------------summary------------")

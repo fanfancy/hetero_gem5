@@ -74,8 +74,8 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	runtimeQ = PQ3*Q3*PQ2*Q2*Q1
 	runtimeK = PK3*K3*PK2*K2*K1*PK0
 	runtimeC = C3*C2*C1*PC0
-	runtimeR = R
-	runtimeS = S
+	runtimeR = R0
+	runtimeS = S0
 	runtimeCoreNum = PK2*PQ2*PP2
 	runtimeChipNum = PP3*PQ3*PK3
 
@@ -183,7 +183,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			if core_id not in cc_node_list:
 				cc_node_list.append(core_id)
 
-	all_sim_node_num = CORE_NUM
+	all_sim_node_num = CORE_NUM + NOP_SIZE
 
 	# ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 	# L1 用于统计通信总量 & prediction
@@ -295,29 +295,29 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	# 对chip构建通信需求
 	# 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
 	bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
-	for item in act_core_dict:
-		dst_list = act_core_dict[item]
+	for item in act_chip_dict:
+		dst_list = act_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
-	for item in wgt_core_dict:
-		dst_list = wgt_core_dict[item]
+	for item in wgt_chip_dict:
+		dst_list = wgt_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
-	for item in out_core_dict:
-		dst_list = out_core_dict[item]
+	for item in out_chip_dict:
+		dst_list = out_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
-	for item in out_core_dict:
-		dst_list = out_core_dict[item]
+	for item in out_chip_dict:
+		dst_list = out_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dst + 1000, dram_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
@@ -476,7 +476,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 			if core_id not in cc_node_list:
 				cc_node_list.append(core_id)
 
-	all_sim_node_num = CORE_NUM
+	all_sim_node_num = CORE_NUM + NOP_SIZE
 
 	# ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 	# L1 用于统计通信总量 & prediction
@@ -588,29 +588,29 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	# 对chip构建通信需求
 	# 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
 	bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
-	for item in act_core_dict:
-		dst_list = act_core_dict[item]
+	for item in act_chip_dict:
+		dst_list = act_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
-	for item in wgt_core_dict:
-		dst_list = wgt_core_dict[item]
+	for item in wgt_chip_dict:
+		dst_list = wgt_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
-	for item in out_core_dict:
-		dst_list = out_core_dict[item]
+	for item in out_chip_dict:
+		dst_list = out_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
-	for item in out_core_dict:
-		dst_list = out_core_dict[item]
+	for item in out_chip_dict:
+		dst_list = out_chip_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dst + 1000, dram_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
@@ -702,10 +702,6 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		with open (output_folder_name_pipe+'/'+str(ol2_node)+'.txt','a') as mem_file:
 			if core_small_rd_out_packet!= 0: print ("send "+str(cal_core_id)+" "+str(core_small_rd_out_packet)+" "+str(out_tag), file= mem_file)
 
-	# ol1 node task
-	with open (output_folder_name_pipe+'/'+str(ol2_node)+'.txt','a') as mem_file:
-		if mem_wait_packet[ol2_node] != 0: print ("wait "+str(mem_wait_packet[ol2_node])+" "+str(out_tag), file= mem_file)
-		
 
 	# chiplet traffic: dram -> act L2
 	for item in act_chip_dict:
@@ -725,21 +721,42 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 			with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
 				print ("send "+str(dst)+" "+str(chip_small_wgt_packet)+" "+str(wgt_tag), file= dram_file)
 
-	# chiplet traffic: dram -> ol2 L2
+	# chiplet traffic: dram -> out L2 (send part)
+	for item in out_chip_dict:
+		dst_list = out_chip_dict[item]
+		for dst in dst_list:
+			with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
+				print ("send "+str(dst)+" "+str(chip_small_rd_out_packet)+" "+str(out_tag), file= dram_file)
+
+	# chiplet traffic: out L2 -> dram (send part)
 	for item in out_chip_dict:
 		dst_list = out_chip_dict[item]
 		for dst in dst_list:
 			with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
-				print ("wait "+str(chip_small_out_packet) +" "+str(out_tag),file = ol2_file)
-			with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
-				print ("send "+str(dst)+" "+str(chip_small_out_packet)+" "+str(out_tag), file= dram_file)
+				print ("send "+str(dram_node)+" "+str(chip_small_out_packet) +" "+str(out_tag),file = ol2_file)
+			mem_wait_packet[dram_node] += chip_small_out_packet
+	
+	# chiplet traffic: out L2 -> dram (wait part)
+	with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
+		print ("wait "+str(mem_wait_packet[dram_node])+" "+str(out_tag), file= dram_file)
 
+	# chiplet traffic: dram -> out L2 (wait part)
+	for item in out_chip_dict:
+		dst_list = out_chip_dict[item]
+		for dst in dst_list:
+			with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
+				print ("wait "+str(chip_small_rd_out_packet) +" "+str(out_tag),file = ol2_file)
+			
+	# core traffic ol2 node task (wait part)
+	with open (output_folder_name_pipe+'/'+str(ol2_node)+'.txt','a') as mem_file:
+		if mem_wait_packet[ol2_node] != 0: print ("wait "+str(mem_wait_packet[ol2_node])+" "+str(out_tag), file= mem_file)
+		
+	# all finish
 	for sim_node in range (all_sim_node_num):   
 		with open (output_folder_name_pipe+'/'+str(sim_node)+'.txt','a') as node_file:
 			print ("finish",file = node_file)
 	# 启动延迟仿真 指令
 
-	# todo 增加额外的nop router的task file，否则gem5无法运行
 
 	## summary 
 	print ("\n------------summary------------")
