@@ -396,15 +396,20 @@ def parseChange(parse):
 	act_share_Chiplet = [1,1]
 	wgt_share_Chiplet = [1,1]
 	parallel_dim_list = {0:[1,1,1],1:[1,1,1]}
+	index_PQKC = [1,1,1,1]
 	
 	for i in range(len(parse)):
 		for_type = parse[i][0]
 		dim = parse[i][1]
 		num = parse[i][2]
 		if for_type == 0:
-			data_flow.append(dim_list[dim])
+			if dim < 4:
+				data_flow.append(dim_list[dim]+str(index_PQKC[dim]))
+				index_PQKC[dim] += 1
+			else:
+				data_flow.append(dim_list[dim])
 			data_flow_dim.append(dim)
-
+			
 			if O_correlation[dim] == 1:
 				ol1_ratio.append(num)
 			else:
