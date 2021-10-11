@@ -43,7 +43,7 @@ neuron_width  = 16 # bit
 OL1 = 1; AL1 = 1; WL1 = 1 # KByte
 OL2 = 64; AL2 = 64; WL2 = 64 # KByte
 # 卷积配置
-P = Q = 224; K=1024; C=64; R=S=3
+P = Q = 224; K=256; C=64; R=S=3
 
 def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list):
 	# 映射方案 (目前只实现了K维度有并行度)
@@ -301,21 +301,21 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
-	bw_needed = (core_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
+	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 	for item in wgt_core_dict:
 		dst_list = wgt_core_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
-	bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
+	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
-	bw_needed = (core_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
+	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
 		for dst in dst_list:
@@ -594,21 +594,21 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
-	bw_needed = (core_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
+	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 	for item in wgt_core_dict:
 		dst_list = wgt_core_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
-	bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
+	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
 		for dst in dst_list:
 			for link in route_table[(dram_node + 1000, dst + 1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
-	bw_needed = (core_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
+	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
 		for dst in dst_list:

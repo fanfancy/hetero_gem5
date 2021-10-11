@@ -303,21 +303,21 @@ for item in act_core_dict:
         for link in route_table[(dram_node + 1000, dst + 1000)]:
             F_cur[link] += ( bw_needed / bw_scales[link] )
 
-bw_needed = (core_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
+bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 for item in wgt_core_dict:
     dst_list = wgt_core_dict[item]
     for dst in dst_list:
         for link in route_table[(dram_node + 1000, dst + 1000)]:
             F_cur[link] += ( bw_needed / bw_scales[link] )
 
-bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
+bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 for item in out_core_dict:
     dst_list = out_core_dict[item]
     for dst in dst_list:
         for link in route_table[(dram_node + 1000, dst + 1000)]:
             F_cur[link] += ( bw_needed / bw_scales[link] )
 
-bw_needed = (core_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
+bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 for item in out_core_dict:
     dst_list = out_core_dict[item]
     for dst in dst_list:
