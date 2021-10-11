@@ -134,7 +134,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	# ------------------ 决定存储临界点 ------------------
 
 	def find_cp(the_data_flow,storage_need,storage_size):
-		for id in range(len(data_flow)):
+		for id in range(len(the_data_flow)):
 			param = the_data_flow[id]
 			if storage_need[param] > storage_size: 
 				the_cp = param
@@ -420,7 +420,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	# ------------------ 决定存储临界点 ------------------
 
 	def find_cp(the_data_flow,storage_need,storage_size):
-		for id in range(len(data_flow)):
+		for id in range(len(the_data_flow)):
 			param = the_data_flow[id]
 			if storage_need[param] > storage_size: 
 				the_cp = param
