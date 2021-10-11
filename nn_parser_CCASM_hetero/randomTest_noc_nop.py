@@ -5,7 +5,7 @@ import random
 import numpy as np
 import copy
 from enum import Enum
-from single_engine_test import *
+from single_engine_predict_noc_nop import *
 from matplotlib import pyplot as plt
 
 iterTime = 1000
@@ -13,6 +13,7 @@ fitness_min = 0
 fitness_list = []
 fitness_min_list = []
 index = []
+degrade_ratio_list = []
 
 for i in range(iterTime):
   #---生成个代---
@@ -33,6 +34,7 @@ for i in range(iterTime):
 	fitness_list.append(fitness)
 	fitness_min_list.append(fitness_min)
 	index.append(i)
+	degrade_ratio_list.append (degrade_ratio)
 	print("######---------Times = ", i)
 	print("fitness_min = ",fitness_min)
 	print("compuation_cycles_1 = ",compuation_cycles_1)
@@ -48,6 +50,17 @@ print("degrade_ratio_1 = ",degrade_ratio_1)
 print("parallel_dim_list_1 = ",parallel_dim_list_1)
 print("partition_list_1 = ",partition_list_1)
 
-#plt.plot(index,fitness_min_list)
-#plt.plot(index,fitness_list)
-#plt.show()
+plt.figure(1)
+plt.scatter(index,degrade_ratio_list)
+plt.savefig("randomTest.png")
+
+
+degrade_ratio_list.sort()
+
+plt.figure(2)
+plt.scatter(index,degrade_ratio_list)
+plt.savefig("randomTest2.png")
+
+plt.figure(3)
+plt.scatter(index[:900],degrade_ratio_list[:900])
+plt.savefig("randomTest3.png")

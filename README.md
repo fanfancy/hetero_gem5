@@ -4,7 +4,7 @@
   wgt_tag=1001; act_tag=1002; out_tag=1003
 
 - [x] 单引擎：read output partial sum
-- [ ] code refactory!
+- [ ] code refactory: 统一文件读入hardware参数和conv参数 
 - [ ] 拓扑：hetero_mesh_nopRouter 参数从脚本中传进来，而不要写死
 ---
 # hetero_gem5
