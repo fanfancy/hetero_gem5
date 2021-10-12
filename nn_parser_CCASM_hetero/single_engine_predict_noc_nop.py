@@ -43,7 +43,7 @@ neuron_width  = 16 # bit
 OL1 = 1; AL1 = 1; WL1 = 1 # KByte
 OL2 = 64; AL2 = 64; WL2 = 64 # KByte
 # 卷积配置
-P = Q = 224; K=1024; C=64; R=S=3
+P = Q = 224; K=256; C=64; R=S=3
 
 def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list):
 	# 映射方案 (目前只实现了K维度有并行度)
