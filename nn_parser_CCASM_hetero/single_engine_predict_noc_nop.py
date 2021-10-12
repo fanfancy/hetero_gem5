@@ -43,7 +43,7 @@ neuron_width  = 16 # bit
 OL1 = 1; AL1 = 1; WL1 = 1 # KByte
 OL2 = 64; AL2 = 64; WL2 = 64 # KByte
 # 卷积配置
-P = Q = 224; K=256; C=64; R=S=3
+P = Q = 224; K=1024; C=64; R=S=3
 
 def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list):
 	# 映射方案 (目前只实现了K维度有并行度)
@@ -200,7 +200,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 	cur = data_flow[ol1_cp_id]; inner = data_flow[ol1_cp_id-1]  
 	if (if_out_final[cur]!=1): 
-		print("CORE: read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
+		#print("CORE: read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
 		core_pkt_num_rd_opt += int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) * repeat_num[cur]
 		core_rd_out_data_num += OL1_need[inner]
 	else:
@@ -702,7 +702,6 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		with open (output_folder_name_pipe+'/'+str(ol2_node)+'.txt','a') as mem_file:
 			if core_small_rd_out_packet!= 0: print ("send "+str(cal_core_id)+" "+str(core_small_rd_out_packet)+" "+str(out_tag), file= mem_file)
 
-
 	# chiplet traffic: dram -> act L2
 	for item in act_chip_dict:
 		dst_list = act_chip_dict[item]
@@ -735,7 +734,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 			with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
 				print ("send "+str(dram_node)+" "+str(chip_small_out_packet) +" "+str(out_tag),file = ol2_file)
 			mem_wait_packet[dram_node] += chip_small_out_packet
-	
+
 	# chiplet traffic: out L2 -> dram (wait part)
 	with open (output_folder_name_pipe+'/'+str(dram_node)+'.txt','a') as dram_file:
 		print ("wait "+str(mem_wait_packet[dram_node])+" "+str(out_tag), file= dram_file)
@@ -746,17 +745,19 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		for dst in dst_list:
 			with open (output_folder_name_pipe+'/'+str(dst)+'.txt','a') as ol2_file:
 				print ("wait "+str(chip_small_rd_out_packet) +" "+str(out_tag),file = ol2_file)
-			
+
 	# core traffic ol2 node task (wait part)
 	with open (output_folder_name_pipe+'/'+str(ol2_node)+'.txt','a') as mem_file:
 		if mem_wait_packet[ol2_node] != 0: print ("wait "+str(mem_wait_packet[ol2_node])+" "+str(out_tag), file= mem_file)
-		
+
 	# all finish
+
 	for sim_node in range (all_sim_node_num):   
 		with open (output_folder_name_pipe+'/'+str(sim_node)+'.txt','a') as node_file:
 			print ("finish",file = node_file)
 	# 启动延迟仿真 指令
 
+	# todo 增加额外的nop router的task file，否则gem5无法运行
 
 	## summary 
 	print ("\n------------summary------------")
