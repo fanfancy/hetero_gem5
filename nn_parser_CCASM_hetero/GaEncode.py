@@ -5,7 +5,7 @@ import random
 import numpy as np
 import copy
 from enum import Enum
-from basicParam import *
+from basicParam_noc_nop import *
 
 # 质因数分解
 def getZhiyinShu(num, list):
@@ -27,7 +27,6 @@ def getZhiyinShu(num, list):
 def setPartition_1(num, dim):
 	par_list = []
 	getZhiyinShu(num, par_list)
-	print(par_list)
 	par_dim = [1, 1, 1]
 	for i in par_list:
 		ran = random.randint(1, dim)
@@ -115,7 +114,6 @@ def getPartitionChild():
 
 	#---维度拆分（时间并行）---
 	ran1 = random.randint(0,2)
-	print("random1 = ", ran1)
 	if ran1 == 0:
 		Pset = setPartition_1(size_i[0], 3)
 		Qset = setPartition_1(size_i[1], 3)
@@ -329,7 +327,6 @@ def dictChipletChange(dict, flag1, flag2):
 	for i in send:
 		for x in range(len(send[i])):
 			num = send[i][x]
-			print(num)
 			send[i][x] = NoP2NoCnode[num] + A_W_offset[flag1]
 	for i in recv:
 		for x in range(len(recv[i])):
@@ -409,7 +406,7 @@ def parseChange(parse):
 			else:
 				data_flow.append(dim_list[dim])
 			data_flow_dim.append(dim)
-			
+
 			if O_correlation[dim] == 1:
 				ol1_ratio.append(num)
 			else:
@@ -525,10 +522,12 @@ def printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict):
 
 # act_PE_dict = {0:[],1:[]}，列表内为act复用的PE list， 0、1代表不同的组
 def GaGetChild():
-	printBasicSet()
+	if debug == 1:
+		printBasicSet()
 	code = getChild()
 	parse = codeParse(code)
-	printParseDict(parse)
+	if debug == 1:
+		printParseDict(parse)
 
 	#---获得PQKC的拆分---
 	partition_list = {"P":[],"Q":[],"K":[],"C":[]}
@@ -537,22 +536,39 @@ def GaGetChild():
 	partition_list["C"] = code[14:17]
 	partition_list["K"] = code[17:20]
 
-	#---data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet---
 	for_list = {}
-	#---act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict---
 	act_wgt_dict = {}
 	for_list[0], for_list[1], for_list[2], for_list[3], for_list[4], for_list[5], for_list[6], for_list[7], for_list[8], for_list[9], act_wgt_dict["act_core"], act_wgt_dict["wgt_core"], act_wgt_dict["act_chiplet"], act_wgt_dict["wgt_chiplet"], parallel_dim_list = parseChange(parse)
-	#data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, parallel_dim_list = parseChange(parse)
 	
-	#---rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict---
 	out_dict = {}
 	out_dict["rd_core"], out_dict["wr_core"], out_dict["rd_chip"], out_dict["wr_chip"] = getOutputDict()
-	#rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict = getOutputDict()
 
-	printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict)
+	if debug == 1:
+		printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict)
 
 	return for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list
-	#return data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict
 
-#for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
-#print(parallel_dim_list)
+def GaGetChildParse(code):
+	parse = codeParse(code)
+
+	#---获得PQKC的拆分---
+	partition_list = {"P":[],"Q":[],"K":[],"C":[]}
+	partition_list["P"] = code[8:11]
+	partition_list["Q"] = code[11:14]
+	partition_list["C"] = code[14:17]
+	partition_list["K"] = code[17:20]
+
+	for_list = {}
+
+	act_wgt_dict = {}
+	for_list[0], for_list[1], for_list[2], for_list[3], for_list[4], for_list[5], for_list[6], for_list[7], for_list[8], for_list[9], act_wgt_dict["act_core"], act_wgt_dict["wgt_core"], act_wgt_dict["act_chiplet"], act_wgt_dict["wgt_chiplet"], parallel_dim_list = parseChange(parse)
+
+	out_dict = {}
+	out_dict["rd_core"], out_dict["wr_core"], out_dict["rd_chip"], out_dict["wr_chip"] = getOutputDict()
+	
+	
+	return for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list
+
+if __name__ == '__main__':
+	for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
+	print(parallel_dim_list)
