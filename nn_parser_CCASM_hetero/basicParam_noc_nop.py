@@ -7,6 +7,7 @@ import copy
 from enum import Enum
 
 # Parameter
+debug = 0
 # architecture parameter
 Chiplets = 4
 PEs = 16
