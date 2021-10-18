@@ -147,6 +147,7 @@ RoutingUnit::addOutDirection(PortDirection outport_dirn, int outport_idx)
 {
     m_outports_dirn2idx[outport_dirn] = outport_idx;
     m_outports_idx2dirn[outport_idx]  = outport_dirn;
+    std::cout << "outport_idx = " << outport_idx << " outport_dirn = " << outport_dirn <<std::endl;
 }
 
 // outportCompute() is called by the InputUnit
