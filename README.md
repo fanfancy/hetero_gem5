@@ -11,6 +11,8 @@
 
 This repo contains 1) gem5 with support of heterogeneous topology, 2) neural network parser and mapping system and 3) prediction function of single-engine & multiple-engine DNN accelerator performance.
 
+This repo is developed based on gem5 v20.1.0.
+
 ## The baseline heterogeneous single-engine accelerator
 <div align=center>
 <img src="https://github.com/fanfancy/hetero_gem5/blob/main/img/baseline_noc_nop.png" width="800" alt="baseline_arch"/><br/>
