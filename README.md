@@ -35,7 +35,7 @@ This repo is developed based on gem5 v20.1.0.
 - GAGA_gennew_waitall_fensan_2gene.py 多引擎workload拆分、mapping、性能预测、task file生成代码。
 - single_engine.py 单引擎性能预测&task file生成（under develop).
 
-## How to run
+## Run 多引擎
 :bug: 目前没法run，因为garnet源码对单引擎的一些更新
 
 依据需求修改nn_parser_CCASM_hetero/run_configs.py.
@@ -52,3 +52,15 @@ python3 GAGA_gennew_waitall_fensan_2gene.py
 cd gem5
 sh run_dnn_example.sh
 ```
+
+## Run 单引擎
+```
+cd nn_parser_CCASM_hetero
+python3 randomTest_noc_nop.py.py
+```
+拷贝对应的task file
+```
+cd gem5
+sh run_singleEngine_baseline_noc.sh
+```
+可以得到运行一层网络的延迟信息。
