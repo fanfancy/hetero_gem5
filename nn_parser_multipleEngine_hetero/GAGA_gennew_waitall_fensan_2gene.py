@@ -6,30 +6,32 @@ import numpy as np
 import copy
 from enum import Enum
 from numpy.core.fromnumeric import mean
-from mesh import *
 import re
 np.set_printoptions(threshold=sys.maxsize)
 from DNN import *
 from run_configs import *
-
+if if_hetero == 0:
+    from mesh import *
+else:
+    from mesh_hetero import *
 
 # 遗传算法
 class GA_all:
-    def __init__(self, dnn, noc_node_num):
+    def __init__(self, dnn, core_node_num):
         self.dnn = dnn
-        self.noc_node_num = noc_node_num
+        self.core_node_num = core_node_num
         self.layer_num = dnn.layer_num
 
-        self.num_generation = 100
-        self.num_generation_left = 20
-        self.iter_max = 100
+        self.num_generation = 200
+        self.num_generation_left = 40
+        self.iter_max = 150
         self.ratio = 0.5
         self.pm = 0.3
     
     def check_layer_has_node(self, individual):
         individual_repair = individual.copy()
         for layer_id in range (0,self.layer_num):
-            cal_map = individual_repair[0:self.noc_node_num].tolist()
+            cal_map = individual_repair[0:self.core_node_num].tolist()
             if not (layer_id in cal_map):
                 # print ("layer",layer_id,"has no layer")
                 if (-1 in cal_map):
@@ -44,37 +46,37 @@ class GA_all:
     def check_map(self, individual):
         # print ("individual",individual)
         individual_repair = individual.copy()
-        for node_id in range (0,self.noc_node_num):
-            if not (node_id in individual[self.noc_node_num:]):
-                phy_map = individual_repair[self.noc_node_num:].tolist()
+        for node_id in range (0,self.core_node_num):
+            if not (node_id in individual[self.core_node_num:]):
+                phy_map = individual_repair[self.core_node_num:].tolist()
                 result = max(set(phy_map), key=phy_map.count)
-                index_many_layer = phy_map.index(result) + self.noc_node_num
+                index_many_layer = phy_map.index(result) + self.core_node_num
                 individual_repair[index_many_layer] = node_id
                 # print ("individual_repair", individual_repair)
         return individual_repair
 
     def check_layer_has_node_only (self, individual):
         for layer_id in range (0,self.layer_num):
-            if not (layer_id in individual[:self.noc_node_num]):
+            if not (layer_id in individual[:self.core_node_num]):
                 return False
         return True
 
     def check_map_only(self, individual):
-        for node_id in range (0,self.noc_node_num):
-            if not (node_id in individual[self.noc_node_num:]):
+        for node_id in range (0,self.core_node_num):
+            if not (node_id in individual[self.core_node_num:]):
                return False
         return True
 
     def createFirstGeneration(self):
-        generation = np.zeros((self.num_generation, self.noc_node_num*2))
+        generation = np.zeros((self.num_generation, self.core_node_num*2))
         for ind_id in range (self.num_generation):
             if_check_map = False
             generation[ind_id][0: self.layer_num] = np.arange(0,self.layer_num)
-            generation[ind_id][self.layer_num :self.noc_node_num] = np.random.randint(-1,self.layer_num,size=self.noc_node_num - self.layer_num)
+            generation[ind_id][self.layer_num :self.core_node_num] = np.random.randint(-1,self.layer_num,size=self.core_node_num - self.layer_num)
             generation[ind_id] = self.check_layer_has_node(generation[ind_id])
-            the_map = np.arange(self.noc_node_num)
+            the_map = np.arange(self.core_node_num)
             np.random.shuffle(the_map)
-            generation[ind_id][self.noc_node_num:] = the_map
+            generation[ind_id][self.core_node_num:] = the_map
         return generation
     
     def calF(self,indv):
@@ -84,7 +86,7 @@ class GA_all:
         layer_comp_cycles_1node = {}
         layer_send_pkt_num = {}
         for layer in range (self.layer_num):
-            node_num_in_layer[layer] = sum(indv[0:self.noc_node_num] == layer)
+            node_num_in_layer[layer] = sum(indv[0:self.core_node_num] == layer)
             layer_comp_cycles_1node[layer] = math.ceil (self.dnn.layer_neu_compute[layer] * self.dnn.layer_neuron_out[layer] / node_num_in_layer[layer] / PE_ability)  ## layer_neu_compute = 每层的每个输出神经元所需的计算量
             layer_send_pkt_num[layer] = math.ceil(self.dnn.layer_neuron_out[layer] / node_num_in_layer[layer] /(neu_per_flit*flit_per_pkt)) 
             
@@ -97,33 +99,18 @@ class GA_all:
             print ("layer_send_pkt_num",layer_send_pkt_num)
             print ("max_comp_cycle",max_comp_cycle)
 
-        real_route = {}
-        bw_needed = {}
-        real_src_dst = {}
-        for possible_src in range (self.noc_node_num):
-            src_layer_id = indv[possible_src]
-            src_phy_id = int(indv[possible_src + self.noc_node_num])
-            real_route[src_phy_id] = []
-            for possible_dst in range (self.noc_node_num):
+        for possible_src in range (self.core_node_num):
+            for possible_dst in range (self.core_node_num):
+                src_layer_id = indv[possible_src]
                 dst_layer_id =  indv[possible_dst]
-                dst_phy_id = int(indv[possible_dst + self.noc_node_num])
+
+                src_phy_id = int(indv[possible_src + self.core_node_num])
+                dst_phy_id = int(indv[possible_dst + self.core_node_num])
                 
                 if src_layer_id != -1 and src_layer_id + 1 ==  dst_layer_id:  # 这两个节点之间具有通信需求
-                    real_route[src_phy_id].append(route_table[(src_phy_id + 1000,dst_phy_id + 1000)])
-                    bw_needed[src_phy_id] =  layer_send_pkt_num[src_layer_id] / max_comp_cycle * flit_per_pkt
-                    # 
-
-        link_set = {}
-        for src_phy_id in real_route:
-            link_set[src_phy_id]=set()
-            for i in range(len(real_route[src_phy_id])):
-                    set_i = set(real_route[src_phy_id][i])
-                    link_set[src_phy_id] = link_set[src_phy_id].union(set_i)
-
-        for src_phy_id in real_route: 
-            for link in link_set[src_phy_id]:
-                F_cur[link] += bw_needed[src_phy_id]             
-        
+                    bw_needed =  layer_send_pkt_num[src_layer_id] / max_comp_cycle * flit_per_pkt
+                    for link in route_table[(src_phy_id + 1000,dst_phy_id + 1000)]:
+                        F_cur[link] += bw_needed / bw_scales [link]
         if(debug):
             ratio = 1
             for item in F_cur:
@@ -134,7 +121,6 @@ class GA_all:
             print ("F_cur sum",sum(F_cur.values()))
             print ("F_cur len",len(F_cur))
             print ("ratio=",ratio)
-            sys.exit()
         return F_cur,max_comp_cycle
 
     def calFitness(self,gen):
@@ -192,10 +178,10 @@ class GA_all:
 
     def cross(self, father1,father2):
         # 交叉
-        index = random.randint(1, self.noc_node_num*2 - 1)
-        gen1 = np.zeros(self.noc_node_num*2)
-        gen2 = np.zeros(self.noc_node_num*2)
-        for i in range(0, self.noc_node_num*2):
+        index = random.randint(1, self.core_node_num*2 - 1)
+        gen1 = np.zeros(self.core_node_num*2)
+        gen2 = np.zeros(self.core_node_num*2)
+        for i in range(0, self.core_node_num*2):
             if i < index:
                 gen1[i] = father1[i]
                 gen2[i] = father2[i]
@@ -209,9 +195,9 @@ class GA_all:
         gen2 = self.check_layer_has_node(gen2)
         gen2 = self.check_map(gen2)
 
-        rand1 = random.random()            
+        rand1 = random.random()
         rand2 = random.random()
-
+        
         assert(self.check_layer_has_node_only(gen1))
         assert(self.check_layer_has_node_only(gen2))
         assert(self.check_map_only(gen1))
@@ -219,25 +205,25 @@ class GA_all:
 
         # 变异
         if rand1 < self.pm:
-            index = random.randint(0, self.noc_node_num*2 - 1)
-            if index <= self.noc_node_num-1:
+            index = random.randint(0, self.core_node_num*2 - 1)
+            if index <= self.core_node_num-1:
                 value = random.randint(-1, self.layer_num-1)
                 gen1[index] = value
                 gen1 = self.check_layer_has_node(gen1)
             else:
-                index2 = random.randint(0, self.noc_node_num - 1) + self.noc_node_num
+                index2 = random.randint(0, self.core_node_num - 1) + self.core_node_num
                 temp = gen1[index]
                 gen1[index] = gen1[index2]
                 gen1[index2] = temp
     
         if rand2 < self.pm:
-            index = random.randint(0, self.noc_node_num*2 - 1)
-            if index <= self.noc_node_num-1:
+            index = random.randint(0, self.core_node_num*2 - 1)
+            if index <= self.core_node_num-1:
                 value = random.randint(-1, self.layer_num-1)
                 gen2[index] = value
                 gen2 = self.check_layer_has_node(gen2)
             else:
-                index2 = random.randint(0, self.noc_node_num - 1) + self.noc_node_num
+                index2 = random.randint(0, self.core_node_num - 1) + self.core_node_num
                 temp = gen2[index]
                 gen2[index] = gen2[index2]
                 gen2[index2] = temp
@@ -249,7 +235,7 @@ class GA_all:
         return gen1, gen2
 
     def createNextGeneration(self, generation, select_probability, select_table):
-        generation_next = np.zeros((self.num_generation, self.noc_node_num *2 ), dtype = int)
+        generation_next = np.zeros((self.num_generation, self.core_node_num *2 ), dtype = int)
         times = int((self.num_generation - self.num_generation_left)/2)
         for i in range(0, times):
             # 选择
@@ -261,7 +247,7 @@ class GA_all:
             gen1, gen2 = self.cross(father1,father2)
             
             gen_id = i * 2
-            for l_id in range(0, self.noc_node_num *2 ):
+            for l_id in range(0, self.core_node_num *2 ):
                 generation_next[gen_id][l_id] = gen1[l_id]
                 generation_next[gen_id + 1][l_id] = gen2[l_id]
             
@@ -269,7 +255,7 @@ class GA_all:
         for i in range(0, self.num_generation_left):
             gen_id = self.num_generation - self.num_generation_left + i
             select_gen_id = select_gen_list[i]
-            for l_id in range(0, self.noc_node_num *2 ):
+            for l_id in range(0, self.core_node_num *2 ):
                 generation_next[gen_id][l_id] = generation[select_gen_id][l_id]
         return generation_next
 
@@ -373,7 +359,7 @@ def generate_info (dnn, map):
     layer_wait_pkt_num = {}
     
     for layer in range (dnn.layer_num):
-        node_num_in_layer[layer] = sum(map[0:NOC_NODE_NUM] == layer)
+        node_num_in_layer[layer] = sum(map[0:CORE_NUM] == layer)
         layer_comp_cycles_1node[layer] = math.ceil (dnn.layer_neu_compute[layer] * dnn.layer_neuron_out[layer] / node_num_in_layer[layer] / PE_ability)  ## layer_neu_compute = 每层的每个输出神经元所需的计算量
         layer_send_pkt_num[layer] = math.ceil(dnn.layer_neuron_out[layer] / node_num_in_layer[layer] /(neu_per_flit*flit_per_pkt))
     for layer in range (1, dnn.layer_num):
@@ -383,8 +369,8 @@ def generate_info (dnn, map):
     print ("layer_comp_cycles_1node" ,layer_comp_cycles_1node )
     print ("layer_send_pkt_num" , layer_send_pkt_num)
     print ("layer_wait_pkt_num" ,layer_wait_pkt_num )
-    print ("map1:" , map[:NOC_NODE_NUM])
-    print ("map2:" , map[NOC_NODE_NUM:])
+    print ("map1:" , map[:CORE_NUM])
+    print ("map2:" , map[CORE_NUM:])
     print ("len(map)" , len(map))
 
     phy_node_wait_pkt = {}
@@ -392,9 +378,9 @@ def generate_info (dnn, map):
     phy_node_send_dst = {}
     phy_node_cal_cycles = {}
 
-    for cal_id in range (0, NOC_NODE_NUM):
+    for cal_id in range (0, CORE_NUM):
         layer_id = int(map[cal_id])
-        phy_id = int(map[cal_id+NOC_NODE_NUM])
+        phy_id = int(map[cal_id+CORE_NUM])
         if layer_id != -1:
             phy_node_cal_cycles[phy_id] = layer_comp_cycles_1node[layer_id]
             if layer_id != dnn.layer_num:
@@ -402,15 +388,15 @@ def generate_info (dnn, map):
             if layer_id != 0:
                 phy_node_wait_pkt[phy_id]   = layer_wait_pkt_num[layer_id]
     
-    for cal_id_src in range (0, NOC_NODE_NUM):
+    for cal_id_src in range (0, CORE_NUM):
         phy_node_send_dst[cal_id_src] = []
 
-    for cal_id_src in range (0, NOC_NODE_NUM):
-        for cal_id_dst in range (0, NOC_NODE_NUM):
+    for cal_id_src in range (0, CORE_NUM):
+        for cal_id_dst in range (0, CORE_NUM):
             layer_id_src = int (map[cal_id_src] )
             layer_id_dst = int (map[cal_id_dst] )
-            phy_id_src = int(map[cal_id_src + NOC_NODE_NUM])
-            phy_id_dst = int(map[cal_id_dst + NOC_NODE_NUM])
+            phy_id_src = int(map[cal_id_src + CORE_NUM])
+            phy_id_dst = int(map[cal_id_dst + CORE_NUM])
 
             if (layer_id_src != -1) and ( (layer_id_src + 1) == layer_id_dst):
                 phy_node_send_dst[phy_id_src].append(phy_id_dst)
@@ -426,13 +412,14 @@ def neuron_group(dnn,node_num):
     map_best = map_best -1 
     max_node_num_cur = node_num
     print (max_node_num_cur)
-
+    print ("node_num",node_num)
 
     while (1): 
         layer_node_num = {}
         neuron_sum = sum(dnn.layer_neuron_out.values())
         for i in dnn.layer_neuron_out :
             layer_node_num[i] = math.ceil(dnn.layer_neuron_out[i] / neuron_sum * max_node_num_cur) 
+            print ("layer_node_num[i]",i,layer_node_num[i])
         if sum(layer_node_num.values()) <= max_node_num:
             break
         else:
@@ -448,7 +435,7 @@ def neuron_group(dnn,node_num):
             cal_id += 1
     print ("dnn.layer_neuron_out",dnn.layer_neuron_out)
     print ("layer_node_num",layer_node_num)
-    print ("map_best",map_best[0:NOC_NODE_NUM])
+    print ("map_best",map_best[0:CORE_NUM])
 
     return map_best
 
@@ -480,18 +467,18 @@ def cmp_group(dnn,node_num):
             cal_id += 1
     print ("dnn.layer_neu_compute",dnn.layer_neu_compute)
     print ("layer_node_num",layer_node_num)
-    print ("map_best",map_best[0:NOC_NODE_NUM])
+    print ("map_best",map_best[0:CORE_NUM])
 
     return map_best
 
-
+        
 def calF_general(dnn,indv):
     F_cur=F.copy()
     node_num_in_layer = {}
     layer_comp_cycles_1node = {}
     layer_send_pkt_num = {}
     for layer in range (dnn.layer_num):
-        node_num_in_layer[layer] = sum(indv[0:NOC_NODE_NUM] == layer)
+        node_num_in_layer[layer] = sum(indv[0:CORE_NUM] == layer)
         layer_comp_cycles_1node[layer] = math.ceil (dnn.layer_neu_compute[layer] * dnn.layer_neuron_out[layer] / node_num_in_layer[layer] / PE_ability)  ## layer_neu_compute = 每层的每个输出神经元所需的计算量
         layer_send_pkt_num[layer] = math.ceil(dnn.layer_neuron_out[layer] / node_num_in_layer[layer] /(neu_per_flit*flit_per_pkt)) 
         
@@ -502,34 +489,17 @@ def calF_general(dnn,indv):
         print ("layer_comp_cycles_1node",layer_comp_cycles_1node)
         print ("layer_send_pkt_num",layer_send_pkt_num)
         print ("max_comp_cycle",max_comp_cycle)
-
-    real_route = {}
-    bw_needed = {}
-    real_src_dst = {}
-
-    for possible_src in range (NOC_NODE_NUM):
-        src_layer_id = indv[possible_src]
-        src_phy_id = int(indv[possible_src + NOC_NODE_NUM])
-        real_route[src_phy_id] = []
-        for possible_dst in range (NOC_NODE_NUM):
+    for possible_src in range (CORE_NUM):
+        for possible_dst in range (CORE_NUM):
+            src_layer_id = indv[possible_src]
             dst_layer_id =  indv[possible_dst]
-            dst_phy_id = int(indv[possible_dst + NOC_NODE_NUM])
+            src_phy_id = int(indv[possible_src + CORE_NUM])
+            dst_phy_id = int(indv[possible_dst + CORE_NUM])
             
             if src_layer_id != -1 and src_layer_id + 1 ==  dst_layer_id:  # 这两个节点之间具有通信需求
-                real_route[src_phy_id].append(route_table[(src_phy_id + 1000,dst_phy_id + 1000)])
-                bw_needed[src_phy_id] =  layer_send_pkt_num[src_layer_id] / max_comp_cycle * flit_per_pkt
-            
-    link_set = {}
-    for src_phy_id in real_route:
-        link_set[src_phy_id]=set()
-        for i in range(len(real_route[src_phy_id])):
-                set_i = set(real_route[src_phy_id][i])
-                link_set[src_phy_id] = link_set[src_phy_id].union(set_i)
-
-    for src_phy_id in real_route: 
-        for link in link_set[src_phy_id]:
-            F_cur[link] += bw_needed[src_phy_id]      
-
+                bw_needed =  layer_send_pkt_num[src_layer_id] / max_comp_cycle * flit_per_pkt
+                for link in route_table[(src_phy_id + 1000,dst_phy_id + 1000)]:
+                    F_cur[link] += bw_needed / bw_scales[link]
     if(debug):
         ratio = 1
         for item in F_cur:
@@ -548,43 +518,47 @@ def calF_general(dnn,indv):
 print ("task = ",task)
 print ("method = ", method)
 print ("NoC_w = ", NoC_w)
-print ("with multicast")
+print ("no multicast")
 DNN1 = DNNModel("DNN1")
 DNN_input(task, DNN1)
 result_list = []
+throughput_list =[]
 max_f_list = []
 
 for PE_ability in PE_ability_list:
     print ("\n\n ########PE_ability=",PE_ability,"########")
     if method=="GA_RF":
-        ga = GA_all(DNN1,NOC_NODE_NUM)
+        ga = GA_all(DNN1,CORE_NUM)
         genbest = ga.GA()
     elif method=="neuron_group_seq":
-        genbest = neuron_group(DNN1,NOC_NODE_NUM)
-        genbest[NOC_NODE_NUM:] = np.arange(0,NOC_NODE_NUM)
-        print ("genbest=",genbest[:NOC_NODE_NUM],"genbest=",genbest[NOC_NODE_NUM:])
+        genbest = neuron_group(DNN1,CORE_NUM)
+        genbest[CORE_NUM:] = np.arange(0,CORE_NUM)
+        print ("genbest=",genbest[:CORE_NUM],"genbest=",genbest[CORE_NUM:])
     elif method=="neuron_group_rdm":
-        genbest = neuron_group(DNN1,NOC_NODE_NUM)
-        map_list =  np.arange(0,NOC_NODE_NUM)
+        genbest = neuron_group(DNN1,CORE_NUM)
+        map_list =  np.arange(0,CORE_NUM)
         np.random.shuffle(map_list)
-        genbest[NOC_NODE_NUM:] = map_list
-        print ("genbest=",genbest[:NOC_NODE_NUM],"genbest=",genbest[NOC_NODE_NUM:])
+        genbest[CORE_NUM:] = map_list
+        print ("genbest=",genbest[:CORE_NUM],"genbest=",genbest[CORE_NUM:])
     elif method == "comp_group_seq":
-        genbest = cmp_group(DNN1,NOC_NODE_NUM)
-        genbest[NOC_NODE_NUM:] = np.arange(0,NOC_NODE_NUM)
-        print ("genbest=",genbest[:NOC_NODE_NUM],"genbest=",genbest[NOC_NODE_NUM:])
+        genbest = cmp_group(DNN1,CORE_NUM)
+        genbest[CORE_NUM:] = np.arange(0,CORE_NUM)
+        print ("genbest=",genbest[:CORE_NUM],"genbest=",genbest[CORE_NUM:])
     elif method == "comp_group_rdm":
-        genbest = cmp_group(DNN1,NOC_NODE_NUM)
-        map_list =  np.arange(0,NOC_NODE_NUM)
+        genbest = cmp_group(DNN1,CORE_NUM)
+        map_list =  np.arange(0,CORE_NUM)
         np.random.shuffle(map_list)
-        genbest[NOC_NODE_NUM:] = map_list
-        print ("genbest=",genbest[:NOC_NODE_NUM],"genbest=",genbest[NOC_NODE_NUM:])
+        genbest[CORE_NUM:] = map_list
+        print ("genbest=",genbest[:CORE_NUM],"genbest=",genbest[CORE_NUM:])
 
     phy_node_wait_pkt,phy_node_send_pkt,phy_node_send_dst,phy_node_cal_cycles = generate_info(DNN1,genbest)
     #生成任务文件
 
     scale_size = 1
-    create_task_list( "./task/task_lenet_2", NOC_NODE_NUM, scale_size, NOC_NODE_NUM, phy_node_cal_cycles, phy_node_send_pkt, phy_node_send_dst, phy_node_wait_pkt,genbest)
+    output_folder_name = task+'_'+method+'_'+str(NoC_w)+'_'+str(PE_ability)
+    os.system('mkdir ./task/'+output_folder_name)
+    if (if_create_task == 1):
+        create_task_list( "./task/"+output_folder_name, CORE_NUM, scale_size, CORE_NUM, phy_node_cal_cycles, phy_node_send_pkt, phy_node_send_dst, phy_node_wait_pkt,genbest)
 
 
     # 输出最终结果
@@ -600,8 +574,12 @@ for PE_ability in PE_ability_list:
     print ("max(best_F_cur.values()",max(best_F_cur.values()))
     print ("best_fitness",best_fitness)
     result_list.append(best_fitness)
+    throughput_list.append(1/best_fitness*clock_freq)
     max_f_list.append(max(best_F_cur.values()))
 
 print ("PE_ability_list",PE_ability_list)
 print ("result_list", result_list)
 print ("max_f_list", max_f_list)
+print ("throughput_list:")
+for throughput in throughput_list:
+    print (throughput)
