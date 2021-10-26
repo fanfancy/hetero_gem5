@@ -34,8 +34,8 @@ def randomTest(GATest,iterTime):
 		fitness_list.append(fitness)
 		fitness_min_ran_list.append(fitness_min_ran)
 		degrade_ratio_list.append (degrade_ratio)
-		#TODO
-		excel_datas.append([i, fitness, degrade_ratio, str(for_list[0]), \  
+
+		excel_datas.append([i, fitness, degrade_ratio, str(for_list[0]), \
 			parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2], \
 			parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2], \
 			parallel_dim_list[0][0]*parallel_dim_list[1][0], \
@@ -57,11 +57,10 @@ def randomTest(GATest,iterTime):
 		print("")
 		
 		#---生成task file
-	createTaskFile(for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1)
+	createTaskFile(for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1,GATest.network_param)
 	workbook = openpyxl.Workbook()
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
-	#TODO
 	column_tite = ["index","fitness","degrade_ratio", "dataflow", \
 		"PP2","PQ2","PK2","PP3","PQ3","PK3","PP","PQ","PKtotal","PPPQtotal", \
 		"partition_list",\
@@ -78,13 +77,13 @@ def randomTest(GATest,iterTime):
 		for col, column_data in enumerate(data):
 			sheet.cell(row+2, col+1, column_data)
 
-	workbook.save('./randomTest_result_VGG-16 conv1.xls')
-	return compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list, partition_list_1, parallel_dim_list_1
+	workbook.save('./randomTest_result_VGG-16 conv1-new.xls')
+	return compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list
 
 if __name__ == '__main__':
 
-	network_param = {"P":224,"Q":224,"C":4,"K":64,"R":3,"S":3}
-	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":4,"K":4}}
+	network_param = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3}
+	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":8,"K":8}}
 	debug=0
 	GATest = GaEncode(network_param, HW_param, debug)
 
@@ -92,14 +91,14 @@ if __name__ == '__main__':
 	fitness_min_ran = 0
 	index = range(iterTime)
 
-	random_test_iter = 20
+	random_test_iter = 1
 	f = open("./random_test_record.txt",'w')
 	GATest.printBasicSetFile(f)
 	f.close()
 
 	for i in range(random_test_iter):
 		print("###### test iteration = ",i)
-		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest_1(GATest, iterTime)
+		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest(GATest, iterTime)
 		print(fitness_min_ran_list[len(fitness_min_ran_list)-1])
 		f = open("./random_test_record.txt",'a')
 		print("###### test iteration = ",i, file = f)

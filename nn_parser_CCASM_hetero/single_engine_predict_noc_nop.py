@@ -66,6 +66,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
 	PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
 	R0, S0 = 3, 3
+	PK0 = PC0 = 8
 
 
 	runtimeP = PP3*P3*PP2*P2*P1
@@ -128,7 +129,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		al1_need_P_final = al1_need_Ppart + al1_need_Rpart - 1
 		al1_need = al1_need_CKpart * al1_need_Q_final * al1_need_P_final
 
-		al2_need_P_final = al1_need_Ppart * PP2 + S - 1
 		
 		wl1_need = wl1_need * wl1_ratio[id]
 		cal = cal * all_param[id]
