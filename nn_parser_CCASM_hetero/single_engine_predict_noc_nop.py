@@ -8,46 +8,40 @@ from enum import Enum
 from numpy.core.fromnumeric import mean
 import re
 np.set_printoptions(threshold=sys.maxsize)
-from DNN import *
 from pathlib import Path
 from GaEncode import *
+from config import *
 
 wgt_tag =  (int(1001))
 act_tag =  (int(1002))
 out_tag =  (int(1003))
 
-task = "VGG16"  
-if_hetero = 1
-
-if if_hetero == 0:
-    from mesh import *
-else:
-    from mesh_hetero import *
-
-task_name = "single_engine_example"
-output_folder_name = "./task/"+task_name+"_"+str(NoC_w)
-output_folder_name_start = output_folder_name+"_start"
-output_folder_name_pipe = output_folder_name+"_pipe"
-
 # 建立DNN模型
 #print ("task = ",task)
-DNN1 = DNNModel("DNN1")
-DNN_input(task, DNN1)
 #print (DNN1.layer_list[0].i_H)
 
 
 #### a NoP+NoC example #########
 # 硬件信息
-CoreNum = 16; ChipNum = 4; 
+# memory_param = {"OL1":,"OL2":,"AL1":,"AL2":,"WL1":,"WL2":}
 neuron_width  = 16 # bit
-OL1 = 1.5; 		AL1 = 800/1024; 		WL1 = 18      # KByte
-OL2 = 1.5*16; 	AL2 = 64; 				WL2 = 18*16   # KByte
 # 卷积配置 从basicParam_noc_nop中import进来
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param):
+	route_table = NoC_param["route_table"]
+	bw_scales = NoC_param["bw_scales"]
+	F = NoC_param["F"]
 	# 映射方案 (目前只实现了K维度有并行度)
 	# Ga Encode
 	#for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
+	CoreNum = HW_param["PE"]
+	ChipNum = HW_param["Chiplet"]
+	OL1 = memory_param["OL1"]
+	OL2 = memory_param["OL2"]
+	AL1 = memory_param["AL1"]
+	AL2 = memory_param["AL2"]
+	WL1 = memory_param["WL1"]
+	WL2 = memory_param["WL2"]
 	data_flow = for_list[0]
 	ol1_ratio = for_list[1]
 	al1_ratio = for_list[2]
@@ -203,8 +197,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		for core_id in core_id_list:
 			if core_id not in cc_node_list:
 				cc_node_list.append(core_id)
-
-	all_sim_node_num = CORE_NUM + NOP_SIZE
 
 	# ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 	# L1 用于统计通信总量 & prediction
@@ -382,7 +374,26 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 # end 性能测评
 
-def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param):
+def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, all_sim_node_num):
+	task_name = "single_engine_example"
+	output_folder_name = "./task/"+task_name
+	output_folder_name_start = output_folder_name+"_start"
+	output_folder_name_pipe = output_folder_name+"_pipe"
+
+	route_table = NoC_param["route_table"]
+	bw_scales = NoC_param["bw_scales"]
+	F = NoC_param["F"]
+
+	CoreNum = HW_param["PE"]
+	ChipNum = HW_param["Chiplet"]
+
+	OL1 = memory_param["OL1"]
+	OL2 = memory_param["OL2"]
+	AL1 = memory_param["AL1"]
+	AL2 = memory_param["AL2"]
+	WL1 = memory_param["WL1"]
+	WL2 = memory_param["WL2"]
+
 	data_flow = for_list[0]
 	ol1_ratio = for_list[1]
 	al1_ratio = for_list[2]
@@ -526,8 +537,6 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		for core_id in core_id_list:
 			if core_id not in cc_node_list:
 				cc_node_list.append(core_id)
-
-	all_sim_node_num = CORE_NUM + NOP_SIZE
 
 	# ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 	# L1 用于统计通信总量 & prediction
@@ -802,7 +811,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		if mem_wait_packet[ol2_node] != 0: print ("wait "+str(mem_wait_packet[ol2_node])+" "+str(out_tag), file= mem_file)
 
 	# all finish
-
+	
 	for sim_node in range (all_sim_node_num):   
 		with open (output_folder_name_pipe+'/'+str(sim_node)+'.txt','a') as node_file:
 			print ("finish",file = node_file)
