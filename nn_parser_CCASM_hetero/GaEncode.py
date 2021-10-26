@@ -47,8 +47,8 @@ def setPartition(num, dim):
 	return list
 
 # 将P_num个并行量进行拆分，随机选两个维度d1、d2，以及对应的并行量p1、p2.
-def setParallel(P_num):
-	dim = len(parallel_select)
+def setParallel(P_num, level):
+	dim = len(parallel_select[level])
 	index = math.ceil(math.log(P_num, 2))
 	p1 = random.randint(0,index)
 	p2 = index - p1
@@ -58,8 +58,8 @@ def setParallel(P_num):
 	d2 = random.randint(0,dim-1)
 	while d2 == d1:
 		d2 = random.randint(0,dim-1)
-	d1 = parallel_select[d1]
-	d2 = parallel_select[d2]
+	d1 = parallel_select[level][d1]
+	d2 = parallel_select[level][d2]
 	return d1, d2, p1, p2
 
 # 只对并行量P_num拆分为p1、p2，不决定其维度
@@ -115,14 +115,14 @@ class GaEncode:
 
 		#---并行度拆分（空间并行）---
 		if Par_type == 4:
-			d1, d2, p1, p2 = setParallel(self.PEs)
+			d1, d2, p1, p2 = setParallel(self.PEs, "PE")
 			parallel_dim_set.append(d1)
 			parallel_dim_set.append(d2)
 			parallel_num_set.append(p1)
 			parallel_num_set.append(p2)
 			size_i[d1] = math.ceil(size_i[d1]/p1)
 			size_i[d2] = math.ceil(size_i[d2]/p2)
-			d1, d2, p1, p2 = setParallel(self.Chiplets)
+			d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet")
 			parallel_dim_set.append(d1)
 			parallel_dim_set.append(d2)
 			parallel_num_set.append(p1)
