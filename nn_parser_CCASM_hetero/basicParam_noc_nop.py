@@ -52,7 +52,8 @@ Par_type = 4
 # encode parameter
 dim_list = ['P','Q','C','K','R','S']
 type_list = ["for","parallel-for-1","parallel-for-2"]
-parallel_select = [0,1,3]
+#chiplet PE todo
+parallel_select = {"chiplet":[0,1,3],"PE":[0,1,3]}
 # fitness parameter
 O_correlation = [1,1,0,1,0,0]
 A_correlation = [1,1,1,0,0,0]
