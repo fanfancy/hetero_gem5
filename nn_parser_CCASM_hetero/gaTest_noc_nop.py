@@ -15,23 +15,79 @@ code_lenth = 4 + 4 + 3 + 3 + 3 + 3 + 6 + 4 + 4
 code_index = [0, 4, 8, 11, 14, 17, 20, 26, 30, 34]
 order_index = [0, 6, 10, 14]
 # GA parameter
-pm = 0.01
+pm = 0.1
 num_children = 100
 num_father_left = int(num_children * 0.1)
-num_iter = 10
-size = [P,Q,C,K]
+num_iter = 20
 
-def calFitnessAll(code):
-	for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChildParse(code)
-	fitness , a1, a2 = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list)
-	return fitness
+def setParallelAll(sets, num):
+	# ["act_core"][0]["recv"]
+	act_recv_dict = {}
+	wgt_recv_dict = {}
+	act_wgt_dict = {}
+	
+	if num == 4:
+		for i in set4[sets]:
+			set_wgt = int(num/sets)
+			if sets == 2:
+				i_wgt = len(set4[2]) - i -1
+			else:
+				i_wgt = i
+			act_recv_dict[i] = set4[sets][i]
+			wgt_recv_dict[i] = set4[set_wgt][i_wgt]
+	elif num == 16:
+		for i in set16[sets]:
+			set_wgt = int(num/sets)
+			if sets == 4:
+				i_wgt = len(set16[4]) - i -1
+			else:
+				i_wgt = i
+			act_recv_dict[i] = set16[sets][i]
+			wgt_recv_dict[i] = set16[set_wgt][i_wgt]
 
-def getFirstGeneration():
+	return act_recv_dict, wgt_recv_dict
+	
+def setCombine(act1, wgt1, act2, wgt2):
+	act_wgt_dict = {}
+	num = 0
+	for i in act1:
+		for j in act2:
+			act_wgt_dict[num] = {"act_core":{0:{"recv":act1[i]}}, "wgt_core":{0:{"recv":wgt1[i]}}, "act_chiplet":{"recv":act2[j]}, "wgt_chiplet":{"recv":wgt2[j]}}
+			num += 1
+	return act_wgt_dict
+
+def calFitnessAll(GATest, code):
+	for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChildParse(code)
+
+	#PEs = GATest.PEs
+	#Chiplets = GATest.Chiplets
+	#act_set_PE = len(act_wgt_dict["act_core"][0]["recv"])
+	#act_set_chip = len(act_wgt_dict["act_chiplet"]["recv"])
+	#print("wxy act_wgt_dict = ",act_wgt_dict)
+	
+	#act_recv_PE, wgt_recv_PE = setParallelAll(act_set_PE, PEs)
+	#act_recv_chiplet, wgt_recv_chiplet = setParallelAll(act_set_chip, Chiplets)
+	#act_wgt_dict_list = setCombine(act_recv_PE, wgt_recv_PE, act_recv_chiplet, wgt_recv_chiplet)
+
+	#fitness_min = 0
+	#print("wxy act_wgt_dict_list = ",act_wgt_dict_list)
+	#for i in act_wgt_dict_list:
+	#	fitness_1 , a1, a2 = calFitness(for_list, act_wgt_dict_list[i], out_dict, parallel_dim_list, partition_list, GATest.network_param)
+	#	print("w fitness:", fitness_1)
+	#	if i == 0:
+	#		fitness_min = fitness_1
+	#	elif fitness_1 < fitness_min:
+	#		fitness_min = fitness_1
+	#rint("w fitness_min:", fitness_min)
+	fitness_min , a1, a2 = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param)
+	return fitness_min
+
+def getFirstGeneration(GATest):
 	generation = {}
 	fitness = np.zeros(num_children)
 	for i in range(num_children):
-		generation[i] = getChild()
-		fitness_i = calFitnessAll(generation[i])
+		generation[i] = GATest.getChild()
+		fitness_i = calFitnessAll(GATest, generation[i])
 		fitness[i] = fitness_i
 	return generation, fitness
 
@@ -71,9 +127,16 @@ def repairParallel2Equal(a,b,num):
 		b = int(num / a)
 	return a, b
 
+def partitionRepair(GATest, code):
+	size = [GATest.network_param["P"],GATest.network_param["Q"],GATest.network_param["C"],GATest.network_param["K"]]
+	num = []
+	for i in range(4):
+		dim = dim_list[i]
+		if dim in GATest.intra_PE:
+			num.append(GATest.intra_PE[dim])
+		else:
+			num.append(1)
 
-def partitionRepair(code):
-	num = [1,1,C0,K0]
 	num_dict = {}
 	code_dim = [code[0],code[1],code[2],code[3],0,0,0,1,1,1,2,2,2,3,3,3]
 
@@ -152,8 +215,8 @@ def partitionCross(code1, code2):
 		print(codecross1)
 		print(codecross2)
 
-	codecross1 = partitionRepair(codecross1)
-	codecross2 = partitionRepair(codecross2)
+	codecross1 = partitionRepair(GATest,codecross1)
+	codecross2 = partitionRepair(GATest,codecross2)
 	
 	if debug == 1:
 		print("repair code:")
@@ -215,19 +278,6 @@ def selectGeneration(select_probability, select_table):
 		time1 += 1
 	
 	return time1
-#	num_ran2 = random.random()
-#	flag = 0
-#	time2 = 0
-#	while flag == 0:
-#		if num_ran2 < select_table[time2]:
-#			flag = 1
-#			break
-#		time2 += 1
-
-#	if select_probability[time1] > select_probability[time2]:
-#		return time1
-#	else:
-#		return time2
 
 def getNextGeneration(father_list, select_probability, select_table, fitness):
 	child_list = {}
@@ -291,10 +341,10 @@ def getNpMin(array):
 	min_index = list.index(min(list))
 	return min_num, min_index
 
-def gaIter():
+def gaIter(GATest):
 	print("########Begin")
 	f = open("./fitness-record.txt",'w')
-	generation, fitness = getFirstGeneration()
+	generation, fitness = getFirstGeneration(GATest)
 	fitness_min = []
 	code_best = []
 	for i in range(num_iter):
@@ -304,28 +354,40 @@ def gaIter():
 		generation, fitness_father = getNextGeneration(generation, select_probability, select_table, fitness)
 		for j in range(len(generation)):
 			code = generation[j]
-			fitness[j] = calFitnessAll(code)
+			fitness[j] = calFitnessAll(GATest, code)
 		if debug == 1:
 			print("########## times = ",str(i+1), file = f)
 			print("fitness_father = ", fitness_father, file = f)
 			print("fitness = ",fitness, file = f)
 			#print("generation = ", generation, file = f)
+		print("########## times = ",str(i+1))
+		print("fitness_father = ", fitness_father)
+		print("fitness = ",fitness)
+
 		min_num, min_index = getNpMin(fitness)
 		code_best = generation[min_index]
+		print("fitness_min = ",min_num)
 		fitness_min.append(min_num)
 
 	#---产生task file
-	for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1 = GaGetChildParse(code_best)
-	createTaskFile(for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1)
+	for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1 = GATest.GaGetChildParse(code_best)
+	#createTaskFile(for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1, GATest.network_param)
 	
 	f.close()
 	return fitness_min
 
 if __name__ == '__main__':
-	fitness_min = gaIter()
+	#224 224 64 256 3 3
+	network_param = {"P":224,"Q":224,"C":64,"K":256,"R":3,"S":3}
+	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":4,"K":4}}
+	debug=0
+	GATest = GaEncode(network_param, HW_param, debug)
+
+	fitness_min = gaIter(GATest)
 
 	print(fitness_min[len(fitness_min)-1])
 	index = range(len(fitness_min))
 	plt.figure(1)
 	plt.scatter(index,fitness_min)
 	plt.savefig("GaTest.png")
+

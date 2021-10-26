@@ -7,23 +7,18 @@ import copy
 from enum import Enum
 from single_engine_predict_noc_nop import *
 from matplotlib import pyplot as plt
-import openpyxl
 
-iterTime = 100000
-fitness_min_ran = 0
-index = range(iterTime)
 degrade_ratio_list = []
-excel_datas = []
 
-def randomTest():
+def randomTest(GATest,iterTime):
 	fitness_min_ran = 0
 	fitness_list = []
 	fitness_min_ran_list = []
 	for i in range(iterTime):
 		#---生成个代---
-		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
+		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChild()
 		#---计算适应度---
-		fitness, degrade_ratio, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list)
+		fitness, degrade_ratio, compuation_cycles = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param)
 		#---比较适应度，并记录相关变量---
 		if fitness_min_ran == 0 or fitness < fitness_min_ran:
 			fitness_min_ran = fitness
@@ -85,27 +80,45 @@ def randomTest():
 	return compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list, partition_list_1, parallel_dim_list_1
 
 if __name__ == '__main__':
-	compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list, partition_list_1, parallel_dim_list_1 = randomTest()
-	print("fitness_min_ran = ",fitness_min_ran)
-	print("compuation_cycles_1 = ",compuation_cycles_1)
-	print("degrade_ratio_1 = ",degrade_ratio_1)
-	print("partition_list_1 = ",partition_list_1)
-	print("parallel_dim_list_1 = ",parallel_dim_list_1)
+
+	network_param = {"P":224,"Q":224,"C":4,"K":64,"R":3,"S":3}
+	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":4,"K":4}}
+	debug=0
+	GATest = GaEncode(network_param, HW_param, debug)
+
+	iterTime = 10000
+	fitness_min_ran = 0
+	index = range(iterTime)
+
+	random_test_iter = 20
+	f = open("./random_test_record.txt",'w')
+	GATest.printBasicSetFile(f)
+	f.close()
+
+	for i in range(random_test_iter):
+		print("###### test iteration = ",i)
+		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest_1(GATest, iterTime)
+		print(fitness_min_ran_list[len(fitness_min_ran_list)-1])
+		f = open("./random_test_record.txt",'a')
+		print("###### test iteration = ",i, file = f)
+		print("fitness:",fitness_min_ran_list[len(fitness_min_ran_list)-1], file=f)
+		f.close()
+
+	#plt.figure(1)
+	#plt.scatter(index,degrade_ratio_list)
+	#plt.savefig("randomTest.png")
 
 
-	print(fitness_min_ran_list[len(fitness_min_ran_list)-1])
+	#degrade_ratio_list.sort()
 
-	plt.figure(1)
-	plt.scatter(index,degrade_ratio_list)
-	plt.savefig("randomTest.png")
+	#plt.figure(2)
+	#plt.scatter(index,degrade_ratio_list)
+	#plt.savefig("randomTest2.png")
+
+	#plt.figure(3)
+	#plt.scatter(index[:900],degrade_ratio_list[:900])
+	#plt.savefig("randomTest3.png")
 
 
-	degrade_ratio_list.sort()
 
-	plt.figure(2)
-	plt.scatter(index,degrade_ratio_list)
-	plt.savefig("randomTest2.png")
-
-	plt.figure(3)
-	plt.scatter(index[:900],degrade_ratio_list[:900])
-	plt.savefig("randomTest3.png")
+	

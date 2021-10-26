@@ -45,7 +45,7 @@ OL1 = 1.5; 		AL1 = 800/1024; 		WL1 = 18      # KByte
 OL2 = 1.5*16; 	AL2 = 64; 				WL2 = 18*16   # KByte
 # 卷积配置 从basicParam_noc_nop中import进来
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param):
 	# 映射方案 (目前只实现了K维度有并行度)
 	# Ga Encode
 	#for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
@@ -79,6 +79,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	runtimeCoreNum = PK2*PQ2*PP2
 	runtimeChipNum = PP3*PQ3*PK3
 
+	P = network_param["P"]
+	Q = network_param["Q"]
+	K = network_param["K"]
+	C = network_param["C"]
 	assert(runtimeP>=P);assert(runtimeQ>=Q);assert(runtimeK>=K);assert(runtimeC>=C)
 	assert(runtimeCoreNum <= CoreNum);assert(runtimeChipNum <= ChipNum)
 
@@ -162,15 +166,14 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 				break
 			the_cp = "top"
 			the_cp_id = id
-		utilization_ratio = storage_need[the_data_flow[the_cp_id-1]] / storage_size
-		return the_cp,the_cp_id,utilization_ratio
+		return the_cp,the_cp_id
 
-	ol1_cp,ol1_cp_id,ol1_utilization_ratio = find_cp(data_flow,OL1_need,OL1_mem)
-	al1_cp,al1_cp_id,al1_utilization_ratio = find_cp(data_flow,AL1_need,AL1_mem)
-	wl1_cp,wl1_cp_id,wl1_utilization_ratio = find_cp(data_flow,WL1_need,WL1_mem)
-	ol2_cp,ol2_cp_id,ol2_utilization_ratio = find_cp(data_flow,OL2_need,OL2_mem)
-	al2_cp,al2_cp_id,al2_utilization_ratio = find_cp(data_flow,AL2_need,AL2_mem)
-	wl2_cp,wl2_cp_id,wl2_utilization_ratio = find_cp(data_flow,WL2_need,WL2_mem)
+	ol1_cp,ol1_cp_id = find_cp(data_flow,OL1_need,OL1_mem)
+	al1_cp,al1_cp_id = find_cp(data_flow,AL1_need,AL1_mem)
+	wl1_cp,wl1_cp_id = find_cp(data_flow,WL1_need,WL1_mem)
+	ol2_cp,ol2_cp_id = find_cp(data_flow,OL2_need,OL2_mem)
+	al2_cp,al2_cp_id = find_cp(data_flow,AL2_need,AL2_mem)
+	wl2_cp,wl2_cp_id = find_cp(data_flow,WL2_need,WL2_mem)
 
 	#print ("OL1_need",OL1_need); print ("OL2_need",OL2_need)
 	#print ("AL1_need",AL1_need); print ("AL2_need",AL2_need)
@@ -208,10 +211,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 	# ------------------ 性能预测：计算整层所有计算和通信数据的数目 ------------------
 	# L1 用于统计通信总量 & prediction
-	core_pkt_num_wr_opt = 0; core_neu_num_wr_opt = 0  
-	core_pkt_num_rd_opt = 0; core_neu_num_rd_opt = 0
-	core_pkt_num_rd_wgt = 0; core_neu_num_rd_wgt = 0
-	core_pkt_num_rd_act = 0; core_neu_num_rd_act = 0
+	core_pkt_num_wr_opt = 0
+	core_pkt_num_rd_opt = 0
+	core_pkt_num_rd_wgt = 0
+	core_pkt_num_rd_act = 0
 
 	# L1 用于生成task file的变量
 	core_rd_out_data_num = 0
@@ -223,16 +226,13 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	if (if_out_final[cur]!=1): 
 		#print("CORE: read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
 		core_pkt_num_rd_opt += int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) * repeat_num[cur]
-		core_neu_num_rd_opt += OL1_need[inner] * repeat_num[cur]
 		core_rd_out_data_num += OL1_need[inner]
 	else:
 		core_pkt_num_rd_opt += 0
-		core_neu_num_rd_opt += 0
 		core_rd_out_data_num += 0
 	#print("CORE: write opt mem ", OL1_need[inner],"repeat ",repeat_num[cur])
 	core_pkt_num_wr_opt += int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 	core_out_data_num += OL1_need[inner] # 用于生成仿真指令
-	core_neu_num_wr_opt += OL1_need[inner] * repeat_num[cur]
 		
 	cur = data_flow[al1_cp_id]; inner = data_flow[al1_cp_id-1]  
 	#print("CORE: read act mem ",AL1_need[inner],"repeat ",repeat_num[cur])
@@ -244,19 +244,12 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	#print("CORE: read wgt mem ",WL1_need[inner],"repeat ",repeat_num[cur]) 
 	core_pkt_num_rd_wgt += int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 	core_wgt_data_num += WL1_need[inner] # 用于生成仿真指令
-	core_neu_num_rd_wgt += WL1_need[inner] * repeat_num[cur]
-
-	# 考虑上并行度带来的数据复用机会
-	core_neu_num_wr_opt = core_neu_num_wr_opt * CoreNum * ChipNum  # 没有机会复用
-	core_neu_num_rd_opt = core_neu_num_rd_opt * CoreNum * ChipNum 
-	core_neu_num_rd_wgt = core_neu_num_rd_wgt * CoreNum * ChipNum /PP2 / PQ2
-	core_neu_num_rd_act = core_neu_num_rd_act * CoreNum * ChipNum /PK2 
 
 	# L2 用于统计通信总量 & prediction
-	chip_pkt_num_wr_opt = 0; chip_neu_num_wr_opt = 0
-	chip_pkt_num_rd_opt = 0; chip_neu_num_rd_opt = 0
-	chip_pkt_num_rd_wgt = 0; chip_neu_num_rd_wgt = 0
-	chip_pkt_num_rd_act = 0; chip_neu_num_rd_act = 0
+	chip_pkt_num_wr_opt = 0
+	chip_pkt_num_rd_opt = 0
+	chip_pkt_num_rd_wgt = 0
+	chip_pkt_num_rd_act = 0
 
 	# L2 用于生成task file的变量
 	chip_rd_out_data_num = 0
@@ -269,15 +262,12 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		#print("Chip: read opt mem ", OL2_need[inner],"repeat ",repeat_num[cur]) 
 		chip_pkt_num_rd_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit)) * repeat_num[cur]
 		chip_rd_out_data_num += OL2_need[inner]
-		chip_neu_num_rd_opt += OL2_need[inner] * repeat_num[cur]
 	else:
 		chip_pkt_num_rd_opt += 0
 		chip_rd_out_data_num += 0
-		chip_neu_num_rd_opt += 0
 	#print("Chip: write opt mem ", OL2_need[inner],"repeat ",repeat_num[cur])
 	chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 	chip_out_data_num += OL2_need[inner] # 用于生成仿真指令
-	chip_neu_num_wr_opt += OL2_need[inner] * repeat_num[cur]
 		
 	cur = data_flow[al2_cp_id]; inner = data_flow[al2_cp_id-1]  
 	#print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
@@ -289,13 +279,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	#print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
 	chip_pkt_num_rd_wgt += int(math.ceil(WL2_need[inner]/flit_per_pkt/neu_per_flit)) *repeat_num[cur]
 	chip_wgt_data_num += WL2_need[inner] # 用于生成仿真指令
-	chip_neu_num_rd_wgt += WL2_need[inner] * repeat_num[cur]
 
-	# 考虑上并行度带来的数据复用机会
-	chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
-	chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
-	chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum /PP3 / PQ3
-	chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum /PK3 
 
 	F_cur=F.copy()
 
@@ -371,18 +355,12 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		degrade_ratio = max(F_cur.values()) 
 	#print ("F_cur",F_cur)
 	#print ("degrade_ratio",degrade_ratio)
-	runtime_calNum = runtimeP*runtimeQ*runtimeR*runtimeS*runtimeC*runtimeK
-	runtime_list = [runtimeP, runtimeQ, runtimeC, runtimeK, runtimeChipNum, runtimeCoreNum,runtime_calNum]
-	cp_list = [ol1_cp_id, al1_cp_id, wl1_cp_id, ol2_cp_id, al2_cp_id, wl2_cp_id]
-	utilization_ratio_list = [ol1_utilization_ratio,al1_utilization_ratio,wl1_utilization_ratio, \
-						      ol2_utilization_ratio,al2_utilization_ratio,wl2_utilization_ratio]
-	chip_comm_num_list = [chip_neu_num_wr_opt, chip_neu_num_rd_opt, chip_neu_num_rd_act, chip_neu_num_rd_wgt]
-	core_comm_num_list = [core_neu_num_wr_opt, core_neu_num_rd_opt, core_neu_num_rd_act, core_neu_num_rd_wgt]
-	return(degrade_ratio*compuation_cycles, degrade_ratio, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list)
+	
+	return(degrade_ratio*compuation_cycles, degrade_ratio, compuation_cycles)
 
 # end 性能测评
 
-def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list):
+def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param):
 	data_flow = for_list[0]
 	ol1_ratio = for_list[1]
 	al1_ratio = for_list[2]
@@ -402,14 +380,18 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
 	PK0,PC0 = 8, 8
 	R0, S0 = 3, 3
+	P = network_param["P"]
+	Q = network_param["Q"]
+	K = network_param["K"]
+	C = network_param["C"]
 
 
 	runtimeP = PP3*P3*PP2*P2*P1
 	runtimeQ = PQ3*Q3*PQ2*Q2*Q1
 	runtimeK = PK3*K3*PK2*K2*K1*PK0
 	runtimeC = C3*C2*C1*PC0
-	runtimeR = R
-	runtimeS = S
+	runtimeR = R0
+	runtimeS = S0
 	runtimeCoreNum = PK2*PQ2*PP2
 	runtimeChipNum = PP3*PQ3*PK3
 
