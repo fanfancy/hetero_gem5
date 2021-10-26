@@ -7,8 +7,10 @@ import copy
 from enum import Enum
 from single_engine_predict_noc_nop import *
 from matplotlib import pyplot as plt
+import openpyxl
 
 degrade_ratio_list = []
+excel_datas = []
 
 def randomTest(GATest,iterTime):
 	fitness_min_ran = 0
@@ -18,7 +20,7 @@ def randomTest(GATest,iterTime):
 		#---生成个代---
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChild()
 		#---计算适应度---
-		fitness, degrade_ratio, compuation_cycles = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param)
+		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param)
 		#---比较适应度，并记录相关变量---
 		if fitness_min_ran == 0 or fitness < fitness_min_ran:
 			fitness_min_ran = fitness
@@ -103,22 +105,3 @@ if __name__ == '__main__':
 		print("###### test iteration = ",i, file = f)
 		print("fitness:",fitness_min_ran_list[len(fitness_min_ran_list)-1], file=f)
 		f.close()
-
-	#plt.figure(1)
-	#plt.scatter(index,degrade_ratio_list)
-	#plt.savefig("randomTest.png")
-
-
-	#degrade_ratio_list.sort()
-
-	#plt.figure(2)
-	#plt.scatter(index,degrade_ratio_list)
-	#plt.savefig("randomTest2.png")
-
-	#plt.figure(3)
-	#plt.scatter(index[:900],degrade_ratio_list[:900])
-	#plt.savefig("randomTest3.png")
-
-
-
-	
