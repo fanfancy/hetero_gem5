@@ -40,10 +40,10 @@ DNN_input(task, DNN1)
 # 硬件信息
 CoreNum = 16; ChipNum = 4; 
 neuron_width  = 16 # bit
-OL1 = 1; AL1 = 1; WL1 = 1 # KByte
-OL2 = 64; AL2 = 64; WL2 = 64 # KByte
-# 卷积配置
-P = Q = 8; K=1024; C=1024; R=S=3
+# TODO
+OL1 = 1.5; 		AL1 = 800/1024; 		WL1 = 18      # KByte
+OL2 = 1.5*16; 	AL2 = 64; 				WL2 = 18*16   # KByte
+# 卷积配置 从basicParam_noc_nop中import进来
 
 def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list):
 	# 映射方案 (目前只实现了K维度有并行度)
@@ -66,7 +66,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	K1,K2,K3 = partition_list["K"][0],partition_list["K"][1],partition_list["K"][2]
 	PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
 	PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
-	PK0,PC0 = 4, 4
+	# TODO PK0,PC0 = 8, 8
 	R0, S0 = 3, 3
 
 
@@ -101,14 +101,34 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	cal_cycles = {}
 	if_out_final = {}
 
-	ol1_need = PK0; al1_need= PC0; wl1_need = PK0*PC0; cal =1
+	# TODO
 
+	ol1_need = PK0; al1_need_CKpart= PC0; wl1_need = PK0*PC0; cal =1
+	al1_need_Qpart = 1; al1_need_Ppart = 1; al1_need_Rpart = 1; al1_need_Spart = 1
 	# ------------------ 计算6个buffer存储需求&每级for循环循环次数 ------------------
 
 	for id in range(len(data_flow)):
 		param = data_flow[id]
 		ol1_need = ol1_need * ol1_ratio[id] # 单位:neuron
-		al1_need = al1_need * al1_ratio[id]
+
+		# al1 need calculation
+		if "K" == param[0] or "C" == param[0]:
+			al1_need_CKpart = al1_need_CKpart * all_param[id]
+		elif "Q" == param[0]:
+			al1_need_Qpart = al1_need_Qpart * all_param[id]
+		elif "P" == param[0]:
+			al1_need_Ppart = al1_need_Ppart * all_param[id]
+		elif "R" == param[0]:
+			al1_need_Rpart = al1_need_Rpart * all_param[id]
+		elif "S" == param[0]:
+			al1_need_Spart = al1_need_Spart * all_param[id]
+
+		al1_need_Q_final = al1_need_Qpart + al1_need_Spart - 1
+		al1_need_P_final = al1_need_Ppart + al1_need_Rpart - 1
+		al1_need = al1_need_CKpart * al1_need_Q_final * al1_need_P_final
+
+		al2_need_P_final = al1_need_Ppart * PP2 + S - 1
+		
 		wl1_need = wl1_need * wl1_ratio[id]
 		cal = cal * all_param[id]
 		cal_cycles[param] = cal
@@ -119,9 +139,9 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		if_out_final[param] = out_final[id]
 		# L2
 		OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
-		AL2_need[param] = al1_need * PQ2 * PP2 
+		AL2_need[param] = al1_need * PQ2 * PP2 #这里有点问题
 		WL2_need[param] = wl1_need * PK2 
-
+	# TODO
 	repeat = 1
 	repeat_num = {}
 		
@@ -218,7 +238,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	#print("CORE: read act mem ",AL1_need[inner],"repeat ",repeat_num[cur])
 	core_pkt_num_rd_act +=  int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
 	core_act_data_num += AL1_need[inner] # 用于生成仿真指令
-	core_neu_num_rd_act += AL1_need[inner] * repeat_num[cur]
+	core_neu_num_rd_act += AL1_need[data_flow[al1_cp_id]] * repeat_num[data_flow[al1_cp_id+1]]
 
 	cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
 	#print("CORE: read wgt mem ",WL1_need[inner],"repeat ",repeat_num[cur]) 
@@ -263,7 +283,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	#print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
 	chip_pkt_num_rd_act +=  int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit))*repeat_num[cur]
 	chip_act_data_num += AL2_need[inner] # 用于生成仿真指令
-	chip_neu_num_rd_act += AL2_need[inner] * repeat_num[cur]
+	chip_neu_num_rd_act += AL2_need[data_flow[al2_cp_id]] * repeat_num[data_flow[al2_cp_id+1]]
 
 	cur = data_flow[wl2_cp_id]; inner = data_flow[wl2_cp_id-1]  
 	#print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
@@ -380,7 +400,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	K1,K2,K3 = partition_list["K"][0],partition_list["K"][1],partition_list["K"][2]
 	PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
 	PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
-	PK0,PC0 = 4, 4
+	PK0,PC0 = 8, 8
 	R0, S0 = 3, 3
 
 

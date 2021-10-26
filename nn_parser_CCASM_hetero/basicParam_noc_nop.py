@@ -11,16 +11,17 @@ debug = 0
 # architecture parameter
 Chiplets = 4
 PEs = 16
-C0 = 4
-K0 = 4
+C0 = 8
+K0 = 8
 
 # network parameter
 P = 224
 Q = 224
-C = 64
-K = 256
+C = 3
+K = 64
 R = 3
 S = 3
+STRIDE = 1
 C_new = math.ceil(C/C0)
 K_new = math.ceil(K/K0)
 size = [P,Q,C_new,K_new]

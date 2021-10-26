@@ -9,7 +9,7 @@ from single_engine_predict_noc_nop import *
 from matplotlib import pyplot as plt
 import openpyxl
 
-iterTime = 1000
+iterTime = 100000
 fitness_min_ran = 0
 index = range(iterTime)
 degrade_ratio_list = []
@@ -37,7 +37,8 @@ def randomTest():
 		fitness_list.append(fitness)
 		fitness_min_ran_list.append(fitness_min_ran)
 		degrade_ratio_list.append (degrade_ratio)
-		excel_datas.append([i, fitness, degrade_ratio, \
+		#TODO
+		excel_datas.append([i, fitness, degrade_ratio, str(for_list[0]), \  
 			parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2], \
 			parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2], \
 			parallel_dim_list[0][0]*parallel_dim_list[1][0], \
@@ -50,7 +51,7 @@ def randomTest():
 		    utilization_ratio_list[0], utilization_ratio_list[1], utilization_ratio_list[2],utilization_ratio_list[3], utilization_ratio_list[4], utilization_ratio_list[5], \
 			chip_comm_num_list[0], chip_comm_num_list[1], chip_comm_num_list[2], chip_comm_num_list[3], \
 			core_comm_num_list[0], core_comm_num_list[1], core_comm_num_list[2], core_comm_num_list[3], \
-			sum(chip_comm_num_list), sum(core_comm_num_list) ])
+			sum(chip_comm_num_list), sum(core_comm_num_list), sum(chip_comm_num_list) * 0.364+sum(core_comm_num_list)* 0.033])
 		print("######---------Times = ", i)
 		print("fitness_min_ran = ",fitness_min_ran)
 		print("compuation_cycles_1 = ",compuation_cycles_1)
@@ -63,7 +64,8 @@ def randomTest():
 	workbook = openpyxl.Workbook()
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
-	column_tite = ["index","fitness","degrade_ratio", \
+	#TODO
+	column_tite = ["index","fitness","degrade_ratio", "dataflow", \
 		"PP2","PQ2","PK2","PP3","PQ3","PK3","PP","PQ","PKtotal","PPPQtotal", \
 		"partition_list",\
 		"runtimeP","runtimeQ", "runtimeC", "runtimeK", "runtimeChipNum", "runtimeCoreNum", "runtime_calNum",\
@@ -71,7 +73,7 @@ def randomTest():
 		"ol1_util","al1_util","wl1_util","ol2_util","al2_util","wl2_util", \
 		"chip_num_wr_opt", "chip_num_rd_opt", "chip_num_rd_act" , "chip_num_rd_wgt",\
 		"core_num_wr_opt", "core_num_rd_opt", "core_num_rd_act" , "core_num_rd_wgt"	,\
-		"chip_comm", "core_comm"]
+		"chip_comm", "core_comm", "power"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
@@ -79,7 +81,7 @@ def randomTest():
 		for col, column_data in enumerate(data):
 			sheet.cell(row+2, col+1, column_data)
 
-	workbook.save('./randomTest_result.xls')
+	workbook.save('./randomTest_result_VGG-16 conv1.xls')
 	return compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list, partition_list_1, parallel_dim_list_1
 
 if __name__ == '__main__':
