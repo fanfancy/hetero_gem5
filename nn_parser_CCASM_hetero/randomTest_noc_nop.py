@@ -21,7 +21,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		#---生成个代---
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChild()
 		#---计算适应度---
-		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param,HW_param, memory_param, NoC_param)
+		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param)
 		#---比较适应度，并记录相关变量---
 		if fitness_min_ran == 0 or fitness < fitness_min_ran:
 			fitness_min_ran = fitness
@@ -102,7 +102,7 @@ if __name__ == '__main__':
 
 	for i in range(random_test_iter):
 		print("###### test iteration = ",i)
-		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest(GATest, iterTime)
+		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num)
 		print(fitness_min_ran_list[len(fitness_min_ran_list)-1])
 		f = open("./random_test_record.txt",'a')
 		print("###### test iteration = ",i, file = f)
