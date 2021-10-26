@@ -811,7 +811,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		if mem_wait_packet[ol2_node] != 0: print ("wait "+str(mem_wait_packet[ol2_node])+" "+str(out_tag), file= mem_file)
 
 	# all finish
-	
+
 	for sim_node in range (all_sim_node_num):   
 		with open (output_folder_name_pipe+'/'+str(sim_node)+'.txt','a') as node_file:
 			print ("finish",file = node_file)

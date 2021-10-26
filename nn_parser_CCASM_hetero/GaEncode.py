@@ -452,11 +452,11 @@ class GaEncode:
 				all_param.append(num)
 			elif for_type == 1:
 				if dim == 0:
-					parallel_dim_list[0][0] = num
+					parallel_dim_list[0][0] *= num
 				elif dim == 1:
-					parallel_dim_list[0][1] = num
+					parallel_dim_list[0][1] *= num
 				elif dim == 3:
-					parallel_dim_list[0][2] = num
+					parallel_dim_list[0][2] *= num
 
 				if A_correlation[dim] == 0:
 					if_act_share_PE[0] = 1
@@ -471,11 +471,11 @@ class GaEncode:
 					wgt_share_PE[0] *= num
 			elif for_type == 2:
 				if dim == 0:
-					parallel_dim_list[1][0] = num
+					parallel_dim_list[1][0] *= num
 				elif dim == 1:
-					parallel_dim_list[1][1] = num
+					parallel_dim_list[1][1] *= num
 				elif dim == 3:
-					parallel_dim_list[1][2] = num
+					parallel_dim_list[1][2] *= num
 
 				if A_correlation[dim] == 0:
 					if_act_share_Chiplet[0] = 1
