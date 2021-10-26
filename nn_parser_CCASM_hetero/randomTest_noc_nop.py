@@ -8,6 +8,7 @@ from enum import Enum
 from single_engine_predict_noc_nop import *
 from mesh_hetero import *
 from matplotlib import pyplot as plt
+from config import *
 import openpyxl
 
 degrade_ratio_list = []
