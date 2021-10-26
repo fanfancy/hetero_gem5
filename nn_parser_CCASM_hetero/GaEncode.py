@@ -55,9 +55,9 @@ def setParallel(P_num, level):
 	p1 = pow(2,p1)
 	p2 = pow(2,p2)
 	d1 = random.randint(0,dim-1)
-	d2 = random.randint(0,dim-1)
-	while d2 == d1:
-		d2 = random.randint(0,dim-1)
+	d2 = random.randint(0,dim-1)	
+	#while d2 == d1:
+	#	d2 = random.randint(0,dim-1)
 	d1 = parallel_select[level][d1]
 	d2 = parallel_select[level][d2]
 	return d1, d2, p1, p2
