@@ -33,9 +33,11 @@ nnparser_ME_hetero：用于支持noc+nop的多引擎架构仿真。
 - mesh_hetero.py 带有noc+nop router拓扑的实现。
 - mesh.py 普通mesh实现。
 - GAGA_gennew_waitall_fensan_2gene.py 多引擎workload拆分、mapping、性能预测、task file生成代码。
-- single_engine.py 单引擎性能预测&task file生成（under develop).
 
 nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
+- mesh_hetero.py 带有noc+nop router拓扑的实现。
+- randomTest_noc_nop.py 随机生成mapping方案并测试，可以在这里配置硬件、卷积参数。
+- config.py 通用的不常修改的参数。
 
 ## Run 多引擎
 :bug: 目前没法run，因为garnet源码对单引擎的一些更新
