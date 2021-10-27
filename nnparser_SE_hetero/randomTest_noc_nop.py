@@ -15,6 +15,7 @@ degrade_ratio_list = []
 excel_datas = []
 
 def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_num , if_multicast, filename):
+
 	fitness_min_ran = 0
 	fitness_list = []
 	fitness_min_ran_list = []
@@ -86,7 +87,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 if __name__ == '__main__':
 
 	network_param = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3}
-	HW_param = {"Chiplet":9,"PE":16,"intra_PE":{"C":8,"K":8}}
+	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":8,"K":8}}
 	memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16}
 	
 	NoC_w = int(HW_param["PE"] ** 0.5) + 1
@@ -101,7 +102,7 @@ if __name__ == '__main__':
 	# --- 生成noc-nop结构图
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])
 	debug=0
-	if_multicast = 1
+	if_multicast = 0
 	GATest = GaEncode(network_param, HW_param, debug)
 
 	iterTime = 10000

@@ -4,4 +4,5 @@ gem5/current_NoC_Configs.txt
 /nnparser_SE_hetero/*.png
 /nnparser_SE_hetero/*.xls
 /nnparser_SE_hetero/*.txt
-
+*/__pycache__/
+__pycache__/

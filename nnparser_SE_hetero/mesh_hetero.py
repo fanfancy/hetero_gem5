@@ -183,3 +183,7 @@ def construct_noc_nop_topo(NOC_NODE_NUM,NoC_w, NOP_SIZE,NoP_w,nop_scale_ratio):
     noc_dict["F"]= F
     noc_dict["bw_scales"]= bw_scales
     return noc_dict,ALL_SIM_NODE_NUM
+
+if __name__ == '__main__':
+    TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6,"nop_scale_ratio":0.5}
+    NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])

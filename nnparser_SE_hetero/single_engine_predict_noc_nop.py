@@ -54,14 +54,23 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	if_act_share_Chiplet = for_list[8]
 	if_wgt_share_Chiplet = for_list[9]
 
+	# mapping parameter
 	P1,P2,P3 = partition_list["P"][0],partition_list["P"][1],partition_list["P"][2]
 	Q1,Q2,Q3 = partition_list["Q"][0],partition_list["Q"][1],partition_list["Q"][2]
 	C1,C2,C3 = partition_list["C"][0],partition_list["C"][1],partition_list["C"][2]
 	K1,K2,K3 = partition_list["K"][0],partition_list["K"][1],partition_list["K"][2]
 	PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
 	PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
-	R0, S0 = 3, 3
-	PK0 = PC0 = 8
+	PK0 = HW_param["intra_PE"]["K"]
+	PC0 = HW_param["intra_PE"]["C"]
+
+	# network parameter
+	P = network_param["P"]
+	Q = network_param["Q"]
+	K = network_param["K"]
+	C = network_param["C"]
+	R = network_param["R"]
+	S = network_param["S"]
 
 	# memory node id
 	PE_lenth = int(CoreNum ** 0.5)
@@ -75,15 +84,11 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	runtimeQ = PQ3*Q3*PQ2*Q2*Q1
 	runtimeK = PK3*K3*PK2*K2*K1*PK0
 	runtimeC = C3*C2*C1*PC0
-	runtimeR = R0
-	runtimeS = S0
+	runtimeR = R # R S不拆分,在PE level的时序for参数里
+	runtimeS = S
 	runtimeCoreNum = PK2*PQ2*PP2
 	runtimeChipNum = PP3*PQ3*PK3
 
-	P = network_param["P"]
-	Q = network_param["Q"]
-	K = network_param["K"]
-	C = network_param["C"]
 	assert(runtimeP>=P);assert(runtimeQ>=Q);assert(runtimeK>=K);assert(runtimeC>=C)
 	assert(runtimeCoreNum <= CoreNum);assert(runtimeChipNum <= ChipNum)
 
@@ -322,6 +327,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
+
 	bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	
 	for item in out_core_dict:
@@ -335,10 +341,11 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
+
 	bw_needed = (core_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
-		for dst in dst_list: #写output不存在多播可能
+		for dst in dst_list:					#写output不存在多播可能
 			for link in route_table[(dst + 1000, ol2_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
@@ -383,7 +390,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
 		dst_list = out_chip_dict[item]
-		for dst in dst_list: #写output不存在多播
+		for dst in dst_list:              #写output不存在多播
 			for link in route_table[(dst + 1000, dram_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
@@ -436,19 +443,23 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	if_act_share_Chiplet = for_list[8]
 	if_wgt_share_Chiplet = for_list[9]
 
+	# mapping parameter
 	P1,P2,P3 = partition_list["P"][0],partition_list["P"][1],partition_list["P"][2]
 	Q1,Q2,Q3 = partition_list["Q"][0],partition_list["Q"][1],partition_list["Q"][2]
 	C1,C2,C3 = partition_list["C"][0],partition_list["C"][1],partition_list["C"][2]
 	K1,K2,K3 = partition_list["K"][0],partition_list["K"][1],partition_list["K"][2]
 	PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
 	PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
-	PK0,PC0 = 8, 8
-	R0, S0 = 3, 3
+	PK0 = HW_param["intra_PE"]["K"]
+	PC0 = HW_param["intra_PE"]["C"]
+
+	# network parameter
 	P = network_param["P"]
 	Q = network_param["Q"]
 	K = network_param["K"]
 	C = network_param["C"]
-
+	R = network_param["R"]
+	S = network_param["S"]
 	# memory node id
 	PE_lenth = int(CoreNum ** 0.5)
 	ol2_node = PE_lenth * (PE_lenth+1)
@@ -456,13 +467,12 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	wl2_node = ol2_node + PE_lenth * 2
 	dram_node  = 0
 
-
 	runtimeP = PP3*P3*PP2*P2*P1
 	runtimeQ = PQ3*Q3*PQ2*Q2*Q1
 	runtimeK = PK3*K3*PK2*K2*K1*PK0
 	runtimeC = C3*C2*C1*PC0
-	runtimeR = R0
-	runtimeS = S0
+	runtimeR = R
+	runtimeS = S
 	runtimeCoreNum = PK2*PQ2*PP2
 	runtimeChipNum = PP3*PQ3*PK3
 
@@ -496,7 +506,24 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	for id in range(len(data_flow)):
 		param = data_flow[id]
 		ol1_need = ol1_need * ol1_ratio[id] # 单位:neuron
-		al1_need = al1_need * al1_ratio[id]
+
+		# al1 need calculation
+		if "K" == param[0] or "C" == param[0]:
+			al1_need_CKpart = al1_need_CKpart * all_param[id]
+		elif "Q" == param[0]:
+			al1_need_Qpart = al1_need_Qpart * all_param[id]
+		elif "P" == param[0]:
+			al1_need_Ppart = al1_need_Ppart * all_param[id]
+		elif "R" == param[0]:
+			al1_need_Rpart = al1_need_Rpart * all_param[id]
+		elif "S" == param[0]:
+			al1_need_Spart = al1_need_Spart * all_param[id]
+
+		al1_need_Q_final = al1_need_Qpart + al1_need_Spart - 1
+		al1_need_P_final = al1_need_Ppart + al1_need_Rpart - 1
+		al1_need = al1_need_CKpart * al1_need_Q_final * al1_need_P_final
+
+		
 		wl1_need = wl1_need * wl1_ratio[id]
 		cal = cal * all_param[id]
 		cal_cycles[param] = cal
@@ -507,7 +534,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		if_out_final[param] = out_final[id]
 		# L2
 		OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
-		AL2_need[param] = al1_need * PQ2 * PP2 
+		AL2_need[param] = al1_need * PQ2 * PP2 #这里有点问题
 		WL2_need[param] = wl1_need * PK2 
 
 	repeat = 1
@@ -665,6 +692,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
+
 	bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
@@ -680,7 +708,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	bw_needed = (core_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
-		for dst in dst_list: #写output不存在多播可能
+		for dst in dst_list:					#写output不存在多播可能
 			for link in route_table[(dst + 1000, ol2_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
@@ -725,7 +753,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
 		dst_list = out_chip_dict[item]
-		for dst in dst_list: #写output不存在多播
+		for dst in dst_list:              #写output不存在多播
 			for link in route_table[(dst + 1000, dram_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
