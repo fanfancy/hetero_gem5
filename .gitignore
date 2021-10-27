@@ -1,3 +1,7 @@
 run_info/
 gem5/current_NoC_Configs.txt
-/nn_parser_CCASM_hetero/task/
+/nnparser_SE_hetero/task/
+/nnparser_SE_hetero/*.png
+/nnparser_SE_hetero/*.xls
+/nnparser_SE_hetero/*.txt
+
