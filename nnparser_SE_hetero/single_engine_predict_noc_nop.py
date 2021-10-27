@@ -11,6 +11,7 @@ np.set_printoptions(threshold=sys.maxsize)
 from pathlib import Path
 from GaEncode import *
 from config import *
+from multicast_method import *
 
 wgt_tag =  (int(1001))
 act_tag =  (int(1002))
@@ -27,7 +28,7 @@ out_tag =  (int(1003))
 neuron_width  = 16 # bit
 # 卷积配置 从basicParam_noc_nop中import进来
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast):
 	route_table = NoC_param["route_table"]
 	bw_scales = NoC_param["bw_scales"]
 	F = NoC_param["F"]
@@ -296,38 +297,50 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 	F_cur=F.copy()
 
-	def all_full(dict): # 广播时候用的
-		for item in dict:
-			if dict[item] == True: return False
-		return True
-
 	# 对core构建通信需求
 	# 用到的信息: core_pkt_num_wr_opt; core_pkt_num_rd_opt; core_pkt_num_rd_wgt; core_pkt_num_rd_act
 	bw_needed = (core_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
 	for item in act_core_dict:
 		dst_list = act_core_dict[item]
-		for dst in dst_list:
-			for link in route_table[(al2_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(al2_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(al2_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (core_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 	for item in wgt_core_dict:
 		dst_list = wgt_core_dict[item]
-		for dst in dst_list:
-			for link in route_table[(wl2_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(wl2_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(wl2_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
+
 
 	bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
-		for dst in dst_list:
-			for link in route_table[(ol2_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(ol2_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(ol2_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
+
 
 	bw_needed = (core_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
-		for dst in dst_list:
+		for dst in dst_list:					#写output不存在多播可能
 			for link in route_table[(dst + 1000, ol2_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
@@ -336,28 +349,43 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
 	for item in act_chip_dict:
 		dst_list = act_chip_dict[item]
-		for dst in dst_list:
-			for link in route_table[(dram_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(dram_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 	for item in wgt_chip_dict:
 		dst_list = wgt_chip_dict[item]
-		for dst in dst_list:
-			for link in route_table[(dram_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(dram_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
 		dst_list = out_chip_dict[item]
-		for dst in dst_list:
-			for link in route_table[(dram_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(dram_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
 		dst_list = out_chip_dict[item]
-		for dst in dst_list:
+		for dst in dst_list:              #写output不存在多播
 			for link in route_table[(dst + 1000, dram_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
@@ -379,7 +407,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 # end 性能测评
 
-def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, all_sim_node_num):
+def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast):
 	task_name = "single_engine_example"
 	output_folder_name = "./task/"+task_name
 	output_folder_name_start = output_folder_name+"_start"
@@ -459,7 +487,8 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	cal_cycles = {}
 	if_out_final = {}
 
-	ol1_need = PK0; al1_need= PC0; wl1_need = PK0*PC0; cal =1
+	ol1_need = PK0; al1_need_CKpart= PC0; wl1_need = PK0*PC0; cal =1
+	al1_need_Qpart = 1; al1_need_Ppart = 1; al1_need_Rpart = 1; al1_need_Spart = 1
 
 	# ------------------ 计算6个buffer存储需求&每级for循环循环次数 ------------------
 
@@ -548,12 +577,6 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	out_core_dict = out_dict["rd_core"][0]["recv"]
 	out_chip_dict = out_dict["rd_chip"]["recv"]
 	
-	print("act_core_dict = ",act_core_dict)
-	print("wgt_core_dict = ",wgt_core_dict)
-	print("act_chip_dict = ",act_chip_dict)
-	print("wgt_chip_dict = ",wgt_chip_dict)
-	print("out_core_dict = ",out_core_dict)
-	print("out_chip_dict = ",out_chip_dict)
 
 	# 依据信息构建 mem_node_list 和 cc_node_list 
 	mem_node_list = [ol2_node,al2_node,wl2_node,dram_node]
@@ -636,38 +659,49 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 
 	F_cur=F.copy()
 
-	def all_full(dict): # 广播时候用的
-		for item in dict:
-			if dict[item] == True: return False
-		return True
-
 	# 对core构建通信需求
 	# 用到的信息: core_pkt_num_wr_opt; core_pkt_num_rd_opt; core_pkt_num_rd_wgt; core_pkt_num_rd_act
 	bw_needed = (core_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
 	for item in act_core_dict:
 		dst_list = act_core_dict[item]
-		for dst in dst_list:
-			for link in route_table[(al2_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(al2_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(al2_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (core_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 	for item in wgt_core_dict:
 		dst_list = wgt_core_dict[item]
-		for dst in dst_list:
-			for link in route_table[(wl2_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(wl2_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(wl2_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
+
 
 	bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
-		for dst in dst_list:
-			for link in route_table[(ol2_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(ol2_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(ol2_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (core_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
-		for dst in dst_list:
+		for dst in dst_list:					#写output不存在多播可能
 			for link in route_table[(dst + 1000, ol2_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
@@ -676,28 +710,43 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
 	for item in act_chip_dict:
 		dst_list = act_chip_dict[item]
-		for dst in dst_list:
-			for link in route_table[(dram_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(dram_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 	for item in wgt_chip_dict:
 		dst_list = wgt_chip_dict[item]
-		for dst in dst_list:
-			for link in route_table[(dram_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(dram_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
 		dst_list = out_chip_dict[item]
-		for dst in dst_list:
-			for link in route_table[(dram_node + 1000, dst + 1000)]:
+		if if_multicast == 0:
+			for dst in dst_list:
+				for link in route_table[(dram_node + 1000, dst + 1000)]:
+					F_cur[link] += ( bw_needed / bw_scales[link] )
+		elif if_multicast == 1:
+			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
+			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
 		dst_list = out_chip_dict[item]
-		for dst in dst_list:
+		for dst in dst_list:              #写output不存在多播
 			for link in route_table[(dst + 1000, dram_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
