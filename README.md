@@ -4,7 +4,7 @@
   wgt_tag=1001; act_tag=1002; out_tag=1003
 
 - [x] 单引擎：read output partial sum
-- [ ] code refactory: 统一文件读入hardware参数和conv参数 
+- [x] code refactory: 统一文件读入hardware参数和conv参数 
 - [ ] 拓扑：hetero_mesh_nopRouter 参数从脚本中传进来，而不要写死
 ---
 # hetero_gem5
@@ -28,22 +28,24 @@ This repo is developed based on gem5 v20.1.0.
 ```
 
 ## File structure
-位于nn_parser_CCASM_hetero文件下：
+nnparser_ME_hetero：用于支持noc+nop的多引擎架构仿真。
 - run_configs.py 用于指定workload拆分及mapping策略&拓扑。
 - mesh_hetero.py 带有noc+nop router拓扑的实现。
 - mesh.py 普通mesh实现。
 - GAGA_gennew_waitall_fensan_2gene.py 多引擎workload拆分、mapping、性能预测、task file生成代码。
 - single_engine.py 单引擎性能预测&task file生成（under develop).
 
+nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
+
 ## Run 多引擎
 :bug: 目前没法run，因为garnet源码对单引擎的一些更新
 
 依据需求修改nn_parser_CCASM_hetero/run_configs.py.
 ```
-cd nn_parser_CCASM_hetero
+cd nnparser_ME_hetero
 python3 GAGA_gennew_waitall_fensan_2gene.py
 ```
-对应task file会生成在：nn_parser_CCASM_hetero/task/对应文件名/
+对应task file会生成在：nnparser_ME_hetero/task/对应文件名/
 
 拷贝task file到dnn_task/对应文件名/
 
@@ -55,7 +57,7 @@ sh run_dnn_example.sh
 
 ## Run 单引擎
 ```
-cd nn_parser_CCASM_hetero
+cd nnparser_SE_hetero
 python3 randomTest_noc_nop.py.py
 ```
 拷贝对应的task file
