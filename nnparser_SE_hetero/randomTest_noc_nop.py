@@ -14,7 +14,7 @@ import openpyxl
 degrade_ratio_list = []
 excel_datas = []
 
-def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_num):
+def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_num , if_multicast, filename):
 	fitness_min_ran = 0
 	fitness_list = []
 	fitness_min_ran_list = []
@@ -22,7 +22,8 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		#---生成个代---
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChild()
 		#---计算适应度---
-		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list = calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param)
+		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list = \
+			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param, if_multicast)
 		#---比较适应度，并记录相关变量---
 		if fitness_min_ran == 0 or fitness < fitness_min_ran:
 			fitness_min_ran = fitness
@@ -59,7 +60,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		print("")
 		
 		#---生成task file
-	createTaskFile(for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1,GATest.network_param, HW_param, memory_param, NoC_param, all_sim_node_num)
+	createTaskFile(for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1,GATest.network_param, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast)
 	workbook = openpyxl.Workbook()
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
@@ -79,17 +80,28 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		for col, column_data in enumerate(data):
 			sheet.cell(row+2, col+1, column_data)
 
-	workbook.save('./randomTest_result_VGG-16 conv1-new.xls')
+	workbook.save(filename)
 	return compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list
 
 if __name__ == '__main__':
 
 	network_param = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3}
-	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":8,"K":8}}
+	HW_param = {"Chiplet":9,"PE":16,"intra_PE":{"C":8,"K":8}}
 	memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16}
-	TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6,"nop_scale_ratio":0.5}
+	
+	NoC_w = int(HW_param["PE"] ** 0.5) + 1
+	NOC_NODE_NUM = NoC_w * (NoC_w-1)
+	NoP_w = int(HW_param["Chiplet"] ** 0.5) + 1
+	NOP_SIZE = NoP_w * (NoP_w-1)
+	
+	TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio":0.5}
+	
+	filename = './randomTest_result_VGG-16 conv1-new '+str(HW_param["Chiplet"])+'_'+str(HW_param["PE"])+'.xls'
+
+	# --- 生成noc-nop结构图
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])
 	debug=0
+	if_multicast = 1
 	GATest = GaEncode(network_param, HW_param, debug)
 
 	iterTime = 10000
@@ -103,7 +115,7 @@ if __name__ == '__main__':
 
 	for i in range(random_test_iter):
 		print("###### test iteration = ",i)
-		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num)
+		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
 		print(fitness_min_ran_list[len(fitness_min_ran_list)-1])
 		f = open("./random_test_record.txt",'a')
 		print("###### test iteration = ",i, file = f)
