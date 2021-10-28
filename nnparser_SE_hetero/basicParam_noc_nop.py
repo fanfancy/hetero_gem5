@@ -6,13 +6,6 @@ import numpy as np
 import copy
 from enum import Enum
 
-# Parameter
-debug = 0
-# architecture parameter
-Chiplets = 4
-PEs = 16
-C0 = 8
-K0 = 8
 
 # network parameter
 # 224 224 64 256 3 3
