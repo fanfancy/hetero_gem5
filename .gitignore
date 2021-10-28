@@ -6,3 +6,4 @@ gem5/current_NoC_Configs.txt
 /nnparser_SE_hetero/*.txt
 */__pycache__/
 __pycache__/
+/dnn_task/lenet_rf_ga/
