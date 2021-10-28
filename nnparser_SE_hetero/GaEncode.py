@@ -48,16 +48,12 @@ def setPartition(num, dim):
 
 # 将P_num个并行量进行拆分，随机选两个维度d1、d2，以及对应的并行量p1、p2.
 def setParallel(P_num, level):
+	list = setPartition_1(P_num, 2)
+	p1 = list[0]
+	p2 = list[1]
 	dim = len(parallel_select[level])
-	index = math.ceil(math.log(P_num, 2))
-	p1 = random.randint(0,index)
-	p2 = index - p1
-	p1 = pow(2,p1)
-	p2 = pow(2,p2)
 	d1 = random.randint(0,dim-1)
 	d2 = random.randint(0,dim-1)	
-	#while d2 == d1:
-	#	d2 = random.randint(0,dim-1)
 	d1 = parallel_select[level][d1]
 	d2 = parallel_select[level][d2]
 	return d1, d2, p1, p2
@@ -90,6 +86,17 @@ class GaEncode:
 		self.R = self.size["R"]
 		self.S = self.size["S"]
 
+		self.NoC_node_offset = []
+		self.NoP2NoCnode = []
+		self.A_W_offset = {}
+		self.setNodeID()
+
+		#self.PEmappingSet = {}
+		#self.Chipmappingset = {}
+		#self.setmapppingSet("Chiplet")
+		#self.setmapppingSet("PE")
+
+
 		self.debug = debug
 		self.debug_file = debug_file
 
@@ -103,6 +110,54 @@ class GaEncode:
 		for i in self.network_param:
 			if i not in self.size:
 				self.size[i] = self.network_param[i]
+
+	def setNodeID(self):
+		Chiplet_lenth = int(self.Chiplets ** 0.5)
+		PE_lenth = int(self.PEs ** 0.5)
+		assert(Chiplet_lenth*Chiplet_lenth == self.Chiplets)
+		assert(PE_lenth*PE_lenth == self.PEs)
+
+		self.A_W_offset["o"] = 0
+		self.A_W_offset["a"] = PE_lenth + 1
+		self.A_W_offset["w"] = (PE_lenth + 1) * 2
+		self.A_W_offset["noc-chiplet"] = 0
+		PE_num = PE_lenth * (PE_lenth+1)
+
+		num = 0
+		for i in range(self.Chiplets):
+			if i % Chiplet_lenth == 0: 
+				self.NoP2NoCnode.append(0)
+			num += PE_num
+			self.NoC_node_offset.append(num)
+			self.NoP2NoCnode.append(num)
+
+			if (i+1) % Chiplet_lenth == 0:
+				num += PE_num
+
+	def setmappingSet(self, num, set1, set2):
+		assert(num == set1*set2)
+		list1 = {}
+		list2 = {}
+		lenth = int(num ** 0.5)
+		node_list = []
+		ID = 0
+		for i in range(num):
+			if i % lenth == 0:
+				ID += 1
+			node_list.append(ID)
+			ID += 1
+		for i in range(num):
+			set1_id = i // set2
+			if set1_id not in list1:
+				list1[set1_id] = []
+			list1[set1_id].append(node_list[i])
+
+		for i in range(num):
+			set2_id = i // set1
+			if set2_id not in list2:
+				list2[set2_id] = []
+			list2[set2_id].append(list1[i % set1][set2_id])
+		return list1, list2
 
 	# 获得for拆分的code
 	def getPartitionChild(self):
@@ -280,6 +335,28 @@ class GaEncode:
 
 	# 获得计算核心对于act与wgt的共享情况
 	# para1是activation的组数，para2是weight的组数
+	def getPEDistribution(self, flag, num, set1, set2):
+		act_PE_dict = {}
+		wgt_PE_dict = {}
+		act_set_type = "0"
+		wgt_set_type = "0"
+
+		#---act + wgt send节点列表---
+		if flag == 0:
+			act_PE_dict["send"] = {0:[A_W_offset["a"]]}
+			wgt_PE_dict["send"] = {0:[A_W_offset["w"]]}
+		else:
+			act_PE_dict["send"] = {0:[0]}
+			wgt_PE_dict["send"] = {0:[0]}
+
+		#---act recv节点列表---
+		act_PE_dict["recv"], wgt_PE_dict["recv"]= self.setmappingSet(num, set1, set2)
+		
+		act_set_type = "set_"+str(set1)+"e_"+str(set2)
+		wgt_set_type = "set_"+str(set2)+"e_"+str(set1)
+
+		return act_PE_dict, wgt_PE_dict, act_set_type, wgt_set_type
+
 	def getPEDistribution16(self, para1, para2):
 		assert(para1*para2 == 16)
 		act_PE_dict = {}
@@ -342,25 +419,20 @@ class GaEncode:
 			for x in range(len(recv[i])):
 				recv[i][x] +=  num
 		dict1 = copy.deepcopy({"send":send,"recv":recv})
-		#print(send)
 		return dict1
 
 	# 转换为chiplet
 	def dictChipletChange(self, dict, flag1, flag2):
 		send = dict["send"]
 		recv = dict["recv"]
-		if self.Chiplets == 16:
-			NoP2NoCnode = NoP2NoCnode_16
-		elif self.Chiplets == 4:
-			NoP2NoCnode = NoP2NoCnode_4
 		for i in send:
 			for x in range(len(send[i])):
 				num = send[i][x]
-				send[i][x] = NoP2NoCnode[num] + A_W_offset[flag1]
+				send[i][x] = self.NoP2NoCnode[num] + self.A_W_offset[flag1]
 		for i in recv:
 			for x in range(len(recv[i])):
 				num = recv[i][x]
-				recv[i][x] = NoP2NoCnode[num] + A_W_offset[flag2]
+				recv[i][x] = self.NoP2NoCnode[num] + self.A_W_offset[flag2]
 		dict1 = copy.deepcopy({"send":send,"recv":recv})
 		return dict1
 
@@ -368,12 +440,8 @@ class GaEncode:
 	def getPEExtent(self, dict, type=0, flag1 = 0, flag2 = 0):
 		list = []
 		#list.append(dict)
-		if self.Chiplets == 16:
-			NoC_node_offset = NoC_node_offset_16
-		elif self.Chiplets == 4:
-			NoC_node_offset = NoC_node_offset_4
 		if type == 0:
-			for i in NoC_node_offset:
+			for i in self.NoC_node_offset:
 				dict1 = copy.deepcopy(dict)
 				dict1 = self.dictAddInt(dict1, i)		
 				list.append(dict1)
@@ -385,18 +453,23 @@ class GaEncode:
 
 	# 获得输出特征图的数据节点通信关系
 	def getOutputDict(self):
-		if self.PEs == 16:
-			rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
-			wr_out_PE_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
-		elif self.PEs == 4:
-			rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
-			wr_out_PE_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
-		if self.Chiplets == 16:
-			rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
-			wr_out_Chiplet_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
-		elif self.Chiplets == 4:
-			rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
-			wr_out_Chiplet_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
+		rd_out_PE_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.PEs, self.PEs, 1)
+		wr_out_PE_dict_temp = {"send":rd_out_PE_dict_temp["recv"],"recv":{0:[0]}}
+		rd_out_Chiplet_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.Chiplets, self.Chiplets, 1)
+		wr_out_Chiplet_dict_temp = {"send":rd_out_Chiplet_dict_temp["recv"],"recv":{0:[0]}}
+
+		#if self.PEs == 16:
+		#	rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
+		#	wr_out_PE_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
+		#elif self.PEs == 4:
+		#	rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
+		#	wr_out_PE_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
+		#if self.Chiplets == 16:
+		#	rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
+		#	wr_out_Chiplet_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
+		#elif self.Chiplets == 4:
+		#	rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
+		#	wr_out_Chiplet_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
 		rd_out_PE_dict = self.getPEExtent(rd_out_PE_dict_temp)
 		wr_out_PE_dict = self.getPEExtent(wr_out_PE_dict_temp)
 		rd_out_Chiplet_dict = self.getPEExtent(rd_out_Chiplet_dict_temp,1,"o","o")
@@ -505,14 +578,16 @@ class GaEncode:
 		wl1_ratio.append(1)
 		all_param.append(1)
 		out_final.append(1)
-		if self.PEs == 16:
-			act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution16(act_share_PE[0],wgt_share_PE[0])
-		elif self.PEs == 4:
-			act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution4(act_share_PE[0],wgt_share_PE[0])
-		if self.Chiplets == 16:
-			act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution16(act_share_Chiplet[0],wgt_share_Chiplet[0])
-		elif self.Chiplets == 4:
-			act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution4(act_share_Chiplet[0],wgt_share_Chiplet[0])
+		act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution(0, self.PEs, act_share_PE[0],wgt_share_PE[0])
+		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution(1, self.Chiplets, act_share_Chiplet[0],wgt_share_Chiplet[0])
+		#if self.PEs == 16:
+		#	act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution16(act_share_PE[0],wgt_share_PE[0])
+		#elif self.PEs == 4:
+		#	act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution4(act_share_PE[0],wgt_share_PE[0])
+		#if self.Chiplets == 16:
+		#	act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution16(act_share_Chiplet[0],wgt_share_Chiplet[0])
+		#elif self.Chiplets == 4:
+		#	act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution4(act_share_Chiplet[0],wgt_share_Chiplet[0])
 		act_PE_dict = self.getPEExtent(act_PE_dict_temp)
 		wgt_PE_dict = self.getPEExtent(wgt_PE_dict_temp)
 		act_Chiplet_dict = self.getPEExtent(act_Chiplet_dict_temp,1,"o","a")

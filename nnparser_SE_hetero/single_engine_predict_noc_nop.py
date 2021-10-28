@@ -71,6 +71,13 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	R = network_param["R"]
 	S = network_param["S"]
 
+	# memory node id
+	PE_lenth = int(CoreNum ** 0.5)
+	ol2_node = PE_lenth * (PE_lenth+1)
+	al2_node = ol2_node + PE_lenth + 1
+	wl2_node = ol2_node + (PE_lenth + 1)* 2
+	dram_node  = 0
+
 
 	runtimeP = PP3*P3*PP2*P2*P1
 	runtimeQ = PQ3*Q3*PQ2*Q2*Q1
@@ -184,9 +191,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 	# ------------------ 构建mem cal core 位置和属性等 ------------------
 	# 从wxy import进来
-
-	ol2_node = 20; al2_node = 25; wl2_node = 30
-	dram_node  = 0
 
 	act_core_dict = act_wgt_dict["act_core"][0]["recv"]
 	wgt_core_dict = act_wgt_dict["wgt_core"][0]["recv"]
@@ -347,6 +351,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 
 	bw_needed = (core_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
+	
 	for item in out_core_dict:
 		dst_list = out_core_dict[item]
 		if if_multicast == 0:
@@ -487,6 +492,12 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	C = network_param["C"]
 	R = network_param["R"]
 	S = network_param["S"]
+	# memory node id
+	PE_lenth = int(CoreNum ** 0.5)
+	ol2_node = PE_lenth * (PE_lenth+1)
+	al2_node = ol2_node + PE_lenth 
+	wl2_node = ol2_node + PE_lenth * 2
+	dram_node  = 0
 
 	runtimeP = PP3*P3*PP2*P2*P1
 	runtimeQ = PQ3*Q3*PQ2*Q2*Q1
@@ -599,16 +610,12 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	# ------------------ 构建mem cal core 位置和属性等 ------------------
 	# 从wxy import进来
 
-	ol2_node = 20; al2_node = 25; wl2_node = 30
-	dram_node  = 0
-
 	act_core_dict = act_wgt_dict["act_core"][0]["recv"]
 	wgt_core_dict = act_wgt_dict["wgt_core"][0]["recv"]
 	act_chip_dict = act_wgt_dict["act_chiplet"]["recv"]
 	wgt_chip_dict = act_wgt_dict["wgt_chiplet"]["recv"]
 	out_core_dict = out_dict["rd_core"][0]["recv"]
 	out_chip_dict = out_dict["rd_chip"]["recv"]
-	
 
 	# 依据信息构建 mem_node_list 和 cc_node_list 
 	mem_node_list = [ol2_node,al2_node,wl2_node,dram_node]
