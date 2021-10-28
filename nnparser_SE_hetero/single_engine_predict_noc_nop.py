@@ -25,7 +25,6 @@ out_tag =  (int(1003))
 #### a NoP+NoC example #########
 # 硬件信息
 # memory_param = {"OL1":,"OL2":,"AL1":,"AL2":,"WL1":,"WL2":}
-neuron_width  = 16 # bit
 # 卷积配置 从basicParam_noc_nop中import进来
 
 def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast):
@@ -85,6 +84,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	assert(runtimeP>=P);assert(runtimeQ>=Q);assert(runtimeK>=K);assert(runtimeC>=C)
 	assert(runtimeCoreNum <= CoreNum);assert(runtimeChipNum <= ChipNum)
 
+	energy_MAC = P*Q*K*C*R*S * MAC_energy_ratio
 	compuation_num = runtimeP*runtimeQ*runtimeK*runtimeC*runtimeR*runtimeS
 	compuation_cycles = compuation_num/runtimeCoreNum/runtimeChipNum/PC0/PK0
 	#print ("compuation_num=",compuation_num)
@@ -244,11 +244,22 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	core_wgt_data_num += WL1_need[inner] # 用于生成仿真指令
 	core_neu_num_rd_wgt += WL1_need[inner] * repeat_num[cur]
 
-	# 考虑上并行度带来的数据复用机会
-	core_neu_num_wr_opt = core_neu_num_wr_opt * CoreNum * ChipNum  # 没有机会复用
-	core_neu_num_rd_opt = core_neu_num_rd_opt * CoreNum * ChipNum 
-	core_neu_num_rd_wgt = core_neu_num_rd_wgt * CoreNum * ChipNum /PP2 / PQ2
-	core_neu_num_rd_act = core_neu_num_rd_act * CoreNum * ChipNum /PK2 
+	# 考虑上并行度带来的数据复用机会 (多播)
+	if if_multicast == 1:
+		core_neu_num_wr_opt = core_neu_num_wr_opt * CoreNum * ChipNum  # 没有机会复用
+		core_neu_num_rd_opt = core_neu_num_rd_opt * CoreNum * ChipNum 
+		core_neu_num_rd_wgt = core_neu_num_rd_wgt * CoreNum * ChipNum /PP2 / PQ2
+		core_neu_num_rd_act = core_neu_num_rd_act * CoreNum * ChipNum /PK2 
+	elif if_multicast == 0:
+		core_neu_num_wr_opt = core_neu_num_wr_opt * CoreNum * ChipNum  # 没有机会复用
+		core_neu_num_rd_opt = core_neu_num_rd_opt * CoreNum * ChipNum 
+		core_neu_num_rd_wgt = core_neu_num_rd_wgt * CoreNum * ChipNum  
+		core_neu_num_rd_act = core_neu_num_rd_act * CoreNum * ChipNum  
+
+	energy_wr_opt_L2 = core_neu_num_wr_opt * SRAM_energy(OL2) * neuron_width 
+	energy_rd_opt_L2 = core_neu_num_rd_opt * SRAM_energy(OL2) * neuron_width
+	energy_rd_wgt_L2 = core_neu_num_rd_wgt * SRAM_energy(WL2) * neuron_width
+	energy_rd_act_L2 = core_neu_num_rd_act * SRAM_energy(AL2) * neuron_width
 
 	# L2 用于统计通信总量 & prediction
 	chip_pkt_num_wr_opt = 0; chip_neu_num_wr_opt = 0
@@ -290,10 +301,21 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	chip_neu_num_rd_wgt += WL2_need[inner] * repeat_num[cur]
 
 	# 考虑上并行度带来的数据复用机会
-	chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
-	chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
-	chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum /PP3 / PQ3
-	chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum /PK3 
+	if if_multicast == 1:
+		chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
+		chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
+		chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum /PP3 / PQ3
+		chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum /PK3 
+	elif if_multicast == 0:
+		chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
+		chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
+		chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum  
+		chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum 
+	
+	energy_wr_opt_dram = chip_neu_num_wr_opt * DRAM_energy_ratio * neuron_width 
+	energy_rd_opt_dram = chip_neu_num_rd_opt * DRAM_energy_ratio * neuron_width
+	energy_rd_wgt_dram = chip_neu_num_rd_wgt * DRAM_energy_ratio * neuron_width
+	energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * neuron_width
 
 	F_cur=F.copy()
 
@@ -345,6 +367,8 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	# 对chip构建通信需求
+	energy_die2die = 0
+	bits_per_packet = flit_per_pkt *  neu_per_flit * neuron_width 
 	# 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
 	bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
 	for item in act_chip_dict:
@@ -353,10 +377,12 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			for dst in dst_list:
 				for link in route_table[(dram_node + 1000, dst + 1000)]:
 					F_cur[link] += ( bw_needed / bw_scales[link] )
+					energy_die2die += chip_pkt_num_rd_act * bits_per_packet * DIE2DIE_energy_ratio
 		elif if_multicast == 1:
 			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
 			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
+				energy_die2die += chip_pkt_num_rd_act * bits_per_packet * DIE2DIE_energy_ratio
 
 	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
 	for item in wgt_chip_dict:
@@ -365,10 +391,12 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			for dst in dst_list:
 				for link in route_table[(dram_node + 1000, dst + 1000)]:
 					F_cur[link] += ( bw_needed / bw_scales[link] )
+					energy_die2die += chip_pkt_num_rd_wgt *  bits_per_packet * DIE2DIE_energy_ratio
 		elif if_multicast == 1:
 			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
 			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
+				energy_die2die += chip_pkt_num_rd_wgt *  bits_per_packet * DIE2DIE_energy_ratio
 
 	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
@@ -377,10 +405,12 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			for dst in dst_list:
 				for link in route_table[(dram_node + 1000, dst + 1000)]:
 					F_cur[link] += ( bw_needed / bw_scales[link] )
+					energy_die2die += chip_pkt_num_rd_opt *  bits_per_packet * DIE2DIE_energy_ratio
 		elif if_multicast == 1:
 			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
 			for link in link_set:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
+				energy_die2die += chip_pkt_num_rd_opt *  bits_per_packet * DIE2DIE_energy_ratio
 
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
 	for item in out_chip_dict:
@@ -388,6 +418,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		for dst in dst_list:              #写output不存在多播
 			for link in route_table[(dst + 1000, dram_node+1000)]:
 				F_cur[link] += ( bw_needed / bw_scales[link] )
+				energy_die2die += chip_pkt_num_wr_opt *  bits_per_packet * DIE2DIE_energy_ratio
 
 
 	if (max(F_cur.values()) < 1):
@@ -401,9 +432,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	cp_list = [ol1_cp_id, al1_cp_id, wl1_cp_id, ol2_cp_id, al2_cp_id, wl2_cp_id]
 	utilization_ratio_list = [ol1_utilization_ratio,al1_utilization_ratio,wl1_utilization_ratio, \
 						      ol2_utilization_ratio,al2_utilization_ratio,wl2_utilization_ratio]
-	chip_comm_num_list = [chip_neu_num_wr_opt, chip_neu_num_rd_opt, chip_neu_num_rd_act, chip_neu_num_rd_wgt]
-	core_comm_num_list = [core_neu_num_wr_opt, core_neu_num_rd_opt, core_neu_num_rd_act, core_neu_num_rd_wgt]
-	return(degrade_ratio*compuation_cycles, degrade_ratio, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list)
+
+	energy_dram_list = [energy_wr_opt_dram, energy_rd_opt_dram, energy_rd_wgt_dram, energy_rd_act_dram]
+	energy_L2_list = [energy_wr_opt_L2, energy_rd_opt_L2, energy_rd_wgt_L2, energy_rd_act_L2]
+	return(degrade_ratio*compuation_cycles, degrade_ratio, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_die2die, energy_MAC)
 
 # end 性能测评
 

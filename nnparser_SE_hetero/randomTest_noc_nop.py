@@ -22,7 +22,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		#---生成个代---
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChild()
 		#---计算适应度---
-		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, chip_comm_num_list, core_comm_num_list = \
+		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_die2die, energy_MAC = \
 			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param, if_multicast)
 		#---比较适应度，并记录相关变量---
 		if fitness_min_ran == 0 or fitness < fitness_min_ran:
@@ -49,9 +49,9 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 			runtime_list[3], runtime_list[4], runtime_list[5], runtime_list[6],\
 			cp_list[0], cp_list[1], cp_list[2],cp_list[3], cp_list[4], cp_list[5] ,\
 		    utilization_ratio_list[0], utilization_ratio_list[1], utilization_ratio_list[2],utilization_ratio_list[3], utilization_ratio_list[4], utilization_ratio_list[5], \
-			chip_comm_num_list[0], chip_comm_num_list[1], chip_comm_num_list[2], chip_comm_num_list[3], \
-			core_comm_num_list[0], core_comm_num_list[1], core_comm_num_list[2], core_comm_num_list[3], \
-			sum(chip_comm_num_list), sum(core_comm_num_list), sum(chip_comm_num_list) * 0.364+sum(core_comm_num_list)* 0.033])
+			energy_dram_list[0], energy_dram_list[1], energy_dram_list[2], energy_dram_list[3], \
+			energy_L2_list[0], energy_L2_list[1], energy_L2_list[2], energy_L2_list[3], \
+			sum(energy_dram_list), sum(energy_L2_list), energy_die2die,energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+energy_die2die+energy_MAC ])
 		print("######---------Times = ", i)
 		print("fitness_min_ran = ",fitness_min_ran)
 		print("compuation_cycles_1 = ",compuation_cycles_1)
@@ -70,9 +70,9 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		"runtimeP","runtimeQ", "runtimeC", "runtimeK", "runtimeChipNum", "runtimeCoreNum", "runtime_calNum",\
 		"ol1_cp_id","al1_cp_id","wl1_cp_id","ol2_cp_id","al2_cp_id","wl2_cp_id", \
 		"ol1_util","al1_util","wl1_util","ol2_util","al2_util","wl2_util", \
-		"chip_num_wr_opt", "chip_num_rd_opt", "chip_num_rd_act" , "chip_num_rd_wgt",\
-		"core_num_wr_opt", "core_num_rd_opt", "core_num_rd_act" , "core_num_rd_wgt"	,\
-		"chip_comm", "core_comm", "power"]
+		"energy_wr_opt_dram", "energy_rd_opt_dram", "energy_rd_wgt_dram", "energy_rd_act_dram", \
+		"energy_wr_opt_L2", "energy_rd_opt_L2", "energy_rd_wgt_L2", "energy_rd_act_L2", \
+		"dram_energy", "L2_energy", "energy_die2die", "energy_MAC", "energy_sum"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
@@ -94,7 +94,7 @@ if __name__ == '__main__':
 	if_multicast = 1
 	GATest = GaEncode(network_param, HW_param, debug)
 
-	iterTime = 10000
+	iterTime = 100
 	fitness_min_ran = 0
 	index = range(iterTime)
 
