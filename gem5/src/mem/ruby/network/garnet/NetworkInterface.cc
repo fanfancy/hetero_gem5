@@ -57,6 +57,7 @@ NetworkInterface::NetworkInterface(const Params *p)
     num_recv_packet_act = 0; 
     num_recv_packet_out = 0;
     num_recv_packet_wgt = 0;  
+    num_recv_packet = 0;
     send_tag_line_id = 0;
     // read the network config and update num_cpus
     std::string file;
@@ -226,6 +227,14 @@ void NetworkInterface::update_recv_packets(int id, int the_recv_tag)
         ofstream OutFile(file);
         OutFile << std::to_string(num_recv_packet_out); 
         if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets out ing, id= " << id <<" packets="<<num_recv_packet_out<<std::endl;
+        OutFile.close();     
+    }  
+    else { // the_recv_packet 没有tag
+        num_recv_packet ++;
+        file = "./../run_info/node_recv/"+std::to_string(id)+".txt";
+        ofstream OutFile(file);
+        OutFile << std::to_string(num_recv_packet); 
+        if (if_debug==1) std::cout<<"in NI.cc, update_recv_packets notag ing, id= " << id <<" packets="<<num_recv_packet<<std::endl;
         OutFile.close();     
     }  
 }

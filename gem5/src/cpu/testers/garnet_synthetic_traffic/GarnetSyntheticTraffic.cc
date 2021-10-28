@@ -188,6 +188,7 @@ GarnetSyntheticTraffic::init()
     total_packet_recv_previous_wgt = 0;
     total_packet_recv_previous_act = 0;
     total_packet_recv_previous_out = 0;
+    total_packet_recv_previous = 0;
     pkt_num_wgt_recv = 0;
     pkt_num_act_recv = 0;
     pkt_num_out_recv = 0;
@@ -227,7 +228,7 @@ int GarnetSyntheticTraffic::recv_packets(int id, int data_tag)
     else if (data_tag == out_tag)
         file = "./../run_info/node_recv/"+std::to_string(id)+"_out"+".txt";
     else
-        panic("data tag not recognized!");
+        file = "./../run_info/node_recv/"+std::to_string(id)+".txt";
 
 	ifstream infile; 
     infile.open(file.data());  
@@ -485,8 +486,16 @@ GarnetSyntheticTraffic::tick()
                     if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT out"  \
                        << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;
                 }
-                
-
+                else { // wait packet 没有tag
+                    packet_recv = recv_packets(id, 0) -  total_packet_recv_previous;
+                    if (packet_recv >= num_packet_wait){
+                        cpu_work_stats = WORK_IDLE;
+                        cpu_status = IDLE;
+                        total_packet_recv_previous += num_packet_wait;
+                    }
+                    if(if_debug==1) std::cout << "node "<<id<<"\tstatus: WORK_WAIT no tag"  \
+                       << "\tpacket_recv:"<< packet_recv << "\tnum_packet_wait"<< num_packet_wait<< std::endl;
+                }
                 // 否则维持wait状态
             }
 

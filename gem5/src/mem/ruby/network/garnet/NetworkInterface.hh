@@ -77,6 +77,7 @@ class NetworkInterface : public ClockedObject, public Consumer
     int num_recv_packet_wgt;
     int num_recv_packet_out;
     int num_recv_packet_act;
+    int num_recv_packet;
     int send_tag_line_id; 
 
     void scheduleFlit(flit *t_flit);
