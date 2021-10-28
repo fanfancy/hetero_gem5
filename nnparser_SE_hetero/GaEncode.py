@@ -117,10 +117,17 @@ class GaEncode:
 		assert(Chiplet_lenth*Chiplet_lenth == self.Chiplets)
 		assert(PE_lenth*PE_lenth == self.PEs)
 
-		self.A_W_offset["o"] = 0
-		self.A_W_offset["a"] = PE_lenth + 1
-		self.A_W_offset["w"] = (PE_lenth + 1) * 2
-		self.A_W_offset["noc-chiplet"] = 0
+		if PE_lenth == 2:
+			self.A_W_offset["o"] = 0
+			self.A_W_offset["a"] = PE_lenth + 1
+			self.A_W_offset["w"] = PE_lenth + 1
+			self.A_W_offset["noc-chiplet"] = 0
+		else:
+			assert(PE_lenth > 1)
+			self.A_W_offset["o"] = 0
+			self.A_W_offset["a"] = PE_lenth + 1
+			self.A_W_offset["w"] = (PE_lenth + 1) * 2
+			self.A_W_offset["noc-chiplet"] = 0
 		PE_num = PE_lenth * (PE_lenth+1)
 
 		num = 0
