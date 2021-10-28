@@ -1,5 +1,5 @@
 # TODO List
-- [ ] 修改了garnet的tester file,对多引擎仿真要做对应的改动 （NOTE：目前的task一定要增加一种data tag才能运行）  
+- [x] 修改了garnet的tester file,对多引擎仿真要做对应的改动 
   wgt_tag=1001; act_tag=1002; out_tag=1003  
 - [x] 单引擎：read output partial sum
 - [x] code refactory: 统一文件读入hardware参数和conv参数 
@@ -37,7 +37,6 @@ nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
 - config.py 通用的不常修改的参数。
 
 ## Run 多引擎
-:bug: 目前没法run，因为garnet源码对单引擎的一些更新  
 依据需求修改nn_parser_CCASM_hetero/run_configs.py.
 ```
 cd nnparser_ME_hetero
