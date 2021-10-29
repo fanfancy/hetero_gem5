@@ -48,12 +48,28 @@ def setPartition(num, dim):
 
 # 将P_num个并行量进行拆分，随机选两个维度d1、d2，以及对应的并行量p1、p2.
 def setParallel(P_num, level):
-	list = setPartition_1(P_num, 2)
-	p1 = list[0]
-	p2 = list[1]
+	parallel_t = parallel_type[level]
+	list_p = setPartition_1(P_num, 2)
+	p1 = list_p[0]
+	p2 = list_p[1]
 	dim = len(parallel_select[level])
-	d1 = random.randint(0,dim-1)
-	d2 = random.randint(0,dim-1)	
+
+	if parallel_t == 1:
+		d2 = d1 = random.randint(0,dim-1)
+		p1 = p1 * p2
+		p2 = 1
+	elif parallel_t == 2:
+		list1 = list(range(dim))
+		random.shuffle(list1)
+		d1 = list1[0]
+		d2 = list1[1]
+		while (p1 == 1 or p2 == 1):
+			list_p = setPartition_1(P_num, 2)
+			p1 = list_p[0]
+			p2 = list_p[1]
+	else:
+		d1 = random.randint(0,dim-1)
+		d2 = random.randint(0,dim-1)
 	d1 = parallel_select[level][d1]
 	d2 = parallel_select[level][d2]
 	return d1, d2, p1, p2
