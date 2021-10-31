@@ -86,7 +86,15 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 
 if __name__ == '__main__':
 
-	network_param = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3}
+	APP = "VGG16_CONV1"
+	if APP == "VGG16_CONV1":
+		network_param = vgg16_conv1
+	elif APP == "VGG16_CONV12":
+		network_param = vgg16_conv12
+	else:
+		print ("fatal: APP not defined")
+		sys.exit()
+
 	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":8,"K":8}}
 	memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16}
 	
@@ -97,7 +105,7 @@ if __name__ == '__main__':
 	
 	TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth}
 	
-	filename = './randomTest_result_VGG-16 conv1-new '+str(HW_param["Chiplet"])+'_'+str(HW_param["PE"])+'.xls'
+	filename = './randomTest_result_'+APP+'_'+str(HW_param["Chiplet"])+'_'+str(HW_param["PE"])+'.xls'
 
 	# --- 生成noc-nop结构图
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])

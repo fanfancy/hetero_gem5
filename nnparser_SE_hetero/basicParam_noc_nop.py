@@ -5,7 +5,7 @@ import random
 import numpy as np
 import copy
 from enum import Enum
-
+from config import *
 
 # network parameter
 # 224 224 64 256 3 3
@@ -46,8 +46,42 @@ Par_type = 4
 dim_list = ['P','Q','C','K','R','S']
 type_list = ["for","parallel-for-1","parallel-for-2"]
 #chiplet PE todo
-parallel_select = {"Chiplet":[0,1,3],"PE":[0,1,3]}
-parallel_type = {"Chiplet":2,"PE":1} # 2: hybrid, 1 single, 0 no limit
+# parallel_select = {"Chiplet":[0,1],"PE":[0,1]}
+# parallel_type = {"Chiplet":0,"PE":0} # 2: hybrid, 1 single, 0 no limit
+parallel_select = {}; parallel_type = {}
+
+if chiplet_parallel == "Channel":
+    parallel_select["Chiplet"] = [3]
+    parallel_type["Chiplet"] = 1
+elif chiplet_parallel == "Pq":
+    parallel_select["Chiplet"] = [0,1]
+    parallel_type["Chiplet"] = 0
+elif chiplet_parallel == "Hybrid":
+    parallel_select["Chiplet"] = [0,1,3]
+    parallel_type["Chiplet"] = 2
+elif chiplet_parallel == "All":
+    parallel_select["Chiplet"] = [0,1,3]
+    parallel_type["Chiplet"] = 0
+else:
+    print("fatal: chiplet_parallel not defined")
+    sys.exit()
+
+if core_parallel == "Channel":
+    parallel_select["PE"] = [3]
+    parallel_type["PE"] = 1
+elif core_parallel == "Pq":
+    parallel_select["PE"] = [0,1]
+    parallel_type["PE"] = 0
+elif core_parallel == "Hybrid":
+    parallel_select["PE"] = [0,1,3]
+    parallel_type["PE"] = 2
+elif core_parallel == "All":
+    parallel_select["PE"] = [0,1,3]
+    parallel_type["PE"] = 0
+else:
+    print("fatal: core_parallel not defined")
+    sys.exit()
+
 # fitness parameter
 O_correlation = [1,1,0,1,0,0]
 A_correlation = [1,1,1,0,0,0]
