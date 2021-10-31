@@ -5,6 +5,7 @@ import random
 import numpy as np
 import copy
 from enum import Enum
+from config import *
 
 
 def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
@@ -13,6 +14,7 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
     ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
     F = {} # fitness value for each link
     bw_scales = {}
+    energy_ratio = {}
     NoC_h = NOC_NODE_NUM / NoC_w
 
     # construct noc nodes
@@ -26,6 +28,8 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
                 F[(src,local)] = 0
                 bw_scales[(local,src)] = 1
                 bw_scales[(src,local)] = 1
+                energy_ratio[(local,src)] = NOC_energy_ratio
+                energy_ratio[(src,local)] = NOC_energy_ratio
                 src_x = src_local_id %  NoC_w
                 src_y = int(src_local_id / NoC_w)
                 dst_x = dst_local_id %  NoC_w
@@ -34,10 +38,12 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
                     if (abs(src_y - dst_y) == 1) or (abs(src_y - dst_y) == NoC_h - 1) :
                         F[(src,dst)] = 0
                         bw_scales[(src,dst)] = 1
+                        energy_ratio[(src,dst)] = NOC_energy_ratio
                 elif (src_y == dst_y) :
                     if (abs(src_x - dst_x) == 1) or (abs(src_x - dst_x) == NoC_w - 1):
                         F[(src,dst)] = 0
                         bw_scales[(src,dst)] = 1
+                        energy_ratio[(src,dst)] = NOC_energy_ratio
 
     # construct NoP nodes
     for src_nop_id in range (NOP_SIZE):
@@ -49,6 +55,8 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
             F[(src,local)] = 0
             bw_scales[(local,src)] = nop_scale_ratio
             bw_scales[(src,local)] = nop_scale_ratio
+            energy_ratio[(local,src)] = DIE2DIE_energy_ratio
+            energy_ratio[(src,local)] = DIE2DIE_energy_ratio
             src_x = src_nop_id %  NoP_w
             src_y = int(src_nop_id / NoP_w)
             dst_x = dst_nop_id %  NoP_w
@@ -57,11 +65,13 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
                 if (abs(src_y - dst_y) == 1):
                     F[(src,dst)] = 0
                     bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
                     
             elif (src_y == dst_y) :
                 if (abs(src_x - dst_x) == 1):
                     F[(src,dst)] = 0
                     bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
 
     # construct noc and nop connection
     for nop_id in range (NOP_SIZE):
@@ -71,6 +81,8 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
         F[(nop_router_id,noc_router_id)] = 0
         bw_scales[(noc_router_id,nop_router_id)] = nop_scale_ratio
         bw_scales[(nop_router_id,noc_router_id)] = nop_scale_ratio
+        energy_ratio[(nop_router_id,noc_router_id)] = DIE2DIE_energy_ratio
+        energy_ratio[(noc_router_id,nop_router_id)] = DIE2DIE_energy_ratio
         # print ("(nop_router_id,noc_router_id)", (nop_router_id,noc_router_id))
 
     print ("len(F)", len(F))
@@ -206,6 +218,7 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
     noc_dict["route_table"]= route_table
     noc_dict["F"]= F
     noc_dict["bw_scales"]= bw_scales
+    noc_dict["energy_ratio"]= energy_ratio 
     return noc_dict,ALL_SIM_NODE_NUM    
 
 def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
@@ -214,6 +227,7 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
     ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
     F = {} # fitness value for each link
     bw_scales = {}
+    energy_ratio = {}
     # construct noc nodes
     for nop_id in range (NOP_SIZE): 
         for src_local_id in range (NOC_NODE_NUM):  
@@ -225,6 +239,8 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
                 F[(src,local)] = 0
                 bw_scales[(local,src)] = 1
                 bw_scales[(src,local)] = 1
+                energy_ratio[(local,src)] = NOC_energy_ratio
+                energy_ratio[(src,local)] = NOC_energy_ratio
                 src_x = src_local_id %  NoC_w
                 src_y = int(src_local_id / NoC_w)
                 dst_x = dst_local_id %  NoC_w
@@ -233,10 +249,12 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
                     if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
                         F[(src,dst)] = 0
                         bw_scales[(src,dst)] = 1
+                        energy_ratio[(src,dst)] = NOC_energy_ratio
                 elif (src_y == dst_y) :
                     if (src_x - dst_x == 1) or (src_x - dst_x == -1):
                         F[(src,dst)] = 0
                         bw_scales[(src,dst)] = 1
+                        energy_ratio[(src,dst)] = NOC_energy_ratio
 
     # construct NoP nodes
     for src_nop_id in range (NOP_SIZE):
@@ -248,6 +266,8 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
             F[(src,local)] = 0
             bw_scales[(local,src)] = nop_scale_ratio
             bw_scales[(src,local)] = nop_scale_ratio
+            energy_ratio[(local,src)] = DIE2DIE_energy_ratio
+            energy_ratio[(src,local)] = DIE2DIE_energy_ratio
             src_x = src_nop_id %  NoP_w
             src_y = int(src_nop_id / NoP_w)
             dst_x = dst_nop_id %  NoP_w
@@ -256,11 +276,13 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
                 if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
                     F[(src,dst)] = 0
                     bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
                     
             elif (src_y == dst_y) :
                 if (src_x - dst_x == 1) or (src_x - dst_x == -1):
                     F[(src,dst)] = 0
                     bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
 
     # construct noc and nop connection
     for nop_id in range (NOP_SIZE):
@@ -270,6 +292,8 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
         F[(nop_router_id,noc_router_id)] = 0
         bw_scales[(noc_router_id,nop_router_id)] = nop_scale_ratio
         bw_scales[(nop_router_id,noc_router_id)] = nop_scale_ratio
+        energy_ratio[(noc_router_id,nop_router_id)] = DIE2DIE_energy_ratio
+        energy_ratio[(nop_router_id,noc_router_id)] = DIE2DIE_energy_ratio
         # print ("(nop_router_id,noc_router_id)", (nop_router_id,noc_router_id))
 
 
@@ -388,6 +412,7 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
     noc_dict["route_table"]= route_table
     noc_dict["F"]= F
     noc_dict["bw_scales"]= bw_scales
+    noc_dict["energy_ratio"] = energy_ratio
     return noc_dict, ALL_SIM_NODE_NUM    
 
 
