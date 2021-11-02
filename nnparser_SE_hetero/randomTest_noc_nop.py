@@ -95,13 +95,13 @@ if __name__ == '__main__':
 		print ("fatal: APP not defined")
 		sys.exit()
 
-	HW_param = {"Chiplet":4,"PE":16,"intra_PE":{"C":8,"K":8}}
+	HW_param = {"Chiplet":[4,2],"PE":[3,4],"intra_PE":{"C":8,"K":8}}
 	memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16}
 	
-	NoC_w = int(HW_param["PE"] ** 0.5) + 1
-	NOC_NODE_NUM = NoC_w * (NoC_w-1)
-	NoP_w = int(HW_param["Chiplet"] ** 0.5) + 1
-	NOP_SIZE = NoP_w * (NoP_w-1)
+	NoC_w = HW_param["PE"][1] + 1
+	NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
+	NoP_w = HW_param["Chiplet"][1] + 1
+	NOP_SIZE = NoP_w * HW_param["Chiplet"][0]
 	
 	TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth}
 	

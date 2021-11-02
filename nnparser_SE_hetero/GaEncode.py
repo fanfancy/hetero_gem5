@@ -87,8 +87,12 @@ def setParallelNum(P_num):
 class GaEncode:
 	def __init__(self, network_param, HW_param, debug=0, parallel_level=3, debug_file="./random_test_record.txt"):
 		self.HW_param = HW_param
-		self.Chiplets = HW_param["Chiplet"]
-		self.PEs = HW_param["PE"]
+		self.Chiplets_h = HW_param["Chiplet"][0]
+		self.Chiplets_w = HW_param["Chiplet"][1]
+		self.Chiplets = self.Chiplets_w * self.Chiplets_h
+		self.PEs_h = HW_param["PE"][0]
+		self.PEs_w = HW_param["PE"][1]
+		self.PEs = self.PEs_w * self.PEs_h
 		self.intra_PE = HW_param["intra_PE"]		#["C":4,"K":4]
 		self.parallel_level = parallel_level
 
@@ -128,23 +132,25 @@ class GaEncode:
 				self.size[i] = self.network_param[i]
 
 	def setNodeID(self):
-		Chiplet_lenth = int(self.Chiplets ** 0.5)
-		PE_lenth = int(self.PEs ** 0.5)
-		assert(Chiplet_lenth*Chiplet_lenth == self.Chiplets)
-		assert(PE_lenth*PE_lenth == self.PEs)
+		Chiplet_lenth = self.Chiplets_w
+		Chiplet_height = self.Chiplets_h
+		PE_lenth = self.PEs_w
+		PE_height = self.PEs_h
+		assert(Chiplet_lenth*Chiplet_height == self.Chiplets)
+		assert(PE_lenth*PE_height == self.PEs)
 
-		if PE_lenth == 2:
+		if PE_height == 2:
 			self.A_W_offset["o"] = 0
 			self.A_W_offset["a"] = PE_lenth + 1
 			self.A_W_offset["w"] = PE_lenth + 1
 			self.A_W_offset["noc-chiplet"] = 0
 		else:
-			assert(PE_lenth > 1)
+			assert(PE_height > 1)
 			self.A_W_offset["o"] = 0
 			self.A_W_offset["a"] = PE_lenth + 1
 			self.A_W_offset["w"] = (PE_lenth + 1) * 2
 			self.A_W_offset["noc-chiplet"] = 0
-		PE_num = PE_lenth * (PE_lenth+1)
+		PE_num = (PE_lenth + 1) * PE_height
 
 		num = 0
 		for i in range(self.Chiplets):
@@ -156,6 +162,9 @@ class GaEncode:
 
 			if (i+1) % Chiplet_lenth == 0:
 				num += PE_num
+		print(self.A_W_offset)
+		print(self.NoC_node_offset)
+		print(self.NoP2NoCnode)
 
 	def setmappingSet(self, num, set1, set2):
 		assert(num == set1*set2)
