@@ -47,7 +47,7 @@ def setPartition(num, dim):
 	return list
 
 # 将P_num个并行量进行拆分，随机选两个维度d1、d2，以及对应的并行量p1、p2.
-def setParallel(P_num, level):
+def setParallel(P_num, level, parallel_select, parallel_type):
 	parallel_t = parallel_type[level]
 	list_p = setPartition_1(P_num, 2)
 	p1 = list_p[0]
@@ -85,7 +85,7 @@ def setParallelNum(P_num):
 
 
 class GaEncode:
-	def __init__(self, network_param, HW_param, debug=0, parallel_level=3, debug_file="./random_test_record.txt"):
+	def __init__(self, network_param, HW_param, debug=0, parallel_level=3, debug_file="./random_test_record.txt", chiplet_parallel="All",core_parallel="All"):
 		self.HW_param = HW_param
 		self.Chiplets = HW_param["Chiplet"]
 		self.PEs = HW_param["PE"]
@@ -118,6 +118,7 @@ class GaEncode:
 
 		#Dim_result = {"P":[],"Q":[],"K":[],"C":[]}
 		#loop_order = {"PE":[],"Chiplet":[],"Pakage":[]}
+		self.parallel_select, self.parallel_type = config_parallel_type(chiplet_parallel, core_parallel)
 
 	def getSize(self):
 		for i in self.intra_PE:
@@ -193,14 +194,14 @@ class GaEncode:
 
 		#---并行度拆分（空间并行）---
 		if Par_type == 4:
-			d1, d2, p1, p2 = setParallel(self.PEs, "PE")
+			d1, d2, p1, p2 = setParallel(self.PEs, "PE",self.parallel_select, self.parallel_type)
 			parallel_dim_set.append(d1)
 			parallel_dim_set.append(d2)
 			parallel_num_set.append(p1)
 			parallel_num_set.append(p2)
 			size_i[d1] = math.ceil(size_i[d1]/p1)
 			size_i[d2] = math.ceil(size_i[d2]/p2)
-			d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet")
+			d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet",self.parallel_select, self.parallel_type)
 			parallel_dim_set.append(d1)
 			parallel_dim_set.append(d2)
 			parallel_num_set.append(p1)

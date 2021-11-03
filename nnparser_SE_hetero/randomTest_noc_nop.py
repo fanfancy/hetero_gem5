@@ -23,7 +23,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		#---生成个代---
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChild()
 		#---计算适应度---
-		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_die2die, energy_MAC, worstlinks = \
+		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, worstlinks = \
 			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param, if_multicast)
 		#---比较适应度，并记录相关变量---
 		if fitness_min_ran == 0 or fitness < fitness_min_ran:
@@ -52,7 +52,8 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		    utilization_ratio_list[0], utilization_ratio_list[1], utilization_ratio_list[2],utilization_ratio_list[3], utilization_ratio_list[4], utilization_ratio_list[5], \
 			energy_dram_list[0], energy_dram_list[1], energy_dram_list[2], energy_dram_list[3], \
 			energy_L2_list[0], energy_L2_list[1], energy_L2_list[2], energy_L2_list[3], \
-			sum(energy_dram_list), sum(energy_L2_list), energy_die2die,energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+energy_die2die+energy_MAC , str(worstlinks) ])
+			energy_L1_list[0], energy_L1_list[1], \
+			sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)+energy_die2die+energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list), str(worstlinks) ])
 		print("######---------Times = ", i)
 		print("fitness_min_ran = ",fitness_min_ran)
 		print("compuation_cycles_1 = ",compuation_cycles_1)
@@ -71,9 +72,10 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		"runtimeP","runtimeQ", "runtimeC", "runtimeK", "runtimeChipNum", "runtimeCoreNum", "runtime_calNum",\
 		"ol1_cp_id","al1_cp_id","wl1_cp_id","ol2_cp_id","al2_cp_id","wl2_cp_id", \
 		"ol1_util","al1_util","wl1_util","ol2_util","al2_util","wl2_util", \
-		"energy_wr_opt_dram", "energy_rd_opt_dram", "energy_rd_wgt_dram", "energy_rd_act_dram", \
-		"energy_wr_opt_L2", "energy_rd_opt_L2", "energy_rd_wgt_L2", "energy_rd_act_L2", \
-		"dram_energy", "L2_energy", "energy_die2die", "energy_MAC", "energy_sum" , "worstlinks"]
+		"e_wr_opt_dram", "e_rd_opt_dram", "e_rd_wgt_dram", "e_rd_act_dram", \
+		"e_wr_opt_L2", "e_rd_opt_L2", "e_rd_wgt_L2", "e_rd_act_L2", \
+		"e_rd_wgt_L1", "e_rd_act_L1", \
+		"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_sum",  "e_mem", "worstlinks"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
@@ -110,8 +112,10 @@ if __name__ == '__main__':
 	# --- 生成noc-nop结构图
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])
 	debug=0
-	if_multicast = 0
-	GATest = GaEncode(network_param, HW_param, debug)
+	if_multicast = 1
+	chiplet_parallel = "All"		# choices: "Pq" "All" "Channel" "Hybrid"
+	core_parallel = "All"
+	GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel)
 
 	iterTime = 100
 	fitness_min_ran = 0
