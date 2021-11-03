@@ -36,8 +36,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	# 映射方案 (目前只实现了K维度有并行度)
 	# Ga Encode
 	#for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
-	CoreNum = HW_param["PE"]
-	ChipNum = HW_param["Chiplet"]
+	CoreNum = HW_param["PE"][0] * HW_param["PE"][1]
+	PE_lenth = HW_param["PE"][1]
+	PE_height = HW_param["PE"][0]
+	ChipNum = HW_param["Chiplet"][0] * HW_param["Chiplet"][1]
 	OL1 = memory_param["OL1"]
 	OL2 = memory_param["OL2"]
 	AL1 = memory_param["AL1"]
@@ -74,11 +76,16 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	S = network_param["S"]
 
 	# memory node id
-	PE_lenth = int(CoreNum ** 0.5)
-	ol2_node = PE_lenth * (PE_lenth+1)
-	al2_node = ol2_node + PE_lenth + 1
-	wl2_node = ol2_node + (PE_lenth + 1)* 2
+	ol2_node = PE_height * (PE_lenth+1)
+	if PE_height == 2:
+		al2_node = ol2_node + PE_lenth + 1
+		wl2_node = ol2_node + PE_lenth + 1
+	else:
+		assert(PE_height > 1)
+		al2_node = ol2_node + PE_lenth + 1
+		wl2_node = ol2_node + (PE_lenth + 1) * 2
 	dram_node  = 0
+	#print(route_table)
 
 
 	runtimeP = PP3*P3*PP2*P2*P1
@@ -504,8 +511,10 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	F = NoC_param["F"]
 	link_energy_ratio = NoC_param["energy_ratio"]
 
-	CoreNum = HW_param["PE"]
-	ChipNum = HW_param["Chiplet"]
+	CoreNum = HW_param["PE"][0] * HW_param["PE"][1]
+	PE_lenth = HW_param["PE"][1]
+	PE_height = HW_param["PE"][0]
+	ChipNum = HW_param["Chiplet"][0] * HW_param["Chiplet"][1]
 
 	OL1 = memory_param["OL1"]
 	OL2 = memory_param["OL2"]
@@ -543,11 +552,17 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	R = network_param["R"]
 	S = network_param["S"]
 	# memory node id
-	PE_lenth = int(CoreNum ** 0.5)
-	ol2_node = PE_lenth * (PE_lenth+1)
-	al2_node = ol2_node + PE_lenth 
-	wl2_node = ol2_node + PE_lenth * 2
+	# memory node id
+	ol2_node = PE_height * (PE_lenth+1)
+	if PE_height == 2:
+		al2_node = ol2_node + PE_lenth + 1
+		wl2_node = ol2_node + PE_lenth + 1
+	else:
+		assert(PE_height > 1)
+		al2_node = ol2_node + PE_lenth + 1
+		wl2_node = ol2_node + (PE_lenth + 1) * 2
 	dram_node  = 0
+
 
 	runtimeP = PP3*P3*PP2*P2*P1
 	runtimeQ = PQ3*Q3*PQ2*Q2*Q1
