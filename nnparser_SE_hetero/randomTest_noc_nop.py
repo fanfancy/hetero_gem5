@@ -22,7 +22,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 	fitness_min_ran_list = []
 	for i in range(iterTime):
 		#---生成个代---
-		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GATest.GaGetChild()
+		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = GATest.GaGetChild()
 		#---计算适应度---
 		fitness, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, worstlinks = \
 			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param, if_multicast)
@@ -54,7 +54,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 			energy_dram_list[0], energy_dram_list[1], energy_dram_list[2], energy_dram_list[3], \
 			energy_L2_list[0], energy_L2_list[1], energy_L2_list[2], energy_L2_list[3], \
 			energy_L1_list[0], energy_L1_list[1], \
-			sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)+energy_die2die+energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list), str(worstlinks) ])
+			sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)+energy_die2die+energy_MAC, sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list), str(worstlinks), str(code) ])
 		print("######---------Times = ", i)
 		print("fitness_min_ran = ",fitness_min_ran)
 		print("compuation_cycles_1 = ",compuation_cycles_1)
@@ -76,7 +76,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		"e_wr_opt_dram", "e_rd_opt_dram", "e_rd_wgt_dram", "e_rd_act_dram", \
 		"e_wr_opt_L2", "e_rd_opt_L2", "e_rd_wgt_L2", "e_rd_act_L2", \
 		"e_rd_wgt_L1", "e_rd_act_L1", \
-		"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_sum",  "e_mem", "worstlinks"]
+		"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_sum",  "e_mem", "worstlinks", "code"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
