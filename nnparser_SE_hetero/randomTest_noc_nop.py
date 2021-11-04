@@ -11,10 +11,11 @@ from matplotlib import pyplot as plt
 from config import *
 import openpyxl
 
-degrade_ratio_list = []
-excel_datas = []
 
 def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_num , if_multicast, filename):
+
+	degrade_ratio_list = []
+	excel_datas = []
 
 	fitness_min_ran = 0
 	fitness_list = []
