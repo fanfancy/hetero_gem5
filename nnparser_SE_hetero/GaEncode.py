@@ -167,11 +167,11 @@ class GaEncode:
 		print(self.NoC_node_offset)
 		print(self.NoP2NoCnode)
 
-	def setmappingSet(self, num, set1, set2):
+	def setmappingSet(self, height, lenth, set1, set2):
+		num = height * lenth
 		assert(num == set1*set2)
 		list1 = {}
 		list2 = {}
-		lenth = int(num ** 0.5)
 		node_list = []
 		ID = 0
 		for i in range(num):
@@ -179,6 +179,7 @@ class GaEncode:
 				ID += 1
 			node_list.append(ID)
 			ID += 1
+		print(node_list)
 		for i in range(num):
 			set1_id = i // set2
 			if set1_id not in list1:
@@ -368,7 +369,7 @@ class GaEncode:
 
 	# 获得计算核心对于act与wgt的共享情况
 	# para1是activation的组数，para2是weight的组数
-	def getPEDistribution(self, flag, num, set1, set2):
+	def getPEDistribution(self, flag, height, lenth, set1, set2):
 		act_PE_dict = {}
 		wgt_PE_dict = {}
 		act_set_type = "0"
@@ -383,7 +384,7 @@ class GaEncode:
 			wgt_PE_dict["send"] = {0:[0]}
 
 		#---act recv节点列表---
-		act_PE_dict["recv"], wgt_PE_dict["recv"]= self.setmappingSet(num, set1, set2)
+		act_PE_dict["recv"], wgt_PE_dict["recv"]= self.setmappingSet(height, lenth, set1, set2)
 		
 		act_set_type = "set_"+str(set1)+"e_"+str(set2)
 		wgt_set_type = "set_"+str(set2)+"e_"+str(set1)
@@ -486,9 +487,9 @@ class GaEncode:
 
 	# 获得输出特征图的数据节点通信关系
 	def getOutputDict(self):
-		rd_out_PE_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.PEs, self.PEs, 1)
+		rd_out_PE_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.PEs_h, self.PEs_w, self.PEs, 1)
 		wr_out_PE_dict_temp = {"send":rd_out_PE_dict_temp["recv"],"recv":{0:[0]}}
-		rd_out_Chiplet_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.Chiplets, self.Chiplets, 1)
+		rd_out_Chiplet_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.Chiplets_h, self.Chiplets_w, self.Chiplets, 1)
 		wr_out_Chiplet_dict_temp = {"send":rd_out_Chiplet_dict_temp["recv"],"recv":{0:[0]}}
 
 		#if self.PEs == 16:
@@ -611,8 +612,8 @@ class GaEncode:
 		wl1_ratio.append(1)
 		all_param.append(1)
 		out_final.append(1)
-		act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution(0, self.PEs, act_share_PE[0],wgt_share_PE[0])
-		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution(1, self.Chiplets, act_share_Chiplet[0],wgt_share_Chiplet[0])
+		act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution(0, self.PEs_h, self.PEs_w, act_share_PE[0],wgt_share_PE[0])
+		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution(1, self.Chiplets_h, self.Chiplets_w, act_share_Chiplet[0],wgt_share_Chiplet[0])
 		#if self.PEs == 16:
 		#	act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution16(act_share_PE[0],wgt_share_PE[0])
 		#elif self.PEs == 4:
