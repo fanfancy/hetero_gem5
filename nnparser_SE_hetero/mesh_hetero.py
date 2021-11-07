@@ -36,29 +36,40 @@ def construct_noc_nop_Routerless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale
                 dst = dst_local_id + NOC_NODE_NUM * nop_id
                 dst_x = dst_local_id %  NoC_w
                 dst_y = int(dst_local_id / NoC_w)
-                if (src_y == dst_y) and (src_y == 0):
-                    if (src_x - dst_x == 1):
-                        F[(src, dst)] = 0
-                        bw_scales[(src, dst)] = NoC_h - 1 + NoC_w - src_x
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
+                if (src_y == dst_y):
+                    if (src_y == 0):
+                        if (src_x - dst_x == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src, dst)] = NoC_h - 1 + NoC_w - src_x
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+                    elif (src_y == NoC_h - 1):
+                        if (dst_x - src_x == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src, dst)] = 1 + NoC_w - dst_x
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+                    else:
+                        if (dst_x - src_x == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src, dst)] = 1
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
 
-                elif (src_y == dst_y) and (src_y != 0):
-                    if (dst_x - src_x == 1):
-                        F[(src, dst)] = 0
-                        bw_scales[(src, dst)] = 1
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
+                elif (src_x == dst_x):
+                    if (src_x == 0):
+                        if (dst_y - src_y == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src,dst)] = NoC_w - 1 + NoC_h - dst_y
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
 
-                elif (src_x == dst_x) and (src_x == 0):
-                    if (dst_y - src_y == 1):
-                        F[(src,dst)] = 0
-                        bw_scales[(src,dst)] = NoC_w - 1 + NoC_h - dst_y
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
-
-                elif (src_x == dst_x) and (src_x != 0):
-                    if (src_y - dst_y == 1):
-                        F[(src,dst)] = 0
-                        bw_scales[(src,dst)] = 1
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
+                    elif (src_x == NoC_w - 1):
+                        if (src_y - dst_y == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src,dst)] = 1 + NoC_h - src_y
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+                    else:
+                        if (src_y - dst_y == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src,dst)] = 1
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
 
     # construct NoP nodes
     for src_nop_id in range (NOP_SIZE):
@@ -104,7 +115,7 @@ def construct_noc_nop_Routerless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale
     print ("F",F)
     print ("bw_scales",bw_scales)
     print ("len bw_scales",len(bw_scales))
-    print ("----- finish construct the heterogeneous mesh ---- \n\n")
+    print ("----- finish construct the heterogeneous Routerless ---- \n\n")
 
     noc_route_table = {}
     hops = {}
@@ -474,6 +485,9 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
     noc_dict = {}
     CORE_NUM = NOC_NODE_NUM*NOP_SIZE
     ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
+    print('CORE_NUM = ', CORE_NUM)
+    print('NOP_SIZE = ', NOP_SIZE)
+
     F = {} # fitness value for each link
     bw_scales = {}
     energy_ratio = {}
@@ -659,9 +673,9 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
         # print (item,route_table[item])
 
     print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM/NOP_SIZE/NOP_SIZE)
-    noc_dict["route_table"]= route_table
-    noc_dict["F"]= F
-    noc_dict["bw_scales"]= bw_scales
+    noc_dict["route_table"] = route_table
+    noc_dict["F"] = F
+    noc_dict["bw_scales"] = bw_scales
     noc_dict["energy_ratio"] = energy_ratio
     return noc_dict, ALL_SIM_NODE_NUM    
 
@@ -682,5 +696,5 @@ def construct_noc_nop_topo(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
     return noc_dict, ALL_SIM_NODE_NUM
 
 if __name__ == '__main__':
-    TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6, "nop_scale_ratio":0.5, "topology": 'Routerless'}
+    TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6, "nop_scale_ratio":0.5, "topology": 'Mesh'}
     NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = TOPO_param["topology"])
