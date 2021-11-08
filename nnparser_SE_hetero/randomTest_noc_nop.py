@@ -76,7 +76,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		"e_wr_opt_dram", "e_rd_opt_dram", "e_rd_wgt_dram", "e_rd_act_dram", \
 		"e_wr_opt_L2", "e_rd_opt_L2", "e_rd_wgt_L2", "e_rd_act_L2", \
 		"e_rd_wgt_L1", "e_rd_act_L1", \
-		"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_sum",  "e_mem", "worstlinks", "code"]
+		"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_sum",  "e_mem", "EDP pJ*s", "worstlinks", "code"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
@@ -94,6 +94,12 @@ if __name__ == '__main__':
 		network_param = vgg16_conv1
 	elif APP == "VGG16_CONV12":
 		network_param = vgg16_conv12
+	elif APP == "resnet50_conv1":
+		network_param = resnet50_conv1
+	elif APP == "resnet50_res2a_branch2a":
+		network_param = resnet50_res2a_branch2a
+	elif APP == "resnet50_res2a_branch2b":
+		network_param = resnet50_res2a_branch2b
 	else:
 		print ("fatal: APP not defined")
 		sys.exit()
