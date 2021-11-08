@@ -1,16 +1,8 @@
-# import math
-# import os
-# import sys
-# import random
 import numpy as np
 import copy
-# from enum import Enum
-# from mpl_toolkits.mplot3d import axes3d
 from single_engine_predict_noc_nop import simple_multicast
 from mesh_hetero import *
 from matplotlib import pyplot as plt
-
-# from config import *
 
 degrade_ratio_list = []
 excel_datas = []
@@ -41,7 +33,7 @@ def setmappingSet(height, lenth, set1, set2):
         list2[set2_id].append(list1[i % set1][set2_id])
     return list1, list2
 
-def cal_degrade_ratio(HW_param, NoC_param, set_act, set_wgt, act_bw, wgt_bw, if_multicast, debug = False):
+def cal_degrade_ratio(HW_param, NoC_param, topology, set_act, set_wgt, act_bw, wgt_bw, if_multicast, debug = False):
     route_table = NoC_param["route_table"]
     bw_scales = NoC_param["bw_scales"]
     F = NoC_param["F"]
@@ -74,13 +66,15 @@ def cal_degrade_ratio(HW_param, NoC_param, set_act, set_wgt, act_bw, wgt_bw, if_
                     if debug:
                         print(al2_node + 1000, dst + 1000)
                         print(link)
-                    F_cur[link] += ( act_bw / bw_scales[link] ) # act_bw 带宽需求,单位是flits/cycle 
+
+                    F_cur[link] += ( act_bw / bw_scales[link] )
         else :
             link_set = simple_multicast(al2_node + 1000, [dst + 1000 for dst in act_transfer], route_table) 
             for link in link_set:
                 if debug:
                     print(al2_node + 1000, act_transfer)
                     print(link)
+
                 F_cur[link] += ( act_bw / bw_scales[link] )
 
     # 对wgt构建通信需求
@@ -91,6 +85,7 @@ def cal_degrade_ratio(HW_param, NoC_param, set_act, set_wgt, act_bw, wgt_bw, if_
                     if debug:
                         print(wl2_node + 1000, dst + 1000)
                         print(link)
+
                     F_cur[link] += ( wgt_bw / bw_scales[link] )
         
         else:
@@ -99,6 +94,7 @@ def cal_degrade_ratio(HW_param, NoC_param, set_act, set_wgt, act_bw, wgt_bw, if_
                 if debug:
                     print(wl2_node + 1000, wgt_transfer)
                     print(link)
+
                 F_cur[link] += ( wgt_bw / bw_scales[link] )
     
     # 对out构建通信需求
@@ -109,6 +105,7 @@ def cal_degrade_ratio(HW_param, NoC_param, set_act, set_wgt, act_bw, wgt_bw, if_
                 if debug:
                     print(dst + 1000, ol2_node + 1000)
                     print(link)
+
                 F_cur[link] += ( out_bw / bw_scales[link] )
 
     F_cur[(0, 1000)] = 0
@@ -120,15 +117,70 @@ def cal_degrade_ratio(HW_param, NoC_param, set_act, set_wgt, act_bw, wgt_bw, if_
     else:
         degrade_ratio = max(F_cur.values()) 
         
-    
     return degrade_ratio, F_cur
 
-if __name__ == '__main__':
+def check_topology():
+    topology = 'Ring'
     HW_param = {"Chiplet":[1, 1], "PE":[4, 4], "intra_PE":{"C":8,"K":8}}
-    Topology_list = ['Mesh', 'Torus', 'Routerless']
-    color_list = ['b', 'r', 'y']
+    act_wgt_group = [2, 8]
+    Sample_Num = 20
+    
+    NoC_w = HW_param["PE"][1] + 1
+    NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
+    NoP_w = HW_param["Chiplet"][1]
+    NOP_SIZE = NoP_w * HW_param["Chiplet"][0]
+    
+    TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth}
+
+    if_multicast = True
+    debug = True
+    set_act, set_wgt = setmappingSet(4, 4, act_wgt_group[0], act_wgt_group[1])
+    if debug:
+        print('set_act = ', set_act)
+        print('set_wgt = ', set_wgt)
+
+    act_bw_array = np.linspace(2, 16, Sample_Num)
+    wgt_bw_array = np.linspace(2, 16, Sample_Num)
+    degrade_ratio_array = np.zeros((Sample_Num, Sample_Num))
+    X, Y = np.meshgrid(act_bw_array, wgt_bw_array)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    ax.set_xlabel('act_bw')
+    ax.set_ylabel('wgt_bw')
+    ax.set_zlabel('degrade_ratio')
+    
+    plt.title('act_wgt_group = %s, topology = %s' % (str(act_wgt_group), topology))
+    NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = topology)
+
+    for j, act_bw in enumerate(act_bw_array):
+        for k, wgt_bw in enumerate(wgt_bw_array):
+            print('###### act_bw = %f, wgt_bw = %f ######' % (act_bw, wgt_bw))
+            degrade_ratio, F_cur = cal_degrade_ratio(HW_param, NoC_param, topology, set_act, set_wgt, act_bw, wgt_bw, if_multicast, debug = debug)
+
+            if debug:
+                print('degrade_ratio = ', degrade_ratio)
+                print("F_cur = ", F_cur)
+            else:
+                print('degrade_ratio = ', degrade_ratio)
+            degrade_ratio_array[k, j] = degrade_ratio
+    
+    # Plot a basic wireframe.
+    ax.plot_wireframe(X, Y, degrade_ratio_array)
+    if debug:
+        print(X)
+        print(Y)
+        print(degrade_ratio_array)
+
+    plt.show()
+
+def noc_topology_explore():
+    HW_param = {"Chiplet":[1, 1], "PE":[4, 4], "intra_PE":{"C":8,"K":8}}
+    Topology_list = ['Mesh', 'Torus', 'Routerless', 'Ring']
+    color_list = ['b', 'r', 'y', 'g']
     # act_wgt_group = [[1, 16], [2, 8], [4, 4], [8, 2], [16, 1]]
-    act_wgt_group = [16, 1]
+    act_wgt_group = [2, 8]
+    Sample_Num = 20
     
     NoC_w = HW_param["PE"][1] + 1
     NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
@@ -144,8 +196,9 @@ if __name__ == '__main__':
         print('set_act = ', set_act)
         print('set_wgt = ', set_wgt)
 
-    act_bw_array = np.linspace(2, 16, 20)
-    wgt_bw_array = np.linspace(2, 16, 20)
+    act_bw_array = np.linspace(2, 16, Sample_Num)
+    wgt_bw_array = np.linspace(2, 16, Sample_Num)
+    degrade_ratio_array = np.zeros((Sample_Num, Sample_Num))
     X, Y = np.meshgrid(act_bw_array, wgt_bw_array)
 
     fig = plt.figure()
@@ -159,22 +212,29 @@ if __name__ == '__main__':
     for i, topology in enumerate(Topology_list):
         NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = topology)
 
-        degrade_ratio_array = []
         print('topology = ', topology)
 
         for j, act_bw in enumerate(act_bw_array):
-            degrade_ratio_array.append([])
-            for wgt_bw in wgt_bw_array:
+            for k, wgt_bw in enumerate(wgt_bw_array):
                 print('###### act_bw = %f, wgt_bw = %f ######' % (act_bw, wgt_bw))
-                degrade_ratio, F_cur = cal_degrade_ratio(HW_param, NoC_param, set_act, set_wgt, act_bw, wgt_bw, if_multicast, debug = debug)
+                degrade_ratio, F_cur = cal_degrade_ratio(HW_param, NoC_param, topology, set_act, set_wgt, act_bw, wgt_bw, if_multicast, debug = debug)
+
                 if debug:
                     print('degrade_ratio = ', degrade_ratio)
                     print("F_cur = ", F_cur)
-                degrade_ratio_array[j].append(degrade_ratio)
-        degrade_ratio_array = np.array(degrade_ratio_array)
+                else:
+                    print('degrade_ratio = ', degrade_ratio)
+                degrade_ratio_array[k, j] = degrade_ratio
         
-        # Plot a basic wireframe.
+        # Plot wireframe.
         ax.plot_wireframe(X, Y, degrade_ratio_array, color = color_list[i])
+        if debug:
+            print(degrade_ratio_array)
 
     plt.legend([t for t in Topology_list], loc = 'best')
     plt.show()
+
+
+if __name__ == '__main__':
+    noc_topology_explore()
+    # check_topology()
