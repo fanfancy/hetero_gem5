@@ -686,7 +686,7 @@ class GaEncode:
 		if self.debug == 1:
 			self.printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict)
 
-		return for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list
+		return for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code
 
 	def GaGetChildParse(self, code):
 		parse = self.codeParse(code)

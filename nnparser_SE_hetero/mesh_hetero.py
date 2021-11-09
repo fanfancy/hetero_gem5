@@ -1,64 +1,124 @@
-import math
-import os
-import sys
-import random
-import numpy as np
-import copy
-from enum import Enum
 from config import *
+import random
+
+def find_shortest_ring(Ring, src, dst):
+    shortest_sub_Ring = []
+    shortest_dist = float('inf')
+    for sub_Ring in Ring:
+        if (src in sub_Ring) and (dst in sub_Ring):
+            dist = (sub_Ring.index(dst) - sub_Ring.index(src)) % len(sub_Ring)
+            if dist < shortest_dist:
+                shortest_dist = dist
+                shortest_sub_Ring = sub_Ring
+
+    return shortest_sub_Ring
+
+def append_ring_route(route, sub_Ring, src, dst):
+    if sub_Ring.index(dst) > sub_Ring.index(src):
+        for i in range(sub_Ring.index(src), sub_Ring.index(dst)):
+            route.append((sub_Ring[i], sub_Ring[i + 1]))
+        return route
+    else:
+        for i in range(sub_Ring.index(src), len(sub_Ring) - 1):
+            route.append((sub_Ring[i], sub_Ring[i + 1]))
+
+        route.append((sub_Ring[len(sub_Ring) - 1], sub_Ring[0]))
+
+        for i in range(sub_Ring.index(dst)):
+            route.append((sub_Ring[i], sub_Ring[i + 1]))
+        return route
+
+def add_randam_ring(Ring, NoC_w, NoC_h, NOC_NODE_NUM, NOP_SIZE, x1 = 0, x2 = 0, y1 = 0, y2 = 0):
+    while (x1 >= x2) or (y1 >= y2):
+        x1 = random.randint(0, NoC_w - 1)
+        y1 = random.randint(0, NoC_h - 1)
+
+        x2 = random.randint(0, NoC_w - 1)
+        y2 = random.randint(0, NoC_h - 1)
+
+    # print(x1, x2, y1, y2)
+    for nop_id in range (NOP_SIZE):
+        sub_Ring = []
+        for y in range(y1, y2 + 1):
+            id = NOC_NODE_NUM * nop_id + y * NoC_w + x1
+            sub_Ring.append(id)
+        
+        for x in range(x1 + 1, x2):
+            id = NOC_NODE_NUM * nop_id + y2 * NoC_w + x
+            sub_Ring.append(id)
+
+        for y in range(y2, y1 - 1, -1):
+            id = NOC_NODE_NUM * nop_id + y * NoC_w + x2
+            sub_Ring.append(id)
+        
+        for x in range(x2 - 1, x1, -1):
+            id = NOC_NODE_NUM * nop_id + y1 * NoC_w + x
+            sub_Ring.append(id)
+        
+        Ring.append(sub_Ring)
+    return Ring   
 
 
+def gen_RandomRouterless(NoC_w, NoC_h, NOP_SIZE, constraint):
+    NOC_NODE_NUM = NoC_w * NoC_h
 
-def construct_noc_nop_Routerless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
+    while(True):
+        Ring = []
+        flag = True
+        Ring = add_randam_ring(Ring, NoC_w, NoC_h, NOC_NODE_NUM, NOP_SIZE, x1 = 0, x2 = NoC_w - 1, y1 = 0, y2 = NoC_h - 1)
+        
+        for i in range (constraint - 1):
+            Ring = add_randam_ring(Ring, NoC_w, NoC_h, NOC_NODE_NUM, NOP_SIZE)
+
+        for src in range (0, NOC_NODE_NUM):
+            for dst in range (0, NOC_NODE_NUM):
+                if src != dst:
+                    if((src % NoC_w) == 0) or ((dst % NoC_w) == 0):
+                        sub_Ring = find_shortest_ring(Ring, src, dst)
+                        if sub_Ring == []:
+                            flag = False
+                            
+            if not flag:
+                break
+        
+        if flag:
+            break
+    return Ring
+
+def construct_noc_nop_RandomRouterless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio, constraint):
     noc_dict = {}
     CORE_NUM = NOC_NODE_NUM*NOP_SIZE
     ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
     F = {} # fitness value for each link
     bw_scales = {}
     energy_ratio = {}
-    NoC_h = NOC_NODE_NUM / NoC_w
+
+    NoC_h = int(NOC_NODE_NUM / NoC_w)
+
+    Ring = gen_RandomRouterless(NoC_w, NoC_h, NOP_SIZE, constraint = NoC_w)
+    print('Ring = ', Ring)
 
     # construct noc nodes
     for nop_id in range (NOP_SIZE): 
         for src_local_id in range (NOC_NODE_NUM):
             src = src_local_id + NOC_NODE_NUM * nop_id
             local = src + 1000
-            F[(local,src)] = 0
-            F[(src,local)] = 0
-            bw_scales[(local,src)] = 1
-            bw_scales[(src,local)] = 1
-            energy_ratio[(local,src)] = NOC_energy_ratio
-            energy_ratio[(src,local)] = NOC_energy_ratio
-            src_x = src_local_id %  NoC_w
-            src_y = int(src_local_id / NoC_w)
+            F[(local, src)] = 0
+            F[(src, local)] = 0
+            bw_scales[(local, src)] = 1
+            bw_scales[(src, local)] = 1
+            energy_ratio[(local, src)] = NOC_energy_ratio
+            energy_ratio[(src, local)] = NOC_energy_ratio
 
-            for dst_local_id in range (NOC_NODE_NUM):
-                dst = dst_local_id + NOC_NODE_NUM * nop_id
-                dst_x = dst_local_id %  NoC_w
-                dst_y = int(dst_local_id / NoC_w)
-                if (src_y == dst_y) and (src_y == 0):
-                    if (src_x - dst_x == 1):
-                        F[(src, dst)] = 0
-                        bw_scales[(src, dst)] = NoC_h - 1 + NoC_w - src_x
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
+    for sub_Ring in Ring:
+        for i in range(len(sub_Ring)):
+            F[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] = 0
+            energy_ratio[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] = NOC_energy_ratio
 
-                elif (src_y == dst_y) and (src_y != 0):
-                    if (dst_x - src_x == 1):
-                        F[(src, dst)] = 0
-                        bw_scales[(src, dst)] = 1
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
-
-                elif (src_x == dst_x) and (src_x == 0):
-                    if (dst_y - src_y == 1):
-                        F[(src,dst)] = 0
-                        bw_scales[(src,dst)] = NoC_w - 1 + NoC_h - dst_y
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
-
-                elif (src_x == dst_x) and (src_x != 0):
-                    if (src_y - dst_y == 1):
-                        F[(src,dst)] = 0
-                        bw_scales[(src,dst)] = 1
-                        energy_ratio[(src,dst)] = NOC_energy_ratio
+            if (sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)]) in bw_scales.keys():
+                bw_scales[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] += 1
+            else:
+                bw_scales[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] = 1
 
     # construct NoP nodes
     for src_nop_id in range (NOP_SIZE):
@@ -104,7 +164,7 @@ def construct_noc_nop_Routerless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale
     print ("F",F)
     print ("bw_scales",bw_scales)
     print ("len bw_scales",len(bw_scales))
-    print ("----- finish construct the heterogeneous mesh ---- \n\n")
+    print ("----- finish construct the heterogeneous Routerless ---- \n\n")
 
     noc_route_table = {}
     hops = {}
@@ -128,7 +188,392 @@ def construct_noc_nop_Routerless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale
             cur_dst = src
 
             if chip_id(cur_src) != chip_id(dst):
-                if (src != 0) or ((nop_id(dst) % NoC_w) != 0):
+                if (src != 0) or ((noc_id(dst) % NoC_w) != 0):
+                    continue
+                
+                sub_Ring = find_shortest_ring(Ring, src, comm_id(src))
+                noc_route_table[(src, dst)] = append_ring_route(noc_route_table[(src, dst)], sub_Ring, src, comm_id(src))
+                    
+                # go to the nop node
+                cur_dst = chip_id(cur_src) + NOC_NODE_NUM * NOP_SIZE
+                noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                cur_src = cur_dst
+
+                while cur_src != chip_id(dst) + NOC_NODE_NUM * NOP_SIZE : # nop router of the destination node
+                    src_nop_x = nop_id(cur_src) % NoP_w
+                    src_nop_y = int (nop_id(cur_src) / NoP_w)
+                    dst_nop_x = chip_id(dst) % NoP_w
+                    dst_nop_y = int(chip_id(dst) / NoP_w)
+                    if (src_nop_x > dst_nop_x):  # go west
+                        cur_nop_dst = src_nop_x-1 +  src_nop_y * NoP_w
+                    elif (src_nop_x < dst_nop_x): # go east
+                        cur_nop_dst = src_nop_x+1 +  src_nop_y * NoP_w
+                    elif (src_nop_y < dst_nop_y): # go north
+                        cur_nop_dst = src_nop_x + (src_nop_y+1) * NoP_w
+                    elif (src_nop_y > dst_nop_y): # go south
+                        cur_nop_dst = src_nop_x + (src_nop_y-1) * NoP_w
+                    cur_dst = cur_nop_dst+NOC_NODE_NUM*NOP_SIZE
+                    noc_route_table[(src, dst)].append((cur_src,cur_dst))
+                    cur_src = cur_dst
+                
+                # go to the communication id 
+                cur_dst = chip_id(dst) * NOC_NODE_NUM
+                noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                cur_src = cur_dst
+
+            if((noc_id(src) % NoC_w) == 0) or ((noc_id(dst) % NoC_w) == 0):
+                if cur_src != dst:
+                    sub_Ring = find_shortest_ring(Ring, cur_src, dst)
+                    noc_route_table[(src, dst)] = append_ring_route(noc_route_table[(src, dst)], sub_Ring, cur_src, dst)
+
+    # print ("----noc_route_table------")
+    # for route_item in noc_route_table:
+    #     print (route_item, noc_route_table[route_item])
+
+    route_table = {}
+    for src in range (1000, 1000 + NOC_NODE_NUM * NOP_SIZE):
+        for dst in range (1000, 1000 + NOC_NODE_NUM * NOP_SIZE):
+            route_table[(src,dst)] = []
+            noc_src = src - 1000
+            noc_dst = dst - 1000
+            route_table[(src,dst)] = noc_route_table[(noc_src,noc_dst)].copy()
+            if (src!=dst):
+                route_table[(src,dst)].append((noc_dst, dst))
+                route_table[(src,dst)].insert(0, (src, noc_src))
+
+    for item in route_table:
+        hops[item] = len(route_table[item])
+        # print (item,route_table[item])
+
+    print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM/NOP_SIZE/NOP_SIZE)
+    noc_dict["route_table"]= route_table
+    noc_dict["F"]= F
+    noc_dict["bw_scales"]= bw_scales
+    noc_dict["energy_ratio"] = energy_ratio
+    noc_dict["Ring"] = Ring
+
+    return noc_dict, ALL_SIM_NODE_NUM    
+
+def construct_noc_nop_Ring(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
+    noc_dict = {}
+    CORE_NUM = NOC_NODE_NUM*NOP_SIZE
+    ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
+    F = {} # fitness value for each link
+    bw_scales = {}
+    energy_ratio = {}
+    Ring = []
+    NoC_h = int(NOC_NODE_NUM / NoC_w)
+
+    for nop_id in range (NOP_SIZE): 
+        for w in range(1, NoC_w):
+            sub_Ring = []
+            for y in range(NoC_h):
+                id = NOC_NODE_NUM * nop_id + y * NoC_w + 0
+                sub_Ring.append(id)
+            
+            for x in range(1, w):
+                id = NOC_NODE_NUM * nop_id + (NoC_h - 1) * NoC_w + x
+                sub_Ring.append(id)
+
+            for y in range(NoC_h - 1, -1, -1):
+                id = NOC_NODE_NUM * nop_id + y * NoC_w + w
+                sub_Ring.append(id)
+            
+            for x in range(w - 1, 0, -1):
+                id = NOC_NODE_NUM * nop_id + 0 * NoC_w + x
+                sub_Ring.append(id)
+
+            Ring.append(sub_Ring)        
+
+    print('Ring = ', Ring)
+
+    # construct noc nodes
+    for nop_id in range (NOP_SIZE): 
+        for src_local_id in range (NOC_NODE_NUM):
+            src = src_local_id + NOC_NODE_NUM * nop_id
+            local = src + 1000
+            F[(local, src)] = 0
+            F[(src, local)] = 0
+            bw_scales[(local, src)] = 1
+            bw_scales[(src, local)] = 1
+            energy_ratio[(local, src)] = NOC_energy_ratio
+            energy_ratio[(src, local)] = NOC_energy_ratio
+
+    for sub_Ring in Ring:
+        for i in range(len(sub_Ring)):
+            F[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] = 0
+            energy_ratio[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] = NOC_energy_ratio
+
+            if (sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)]) in bw_scales.keys():
+                bw_scales[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] += 1
+            else:
+                bw_scales[(sub_Ring[i], sub_Ring[(i + 1) % len(sub_Ring)])] = 1
+
+    # construct NoP nodes
+    for src_nop_id in range (NOP_SIZE):
+        for dst_nop_id in range (NOP_SIZE):
+            src =  NOC_NODE_NUM * NOP_SIZE + src_nop_id
+            dst =  NOC_NODE_NUM * NOP_SIZE + dst_nop_id
+            local = src + 1000
+            F[(local,src)] = 0
+            F[(src,local)] = 0
+            bw_scales[(local,src)] = nop_scale_ratio
+            bw_scales[(src,local)] = nop_scale_ratio
+            energy_ratio[(local,src)] = DIE2DIE_energy_ratio
+            energy_ratio[(src,local)] = DIE2DIE_energy_ratio
+            src_x = src_nop_id %  NoP_w
+            src_y = int(src_nop_id / NoP_w)
+            dst_x = dst_nop_id %  NoP_w
+            dst_y = int(dst_nop_id / NoP_w)
+            if (src_x == dst_x) :
+                if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+                    
+            elif (src_y == dst_y) :
+                if (src_x - dst_x == 1) or (src_x - dst_x == -1):
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+
+    # construct noc and nop connection
+    for nop_id in range (NOP_SIZE):
+        nop_router_id = nop_id + NOC_NODE_NUM * NOP_SIZE 
+        noc_router_id = nop_id * NOC_NODE_NUM
+        F[(noc_router_id,nop_router_id)] = 0
+        F[(nop_router_id,noc_router_id)] = 0
+        bw_scales[(noc_router_id,nop_router_id)] = nop_scale_ratio
+        bw_scales[(nop_router_id,noc_router_id)] = nop_scale_ratio
+        energy_ratio[(noc_router_id,nop_router_id)] = DIE2DIE_energy_ratio
+        energy_ratio[(nop_router_id,noc_router_id)] = DIE2DIE_energy_ratio
+        # print ("(nop_router_id,noc_router_id)", (nop_router_id,noc_router_id))
+
+    print ("len(F)", len(F))
+    print ("F",F)
+    print ("bw_scales",bw_scales)
+    print ("len bw_scales",len(bw_scales))
+    print ("----- finish construct the heterogeneous Routerless ---- \n\n")
+
+    noc_route_table = {}
+    hops = {}
+
+    def noc_id (real_id):
+        return (real_id % NOC_NODE_NUM)
+
+    def chip_id (real_id):
+        return (int (real_id /NOC_NODE_NUM) )
+
+    def comm_id (real_id): # the communication router id in one chip
+        return (chip_id(real_id)*NOC_NODE_NUM)
+
+    def nop_id (real_id):
+        return (real_id - NOC_NODE_NUM*NOP_SIZE)
+
+    for src in range (0, NOC_NODE_NUM*NOP_SIZE):
+        for dst in range (0, NOC_NODE_NUM*NOP_SIZE):
+            noc_route_table[(src,dst)] = []
+            cur_src = src
+            cur_dst = src
+
+            if chip_id(cur_src) != chip_id(dst):
+                if (src != 0) or ((noc_id(dst) % NoC_w) != 0):
+                    continue
+                
+                sub_Ring = find_shortest_ring(Ring, src, comm_id(src))
+                noc_route_table[(src, dst)] = append_ring_route(noc_route_table[(src, dst)], sub_Ring, src, comm_id(src))
+                    
+                # go to the nop node
+                cur_dst = chip_id(cur_src) + NOC_NODE_NUM * NOP_SIZE
+                noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                cur_src = cur_dst
+
+                while cur_src != chip_id(dst) + NOC_NODE_NUM * NOP_SIZE : # nop router of the destination node
+                    src_nop_x = nop_id(cur_src) % NoP_w
+                    src_nop_y = int (nop_id(cur_src) / NoP_w)
+                    dst_nop_x = chip_id(dst) % NoP_w
+                    dst_nop_y = int(chip_id(dst) / NoP_w)
+                    if (src_nop_x > dst_nop_x):  # go west
+                        cur_nop_dst = src_nop_x-1 +  src_nop_y * NoP_w
+                    elif (src_nop_x < dst_nop_x): # go east
+                        cur_nop_dst = src_nop_x+1 +  src_nop_y * NoP_w
+                    elif (src_nop_y < dst_nop_y): # go north
+                        cur_nop_dst = src_nop_x + (src_nop_y+1) * NoP_w
+                    elif (src_nop_y > dst_nop_y): # go south
+                        cur_nop_dst = src_nop_x + (src_nop_y-1) * NoP_w
+                    cur_dst = cur_nop_dst+NOC_NODE_NUM*NOP_SIZE
+                    noc_route_table[(src, dst)].append((cur_src,cur_dst))
+                    cur_src = cur_dst
+                
+                # go to the communication id 
+                cur_dst = chip_id(dst) * NOC_NODE_NUM
+                noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                cur_src = cur_dst
+
+            if((noc_id(src) % NoC_w) == 0) or ((noc_id(dst) % NoC_w) == 0):
+                if cur_src != dst:
+                    sub_Ring = find_shortest_ring(Ring, cur_src, dst)
+                    noc_route_table[(src, dst)] = append_ring_route(noc_route_table[(src, dst)], sub_Ring, cur_src, dst)
+
+    # print ("----noc_route_table------")
+    # for route_item in noc_route_table:
+    #     print (route_item, noc_route_table[route_item])
+
+    route_table = {}
+    for src in range (1000, 1000 + NOC_NODE_NUM * NOP_SIZE):
+        for dst in range (1000, 1000 + NOC_NODE_NUM * NOP_SIZE):
+            route_table[(src,dst)] = []
+            noc_src = src - 1000
+            noc_dst = dst - 1000
+            route_table[(src,dst)] = noc_route_table[(noc_src,noc_dst)].copy()
+            if (src!=dst):
+                route_table[(src,dst)].append((noc_dst, dst))
+                route_table[(src,dst)].insert(0, (src, noc_src))
+
+    for item in route_table:
+        hops[item] = len(route_table[item])
+        # print (item,route_table[item])
+
+    print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM/NOP_SIZE/NOP_SIZE)
+    noc_dict["route_table"]= route_table
+    noc_dict["F"]= F
+    noc_dict["bw_scales"]= bw_scales
+    noc_dict["energy_ratio"] = energy_ratio
+    noc_dict["Ring"] = Ring
+
+    return noc_dict, ALL_SIM_NODE_NUM    
+
+def construct_noc_nop_Routerless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
+    noc_dict = {}
+    CORE_NUM = NOC_NODE_NUM*NOP_SIZE
+    ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
+    F = {} # fitness value for each link
+    bw_scales = {}
+    energy_ratio = {}
+    NoC_h = NOC_NODE_NUM / NoC_w
+
+    # construct noc nodes
+    for nop_id in range (NOP_SIZE): 
+        for src_local_id in range (NOC_NODE_NUM):
+            src = src_local_id + NOC_NODE_NUM * nop_id
+            local = src + 1000
+            F[(local,src)] = 0
+            F[(src,local)] = 0
+            bw_scales[(local,src)] = 1
+            bw_scales[(src,local)] = 1
+            energy_ratio[(local,src)] = NOC_energy_ratio
+            energy_ratio[(src,local)] = NOC_energy_ratio
+            src_x = src_local_id %  NoC_w
+            src_y = int(src_local_id / NoC_w)
+
+            for dst_local_id in range (NOC_NODE_NUM):
+                dst = dst_local_id + NOC_NODE_NUM * nop_id
+                dst_x = dst_local_id %  NoC_w
+                dst_y = int(dst_local_id / NoC_w)
+                if (src_y == dst_y):
+                    if (src_y == 0):
+                        if (src_x - dst_x == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src, dst)] = NoC_h - 1 + NoC_w - src_x
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+                    elif (src_y == NoC_h - 1):
+                        if (dst_x - src_x == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src, dst)] = 1 + NoC_w - dst_x
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+                    else:
+                        if (dst_x - src_x == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src, dst)] = 1
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+
+                elif (src_x == dst_x):
+                    if (src_x == 0):
+                        if (dst_y - src_y == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src,dst)] = NoC_w - 1 + NoC_h - dst_y
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+
+                    elif (src_x == NoC_w - 1):
+                        if (src_y - dst_y == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src,dst)] = 1 + NoC_h - src_y
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+                    else:
+                        if (src_y - dst_y == 1):
+                            F[(src, dst)] = 0
+                            bw_scales[(src,dst)] = 1
+                            energy_ratio[(src,dst)] = NOC_energy_ratio
+
+    # construct NoP nodes
+    for src_nop_id in range (NOP_SIZE):
+        for dst_nop_id in range (NOP_SIZE):
+            src =  NOC_NODE_NUM * NOP_SIZE + src_nop_id
+            dst =  NOC_NODE_NUM * NOP_SIZE + dst_nop_id
+            local = src + 1000
+            F[(local,src)] = 0
+            F[(src,local)] = 0
+            bw_scales[(local,src)] = nop_scale_ratio
+            bw_scales[(src,local)] = nop_scale_ratio
+            energy_ratio[(local,src)] = DIE2DIE_energy_ratio
+            energy_ratio[(src,local)] = DIE2DIE_energy_ratio
+            src_x = src_nop_id %  NoP_w
+            src_y = int(src_nop_id / NoP_w)
+            dst_x = dst_nop_id %  NoP_w
+            dst_y = int(dst_nop_id / NoP_w)
+            if (src_x == dst_x) :
+                if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+                    
+            elif (src_y == dst_y) :
+                if (src_x - dst_x == 1) or (src_x - dst_x == -1):
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+
+    # construct noc and nop connection
+    for nop_id in range (NOP_SIZE):
+        nop_router_id = nop_id + NOC_NODE_NUM * NOP_SIZE 
+        noc_router_id = nop_id * NOC_NODE_NUM
+        F[(noc_router_id,nop_router_id)] = 0
+        F[(nop_router_id,noc_router_id)] = 0
+        bw_scales[(noc_router_id,nop_router_id)] = nop_scale_ratio
+        bw_scales[(nop_router_id,noc_router_id)] = nop_scale_ratio
+        energy_ratio[(noc_router_id,nop_router_id)] = DIE2DIE_energy_ratio
+        energy_ratio[(nop_router_id,noc_router_id)] = DIE2DIE_energy_ratio
+        # print ("(nop_router_id,noc_router_id)", (nop_router_id,noc_router_id))
+
+    print ("len(F)", len(F))
+    print ("F",F)
+    print ("bw_scales",bw_scales)
+    print ("len bw_scales",len(bw_scales))
+    print ("----- finish construct the heterogeneous Routerless ---- \n\n")
+
+    noc_route_table = {}
+    hops = {}
+
+    def noc_id (real_id):
+        return (real_id % NOC_NODE_NUM)
+
+    def chip_id (real_id):
+        return (int (real_id /NOC_NODE_NUM) )
+
+    def comm_id (real_id): # the communication router id in one chip
+        return (chip_id(real_id)*NOC_NODE_NUM)
+
+    def nop_id (real_id):
+        return (real_id - NOC_NODE_NUM*NOP_SIZE)
+
+    for src in range (0, NOC_NODE_NUM*NOP_SIZE):
+        for dst in range (0, NOC_NODE_NUM*NOP_SIZE):
+            noc_route_table[(src,dst)] = []
+            cur_src = src
+            cur_dst = src
+
+            if chip_id(cur_src) != chip_id(dst):
+                if (src != 0) or ((noc_id(dst) % NoC_w) != 0):
                     continue
                 
                 while cur_src != comm_id(src): # go to the first noc node
@@ -474,6 +919,9 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
     noc_dict = {}
     CORE_NUM = NOC_NODE_NUM*NOP_SIZE
     ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
+    print('CORE_NUM = ', CORE_NUM)
+    print('NOP_SIZE = ', NOP_SIZE)
+
     F = {} # fitness value for each link
     bw_scales = {}
     energy_ratio = {}
@@ -659,20 +1107,24 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
         # print (item,route_table[item])
 
     print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM/NOP_SIZE/NOP_SIZE)
-    noc_dict["route_table"]= route_table
-    noc_dict["F"]= F
-    noc_dict["bw_scales"]= bw_scales
+    noc_dict["route_table"] = route_table
+    noc_dict["F"] = F
+    noc_dict["bw_scales"] = bw_scales
     noc_dict["energy_ratio"] = energy_ratio
     return noc_dict, ALL_SIM_NODE_NUM    
 
 
-def construct_noc_nop_topo(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio, topology = 'Mesh'):
+def construct_noc_nop_topo(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio, topology = 'Mesh', constraint = 5):
     if topology == 'Mesh':
         noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio)
     elif topology == 'Torus':
         noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio)
     elif topology == 'Routerless':
         noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_Routerless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio)
+    elif topology == 'Ring':
+        noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_Ring(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio)
+    elif topology == 'RandomRouterless':
+        noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_RandomRouterless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio, constraint = NoC_w)
     else:
         raise NotImplementedError
 
@@ -682,5 +1134,5 @@ def construct_noc_nop_topo(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
     return noc_dict, ALL_SIM_NODE_NUM
 
 if __name__ == '__main__':
-    TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6, "nop_scale_ratio":0.5, "topology": 'Routerless'}
+    TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6, "nop_scale_ratio":0.5, "topology": 'RandomRouterless'}
     NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = TOPO_param["topology"])

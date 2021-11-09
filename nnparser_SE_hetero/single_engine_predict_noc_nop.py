@@ -74,6 +74,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	C = network_param["C"]
 	R = network_param["R"]
 	S = network_param["S"]
+	stride = network_param["stride"]
 
 	# memory node id
 	ol2_node = PE_height * (PE_lenth+1)
@@ -143,8 +144,8 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		elif "S" == param[0]:
 			al1_need_Spart = al1_need_Spart * all_param[id]
 
-		al1_need_Q_final = al1_need_Qpart + al1_need_Spart - 1
-		al1_need_P_final = al1_need_Ppart + al1_need_Rpart - 1
+		al1_need_Q_final = al1_need_Qpart * stride + al1_need_Spart - stride
+		al1_need_P_final = al1_need_Ppart * stride + al1_need_Rpart - stride
 		al1_need = al1_need_CKpart * al1_need_Q_final * al1_need_P_final
 
 		
@@ -228,7 +229,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	pe_neu_num_rd_act = 0
 
 	cur = data_flow[ape_cp_id]; inner = data_flow[ape_cp_id-1]  
-	pe_neu_num_rd_act += AL1_need[data_flow[ape_cp_id]] * repeat_num[data_flow[ape_cp_id+1]]
+	if ape_cp == "top":
+		pe_neu_num_rd_act += AL1_need[data_flow[ape_cp_id]] * 1
+	else:
+		pe_neu_num_rd_act += AL1_need[data_flow[ape_cp_id]] * repeat_num[data_flow[ape_cp_id+1]]
 
 	cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
 	pe_neu_num_rd_wgt += WL1_need[inner] * repeat_num[cur]
@@ -272,7 +276,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	#print("CORE: read act mem ",AL1_need[inner],"repeat ",repeat_num[cur])
 	core_pkt_num_rd_act +=  int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
 	core_act_data_num += AL1_need[inner] # 用于生成仿真指令
-	core_neu_num_rd_act += AL1_need[data_flow[al1_cp_id]] * repeat_num[data_flow[al1_cp_id+1]]
+	if al1_cp == "top":
+		core_neu_num_rd_act += AL1_need[data_flow[al1_cp_id]] * 1
+	else:
+		core_neu_num_rd_act += AL1_need[data_flow[al1_cp_id]] * repeat_num[data_flow[al1_cp_id+1]]
 
 	cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
 	#print("CORE: read wgt mem ",WL1_need[inner],"repeat ",repeat_num[cur]) 
@@ -334,7 +341,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	#print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
 	chip_pkt_num_rd_act +=  int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
 	chip_act_data_num += AL2_need[inner] # 用于生成仿真指令
-	chip_neu_num_rd_act += AL2_need[data_flow[al2_cp_id]] * repeat_num[data_flow[al2_cp_id+1]]
+	if al2_cp == "top":
+		chip_neu_num_rd_act += AL2_need[data_flow[al2_cp_id]] * 1
+	else:
+		chip_neu_num_rd_act += AL2_need[data_flow[al2_cp_id]] * repeat_num[data_flow[al2_cp_id+1]]
 
 	cur = data_flow[wl2_cp_id]; inner = data_flow[wl2_cp_id-1]  
 	#print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
@@ -551,6 +561,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 	C = network_param["C"]
 	R = network_param["R"]
 	S = network_param["S"]
+	stride = network_param["stride"]
 	# memory node id
 	# memory node id
 	ol2_node = PE_height * (PE_lenth+1)
@@ -616,8 +627,8 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		elif "S" == param[0]:
 			al1_need_Spart = al1_need_Spart * all_param[id]
 
-		al1_need_Q_final = al1_need_Qpart + al1_need_Spart - 1
-		al1_need_P_final = al1_need_Ppart + al1_need_Rpart - 1
+		al1_need_Q_final = al1_need_Qpart * stride + al1_need_Spart - stride
+		al1_need_P_final = al1_need_Ppart * stride + al1_need_Rpart - stride
 		al1_need = al1_need_CKpart * al1_need_Q_final * al1_need_P_final
 
 		
