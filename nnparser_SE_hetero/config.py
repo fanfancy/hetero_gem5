@@ -11,7 +11,8 @@ flit_per_pkt = 5
 freq_1G = 1 * 1000 * 1000 * 1000 
 DRAM_energy_ratio = 8.75    	# PJ/bit  from NNbaton
 def SRAM_energy(size):			# PJ/bit  from NNbaton
-	return 0.016452 * size + 0.283548
+	# return 0.016452 * size + 0.283548
+	return 0.81
 DIE2DIE_energy_ratio = 1.17
 NOC_energy_ratio = 0
 MAC_energy_ratio = 0.024    	# 8bit MAC
