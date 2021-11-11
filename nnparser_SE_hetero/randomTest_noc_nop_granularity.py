@@ -25,11 +25,11 @@ def randomTest(GATest,iterTime, HW_param, memory_param , if_multicast, filename)
 		#---生成个代---
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = GATest.GaGetChild()
 		#---计算适应度---
-		compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_MAC = \
+		compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_MAC, energy_die2die_in_layer = \
 			calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, if_multicast)
 		#---比较适应度，并记录相关变量---
 		
-		e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
+		e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)+(energy_die2die_in_layer)
 		edp_res = e_mem * compuation_cycles/(PE_freq * freq_1G) 
 
 		if edp_res_min == 0 or edp_res < edp_res_min:
@@ -50,7 +50,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param , if_multicast, filename)
 			energy_dram_list[0], energy_dram_list[1], energy_dram_list[2], energy_dram_list[3], \
 			energy_L2_list[0], energy_L2_list[1], energy_L2_list[2], energy_L2_list[3], \
 			energy_L1_list[0], energy_L1_list[1], \
-			sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_MAC, e_mem, \
+			sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_MAC, energy_die2die_in_layer, e_mem, \
 			edp_res, \
 		    str(code) ])
 		# print("######---------Times = ", i)
@@ -72,14 +72,14 @@ if __name__ == '__main__':
 		"e_wr_opt_dram", "e_rd_opt_dram", "e_rd_wgt_dram", "e_rd_act_dram", \
 		"e_wr_opt_L2", "e_rd_opt_L2", "e_rd_wgt_L2", "e_rd_act_L2", \
 		"e_rd_wgt_L1", "e_rd_act_L1", \
-		"e_dram", "e_L2", "e_L1", "e_MAC",  "e_mem", "EDP pJ*s", "code",\
+		"e_dram", "e_L2", "e_L1", "e_MAC", "e_die2die", "e_mem", "EDP pJ*s", "code",\
 		"num_chip","num_core","PE_C","PE_K",\
 		"WL1","AL1","OL1",\
 		"WL2","AL2","OL2", "area_chip_mm2"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 
-	APP = "VGG16_CONV1"
+	APP = str(sys.argv[1])
 	if APP == "VGG16_CONV1":
 		network_param = vgg16_conv1
 	elif APP == "VGG16_CONV12":
@@ -100,10 +100,10 @@ if __name__ == '__main__':
 	PE_K_list = [4,8,16]
 	core_num_list = [4,8,16,32,64]
 	chiplet_num_list = [1,2,4,8,16]
-	l1_list = [0.5,1,2,4]
+	l1_list = [0.5,1,2,4,8]
 
 	def valid(PE_C,PE_K,core_num,chiplet_num,WL1,AL1,OL1,WL2,AL2,OL2):
-		if PE_C*PE_K*core_num*chiplet_num == 4096 and \
+		if PE_C*PE_K*core_num*chiplet_num == 4096*4 and \
 			WL1 > 0 and \
 			AL1 > 0 and \
 			OL1 > 0 :
@@ -122,8 +122,10 @@ if __name__ == '__main__':
 			for core_num in core_num_list:
 				for chiplet_num in chiplet_num_list:
 					for l1 in l1_list:
-						WL1 =  l1*2 ; AL1 =  l1*8 ; OL1 = l1
-						WL2 =  WL1*core_num; AL2 = AL1 * core_num; OL2 = OL1*core_num 
+						# pe_ratio = PE_C * PE_K /64
+						# WL1 =  int(pe_ratio*32) ; AL1 =  int(pe_ratio*8); OL1 = int(pe_ratio*4)
+						WL1 = l1 * 8; AL1 = l1 * 2; OL1 = l1 * 1
+						WL2 =  WL1*core_num;  AL2 = AL1 * core_num; OL2 = OL1*core_num 
 
 						if valid(PE_C,PE_K,core_num,chiplet_num,WL1,AL1,OL1,WL2,AL2,OL2):
 							print ("--",all_valid_param)
@@ -149,7 +151,9 @@ if __name__ == '__main__':
 							# NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])
 							debug=0
 							if_multicast = 1
-							chiplet_parallel = "All"		# choices: "Pq" "All" "Channel" "Hybrid"
+							assert (if_multicast ==1 )
+							chiplet_parallel = "P_K_PK"		# choices: "Pq" "All" "Channel" "Hybrid" "P_K_PK"
+							assert (chiplet_parallel == "P_K_PK")
 							core_parallel = "All"
 							GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel )
 							iterTime = 10000

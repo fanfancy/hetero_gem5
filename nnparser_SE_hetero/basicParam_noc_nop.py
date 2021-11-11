@@ -63,6 +63,9 @@ def config_parallel_type(chiplet_parallel,core_parallel):
     elif chiplet_parallel == "All":
         parallel_select["Chiplet"] = [0,1,3]
         parallel_type["Chiplet"] = 0
+    elif chiplet_parallel == "P_K_PK":
+        parallel_select["Chiplet"] = [0,3]
+        parallel_type["Chiplet"] = 0
     else:
         print("fatal: chiplet_parallel not defined")
         sys.exit()
@@ -78,6 +81,9 @@ def config_parallel_type(chiplet_parallel,core_parallel):
         parallel_type["PE"] = 2
     elif core_parallel == "All":
         parallel_select["PE"] = [0,1,3]
+        parallel_type["PE"] = 0
+    elif chiplet_parallel == "P_K_PK":
+        parallel_select["PE"] = [0,3]
         parallel_type["PE"] = 0
     else:
         print("fatal: core_parallel not defined")
