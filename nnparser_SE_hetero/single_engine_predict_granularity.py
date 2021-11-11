@@ -153,7 +153,13 @@ def calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partit
 		if_out_final[param] = out_final[id]
 		# L2
 		OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
-		AL2_need[param] = al1_need * PQ2 * PP2 #这里有点问题
+		al2_need_Qpart = al1_need_Qpart * PQ2 
+		al2_need_Ppart = al1_need_Ppart * PP2
+		al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride
+		al2_need_P_final = al2_need_Ppart * stride + al2_need_Ppart - stride
+		al2_need = al1_need_CKpart * al2_need_Qpart * al2_need_Ppart
+		
+		AL2_need[param] = al2_need #这里有点问题
 		WL2_need[param] = wl1_need * PK2 
 
 	repeat = 1
@@ -347,11 +353,14 @@ def calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partit
 	chip_neu_num_rd_wgt += WL2_need[inner] * repeat_num[cur]
 
 	# 考虑上并行度带来的数据复用机会
+	die2die_intralayer = 0
 	if if_multicast == 1:
 		chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
 		chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
 		chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum /PP3 / PQ3
 		chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum /PK3 
+		die2die_intralayer  += chip_neu_num_rd_wgt * (ChipNum - PK3)  # PK3个chip wgt是不同的 因此需要跨die传输
+		die2die_intralayer  += chip_neu_num_rd_act * (ChipNum - PP3*PQ3) # PP3*PQ3个chip act是不同的 因此需要跨die传输
 	elif if_multicast == 0:
 		chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
 		chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
@@ -365,6 +374,7 @@ def calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partit
 	energy_rd_opt_dram = chip_neu_num_rd_opt * DRAM_energy_ratio * psum_width
 	energy_rd_wgt_dram = chip_neu_num_rd_wgt * DRAM_energy_ratio * act_wgt_width
 	energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * act_wgt_width
+	energy_die2die_in_layer = die2die_intralayer * DIE2DIE_energy_ratio * act_wgt_width *2 # 是否需要*2呢？一次收一次发？
 
 	runtime_calNum = runtimeP*runtimeQ*runtimeR*runtimeS*runtimeC*runtimeK
 	runtime_list = [runtimeP, runtimeQ, runtimeC, runtimeK, runtimeChipNum, runtimeCoreNum,runtime_calNum]
@@ -379,5 +389,5 @@ def calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partit
 	
 
 	return(compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
-		energy_dram_list, energy_L2_list,energy_L1_list, energy_MAC)
+		energy_dram_list, energy_L2_list,energy_L1_list, energy_MAC,energy_die2die_in_layer)
 
