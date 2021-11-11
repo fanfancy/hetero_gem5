@@ -159,7 +159,13 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 		if_out_final[param] = out_final[id]
 		# L2
 		OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
-		AL2_need[param] = al1_need * PQ2 * PP2 #这里有点问题
+		al2_need_Qpart = al1_need_Qpart * PQ2 
+		al2_need_Ppart = al1_need_Ppart * PP2
+		al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride
+		al2_need_P_final = al2_need_Ppart * stride + al2_need_Ppart - stride
+		al2_need = al1_need_CKpart * al2_need_Qpart * al2_need_Ppart
+		
+		AL2_need[param] = al2_need #这里有点问题
 		WL2_need[param] = wl1_need * PK2 
 
 	repeat = 1
@@ -642,7 +648,13 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 		if_out_final[param] = out_final[id]
 		# L2
 		OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
-		AL2_need[param] = al1_need * PQ2 * PP2 #这里有点问题
+		al2_need_Qpart = al1_need_Qpart * PQ2 
+		al2_need_Ppart = al1_need_Ppart * PP2
+		al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride
+		al2_need_P_final = al2_need_Ppart * stride + al2_need_Ppart - stride
+		al2_need = al1_need_CKpart * al2_need_Qpart * al2_need_Ppart
+		
+		AL2_need[param] = al2_need #这里有点问题
 		WL2_need[param] = wl1_need * PK2 
 
 	repeat = 1
