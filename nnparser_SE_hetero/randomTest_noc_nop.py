@@ -104,8 +104,9 @@ if __name__ == '__main__':
 		print ("fatal: APP not defined")
 		sys.exit()
 
-	HW_param = {"Chiplet":[4,2],"PE":[3,4],"intra_PE":{"C":8,"K":8}}
-	memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16}
+	HW_param = {"Chiplet":[4,2],"PE":[4,4],"intra_PE":{"C":8,"K":16}}       	# from granularity exploration
+	# memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	from nnbaton
+	memory_param = {"OL1":4 ,"OL2":64,"AL1":8,"AL2":128,"WL1":32,"WL2":512}		# from granularity exploration
 	
 	NoC_w = HW_param["PE"][1] + 1
 	NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
@@ -120,11 +121,12 @@ if __name__ == '__main__':
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])
 	debug=0
 	if_multicast = 1
-	chiplet_parallel = "All"		# choices: "Pq" "All" "Channel" "Hybrid"
+	chiplet_parallel = "P_K_PK"		# choices: "Pq" "All" "Channel" "Hybrid" "P_K_PK" 
+	assert (chiplet_parallel == "P_K_PK") # to simplify communication between chips
 	core_parallel = "All"
 	GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel)
 
-	iterTime = 100
+	iterTime = 10000 	# run 1w random mapping exploration
 	fitness_min_ran = 0
 	index = range(iterTime)
 
