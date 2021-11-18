@@ -468,8 +468,12 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 			sys.exit()
 	worstlinks = []
 	for item in F_cur:
-		if F_cur[item] == max(F_cur.values()): 
+		if F_cur[item] == degrade_ratio: 
 			worstlinks.append(item)
+		if dram_to_L2_F_cur == degrade_ratio:
+			worstlinks.append("dram2L2")
+		if L2_to_DRAM_F_cur == degrade_ratio:
+			worstlinks.append("L2toDRAM")
 			
 	return(degrade_ratio*compuation_cycles, degrade_ratio, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
 		energy_dram_list, energy_L2_list,energy_L1_list, energy_die2die, energy_MAC, worstlinks)
