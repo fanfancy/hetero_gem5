@@ -7,6 +7,7 @@ import copy
 from enum import Enum
 from matplotlib import pyplot as plt
 import openpyxl
+from config import neu_per_flit_act_wgt
 
 def getChipletID(p,q,k,dim_mapping_seq, debug_flag = 0):
 	if debug_flag == 0:
@@ -69,8 +70,13 @@ def getCommDict(addr, size_dict, dict, dim_mapping_seq, debug_flag):
 # chiplet_size = [chiplet_h, chiplet_w]
 # dim_seq_1 = ["P","Q","K"]，相当于考量chiplet_id是先按哪个维度排列的
 # debug_flag = 0 :正常运行，1 :方便看结果
-def getInterLayerComm(dim_seq_1, dim_seq_2, network_param_1, parallel_1, network_param_2, parallel_2, debug_flag = 0):
+def getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, debug_flag = 0):
 	#---上一网络层的output act每个chiplet所拥有的大小
+
+	network_param_1 = {"P":0, "Q":0, "K":0}
+	network_param_1["P"] = network_param_2["H"]
+	network_param_1["Q"] = network_param_2["M"]
+	network_param_1["K"] = network_param_2["C"]
 
 	P_i = math.ceil(network_param_1["P"]/parallel_1["P"])
 	Q_i = math.ceil(network_param_1["Q"]/parallel_1["Q"])
@@ -113,8 +119,9 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, network_param_1, parallel_1, network
 			offset_q = Q_output * q *stride - padding
 			offset = [offset_p, offset_q]
 			chiplet_act_index_dict[chiplet_index] = offset
-	#print("chiplet_act_index_dict")
-	#print(chiplet_act_index_dict)
+	
+	chiplet_num = len(chiplet_act_index_dict) * parallel_2["K"]
+
 	#---记录前一层chiplet的output act分配情况
 	chiplet_act_index_dict_pre = {"P":{},"Q":{},"K":{}}
 	for p in range(parallel_1["P"]):
@@ -153,9 +160,6 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, network_param_1, parallel_1, network
 	else:
 		chiplet_act_index_dict_pre["K"][k] = network_param_1["K"]
 
-	#print("chiplet_act_index_dict_pre")
-	#print(chiplet_act_index_dict_pre)
-
 	#---记录当前chiplet与上一层chiplet的通信情况
 	#---comm_inter_layer_dict_o_i[layer(i+1)_chiplet_id] = {[layer(i)_chiplet_id]:comm_num,...}
 	#---comm_inter_layer_dict_i_o[layer(i)_chiplet_id] = {[layer(i+1)_chiplet_id]:comm_num,...}
@@ -169,10 +173,6 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, network_param_1, parallel_1, network
 			if chip_id_i not in comm_inter_layer_dict_i_o:
 				comm_inter_layer_dict_i_o[chip_id_i] = {}
 			comm_inter_layer_dict_i_o[chip_id_i][chip_id] = comm_dict[chip_id_i]
-	#print("comm_inter_layer_dict_o_i")
-	#print(comm_inter_layer_dict_o_i)
-	#print("comm_inter_layer_dict_i_o")
-	#print(comm_inter_layer_dict_i_o)
 
 	comm_num_dict = {}
 	comm_type_dict = {"uni-cast":0, "multi-cast":0, "broadcast":0}
@@ -202,25 +202,149 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, network_param_1, parallel_1, network
 				comm_type_times_dict["broadcast"] += 1
 			comm_num_dict[chip_id_i][num] = [commNum, chip_id_list]
 			num += 1
-	#print("comm_num_dict")
-	#print(comm_num_dict)
-	#print("comm_type_dict")
-	#print(comm_type_dict)
-	#print("comm_type_times_dict")
-	#print(comm_type_times_dict)
+	return comm_num_dict, comm_type_dict,comm_type_times_dict, chiplet_num
 
-	return comm_num_dict, comm_type_dict,comm_type_times_dict
+def setRouteTable(NOC_NODE_NUM, NoC_w):
+	# mesh 4*4
+	F = {}
+	bw_scales = {}
+	for src in range (NOC_NODE_NUM):
+		for dst in range (NOC_NODE_NUM):
+			local = src + 1000
+			F[(local,src)] = 0
+			F[(src,local)] = 0
+			src_x = src %  NoC_w
+			src_y = int(src / NoC_w)
+			dst_x = dst %  NoC_w
+			dst_y = int(dst / NoC_w)
+			if (src_x == dst_x) :
+				if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
+					F[(src,dst)] = 0
+					bw_scales[(src,dst)] = 1
+			elif (src_y == dst_y) :
+				if (src_x - dst_x == 1) or (src_x - dst_x == -1):
+					F[(src,dst)] = 0
+					bw_scales[(src,dst)] = 1
+
+	# print ("F",F)
+
+	noc_route_table = {}
+	hops = {}
+	noc_route_ids = {}
+
+	for src in range (0,NOC_NODE_NUM):
+		for dst in range (0,NOC_NODE_NUM):
+			cur_dst = src
+			cur_src = src
+			noc_route_table[(src,dst)] = []
+			noc_route_ids[(src,dst)] = []
+			while cur_dst != dst:
+				src_x = cur_src %  NoC_w
+				src_y = int(cur_src / NoC_w)
+				dst_x = dst %  NoC_w
+				dst_y = int(dst / NoC_w)
+				# print ("src_x",src_x,"src_y",src_y,"dst_x",dst_x,"dst_y",dst_y)
+				if (src_x > dst_x): # go west
+					cur_dst = src_x-1 +  src_y * NoC_w
+				elif (src_x < dst_x): # go east
+					cur_dst = src_x+1 +  src_y * NoC_w
+				elif (src_y < dst_y): # go north
+					cur_dst = src_x + (src_y+1) * NoC_w
+				elif (src_y > dst_y): # go south
+					cur_dst = src_x + (src_y-1) * NoC_w
+				#print ("cur_dst",cur_dst)
+				noc_route_table[(src,dst)].append((cur_src,cur_dst))
+				cur_src = cur_dst
+				noc_route_ids[(src,dst)].append(cur_dst)
+			#print ("\nnoc_route_table:",src,dst,noc_route_table[(src,dst)])
+	#print ("noc_route_table",noc_route_table)
+
+	route_table = {}
+	for src in range (1000,1000+NOC_NODE_NUM):
+		for dst in range (1000,1000+NOC_NODE_NUM):
+			route_table[(src,dst)] = []
+			noc_src = src - 1000
+			noc_dst = dst -1000
+			route_table[(src,dst)] = noc_route_table[(noc_src,noc_dst)].copy()
+			if (src!=dst):
+				route_table[(src,dst)].append((noc_dst,dst))
+				route_table[(src,dst)].insert(0,(src,noc_src))
+				F[(noc_dst,dst)] = 0
+				F[(src,noc_src)] = 0
+				bw_scales[(src,noc_src)] = 1
+				bw_scales[(noc_dst,dst)] = 1
+
+
+
+
+	for item in route_table:
+		hops[item] = len(route_table[item])
+		#print (item,route_table[item])
+
+	#print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM)
+	#print("route_table=========")
+	#print(route_table)
+	return route_table, F
+
+def calDegrateRatio(F,routeTable, commDict):
+	F_cur=F.copy()
+
+	for send_id in commDict:
+		for packet in commDict[send_id]:
+			commNum = commDict[send_id][packet][0]
+			commFlitNum = math.ceil(commNum / neu_per_flit_act_wgt)
+			dst_list = commDict[send_id][packet][1]
+			link_list = []
+			for dst_id in dst_list:
+				for link in routeTable[(send_id + 1000, dst_id + 1000)]:
+					if link not in link_list:
+						link_list.append(link)
+						F_cur[link] += commFlitNum
+
+	worstCommNum = max(F_cur.values()) 
+	worstlinks = []
+	for item in F_cur:
+		if F_cur[item] == max(F_cur.values()): 
+			worstlinks.append(item)
+
+	#print ("F_cur",F_cur)
+	#print ("worstCommNum",worstCommNum)
+	#print(worstlinks)
+	return F_cur, worstCommNum, worstlinks
+
+def getCalCycle(chiplet_num, network_param_2, PENoCNum):
+	calNum = network_param_2["P"] * network_param_2["Q"] * network_param_2["K"] * network_param_2["C"] * network_param_2["R"] * network_param_2["S"]
+	CalCycle = math.ceil(calNum / PENoCNum / chiplet_num)
+	return CalCycle
+
+def getInterLayer(network_param_2, parallel_1, parallel_2, NOC_NODE_NUM, NoC_w):
+	dim_seq_1 = ["K","P","Q"]
+	dim_seq_2 = ["K","P","Q"]
+	# 通信量计算
+	comm_num_dict, comm_type_dict, comm_type_times_dict, chiplet_num = getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, 0)
+			
+	# 拓扑构建routing table
+	routeTable, F = setRouteTable(NOC_NODE_NUM, NoC_w)
+
+	# 计算链路通信量
+	F_final, worstCommNum, worstlinks = calDegrateRatio(F,routeTable, comm_num_dict)
+	return worstCommNum, chiplet_num
 
 if __name__ == '__main__':
 
 	excel_datas = []
 
+	NOC_NODE_NUM = 20
+	NoC_w = 5
+
 	# 1表示前一层，2表示当前层
-	network_param_1 = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3}
-	network_param_2 = {"P":224,"Q":224,"C":64,"K":64,"R":3,"S":3, "stride":1, "padding":1}
+	#network_param_1 = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3}
+	#network_param_2 = {"P":224,"Q":224,"C":64,"K":64,"R":3,"S":3, "stride":1, "padding":1}
+	network_param_2 = {"H":7,"M":7, "P":7,"Q":7,"C":512,"K":2048,"R":1,"S":1, "stride":1, "padding":0}
 	
-	# parallel_type_1 = {"P":{"P":16,"Q":1,"K":1},'Q':{"P":1,"Q":16,"K":1},'K':{"P":1,"Q":1,"K":16},"PQ":{"P":4,"Q":4,"K":1},'PK':{"P":4,"Q":1,"K":4},'QK':{"P":1,"Q":4,"K":4}}
-	# parallel_type_2 = {"P":{"P":16,"Q":1,"K":1},'Q':{"P":1,"Q":16,"K":1},'K':{"P":1,"Q":1,"K":16},"PQ":{"P":4,"Q":4,"K":1},'PK':{"P":4,"Q":1,"K":4},'QK':{"P":1,"Q":4,"K":4}}
+
+	#parallel_type_1 = {"P":{"P":16,"Q":1,"K":1},'Q':{"P":1,"Q":16,"K":1},'K':{"P":1,"Q":1,"K":16},"PQ":{"P":4,"Q":4,"K":1},'PK':{"P":4,"Q":1,"K":4},'QK':{"P":1,"Q":4,"K":4}}
+	#parallel_type_2 = {"P":{"P":16,"Q":1,"K":1},'Q':{"P":1,"Q":16,"K":1},'K':{"P":1,"Q":1,"K":16},"PQ":{"P":4,"Q":4,"K":1},'PK':{"P":4,"Q":1,"K":4},'QK':{"P":1,"Q":4,"K":4}}
 	parallel_type_1 = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
 	parallel_type_2 = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
 
@@ -237,16 +361,27 @@ if __name__ == '__main__':
 			print("parallel_2")
 			print(parallel_2)
 
-			dict1, type_dict1, type_dict2 = getInterLayerComm(dim_seq_1, dim_seq_2, network_param_1, parallel_1, network_param_2, parallel_2, 0)
+			# 通信量计算
+			comm_num_dict, comm_type_dict, comm_type_times_dict, chiplet_num = getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, 0)
 			
-			excel_datas.append([type1+"-"+type2, type1, type2, type_dict2["uni-cast"], type_dict2["multi-cast"], type_dict2["broadcast"], type_dict1["uni-cast"], type_dict1["multi-cast"], type_dict1["broadcast"] ])
-			print(dict1)
+			# 拓扑构建routing table
+			routeTable, F = setRouteTable(NOC_NODE_NUM, NoC_w)
+
+			# 计算链路通信量
+			F_final, worstCommNum, worstlinks = calDegrateRatio(F,routeTable, comm_num_dict)
+			
+			# 计算片上计算时间
+			PENoCNum = 16*8*16
+			calCycle_noc = getCalCycle(chiplet_num, network_param_2, PENoCNum)
+			
+			excel_datas.append([chiplet_num, calCycle_noc, type1+"-"+type2, type1, type2, comm_type_times_dict["uni-cast"], comm_type_times_dict["multi-cast"], comm_type_times_dict["broadcast"], comm_type_dict["uni-cast"], comm_type_dict["multi-cast"], comm_type_dict["broadcast"] , worstCommNum, str(worstlinks), str(F_final)])
+			#print(comm_num_dict)
 			times += 1
 	
 	workbook = openpyxl.Workbook()
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
-	column_tite = ["parallel-type","parallel-type-i","parallel-type-i+1", "times-uni-cast","times-multi-cast","times-broadcast","num-uni-cast","num-multi-cast","num-broadcast"]
+	column_tite = ["chiplet_num", "calCycle_noc", "parallel-type","parallel-type-i","parallel-type-i+1", "times-uni-cast","times-multi-cast","times-broadcast","num-uni-cast","num-multi-cast","num-broadcast", "worstCommNum", "worstlinks", "F"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
@@ -254,6 +389,6 @@ if __name__ == '__main__':
 		for col, column_data in enumerate(data):
 			sheet.cell(row+2, col+1, column_data)
 
-	setname = str(network_param_1["P"]) + "_" + str(network_param_1["Q"]) + "_" + str(network_param_2["P"]) + "_" + str(network_param_2["Q"]) + "_" + str(network_param_2["K"]) + "_" + str(network_param_2["C"])
+	setname = str(network_param_2["P"]) + "_" + str(network_param_2["Q"]) + "_" + str(network_param_2["K"]) + "_" + str(network_param_2["C"]) + "_" + str(NoC_w) + "_" + str(NOC_NODE_NUM)
 
-	workbook.save("inter_layer_output_"+setname+".xls")
+	workbook.save("./test/1116/inter_layer_output_"+setname+"_topo.xls")

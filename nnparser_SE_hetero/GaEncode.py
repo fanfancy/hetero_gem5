@@ -120,6 +120,8 @@ class GaEncode:
 		self.debug = debug
 		self.debug_file = debug_file
 
+		self.chiplet_parallel = chiplet_parallel
+
 		#Dim_result = {"P":[],"Q":[],"K":[],"C":[]}
 		#loop_order = {"PE":[],"Chiplet":[],"Pakage":[]}
 		self.parallel_select, self.parallel_type = config_parallel_type(chiplet_parallel, core_parallel)
@@ -211,7 +213,23 @@ class GaEncode:
 			parallel_num_set.append(p2)
 			size_i[d1] = math.ceil(size_i[d1]/p1)
 			size_i[d2] = math.ceil(size_i[d2]/p2)
-			d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet",self.parallel_select, self.parallel_type)
+			if self.chiplet_parallel == "P_stable":
+				d1 = 0
+				d2 = 0
+				p1 = 16
+				p2 = 1
+			elif self.chiplet_parallel == "K_stable":
+				d1 = 3
+				d2 = 3
+				p1 = 16
+				p2 = 1
+			elif self.chiplet_parallel == "PK_stable":
+				d1 = 0
+				d2 = 3
+				p1 = 4
+				p2 = 4
+			else:
+				d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet",self.parallel_select, self.parallel_type)
 			parallel_dim_set.append(d1)
 			parallel_dim_set.append(d2)
 			parallel_num_set.append(p1)
