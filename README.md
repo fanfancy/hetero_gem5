@@ -39,7 +39,7 @@ nnparser_ME_hetero：用于支持noc+nop的多引擎架构仿真。
 
 nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
 - mesh_hetero.py 带有noc+nop router拓扑的实现。
-- randomTest_noc_nop.py 随机生成mapping方案并测试，可以在这里配置硬件、卷积参数。
+- randomTest_intralayer.py 层内性能预测。
 - config.py 通用的不常修改的参数。
 - single_engine_predict_noc_nop.py 适用于baseline架构下的性能预测。
 
