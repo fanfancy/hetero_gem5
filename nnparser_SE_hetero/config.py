@@ -1,9 +1,13 @@
-nop_bandwidth 	= 28				#Gb/s   # scale to 500Mhz (simba 100Gb/s 1.8Ghz)
-noc_bandwidth 	= 17				#Gb/s 	# scale to 500Mhz (simba 68Gb/s  2Ghz)
+ddr_bandwidth	= 150  				# Gbs
+nop_bandwidth 	= 100				# Gb/s  # (simba 100Gb/s 1.8Ghz)
+noc_bandwidth 	= 68				# Gb/s 	# (simba 68Gb/s  2Ghz)
 act_wgt_width  	= 8 				# bit   # same with NNbaton
 psum_width		= 24				# bit 	# same with NNbaton
-PE_freq 		= 0.5				# Ghz	# NNbaton 500Mhz
+PE_freq 		= 1					# Ghz	# NNbaton 500Mhz
+compuation_ability = 128			# Tops
+MAC_NUM			= compuation_ability*1024/PE_freq/2
 noc_link_width = noc_bandwidth / PE_freq # bit
+ddr_link_width = ddr_bandwidth / PE_freq # bit
 neu_per_flit_act_wgt = int ( noc_link_width / act_wgt_width ) 
 neu_per_flit_psum = int ( noc_link_width  / psum_width )
 flit_per_pkt = 5
@@ -29,6 +33,7 @@ arae_nop_router = 42 * 1000			# um^2 from simba
 buffer_noc_router = 27 * 1000		# um^2 from simba
 
 ## applications
+BATCH_SIZE = 128 					#TODO 目前还没有加上
 vgg16_conv1 = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3,"stride":1}
 vgg16_conv12 =  {"P":16,"Q":16,"C":512,"K":512,"R":3,"S":3,"stride":1} # 原本是14
 resnet50_conv1 =  {"P":112,"Q":112,"C":3,"K":64,"R":7,"S":7,"stride":2}

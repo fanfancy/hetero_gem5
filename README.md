@@ -3,6 +3,7 @@
   wgt_tag=1001; act_tag=1002; out_tag=1003  
 - [x] 单引擎：read output partial sum
 - [x] code refactory: 统一文件读入hardware参数和conv参数 
+- [ ] 增加不同数据流配置？
 - [ ] 拓扑：hetero_mesh_nopRouter 参数从脚本中传进来，而不要写死
 ---
 # hetero_gem5
@@ -35,6 +36,12 @@ nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
 - mesh_hetero.py 带有noc+nop router拓扑的实现。
 - randomTest_noc_nop.py 随机生成mapping方案并测试，可以在这里配置硬件、卷积参数。
 - config.py 通用的不常修改的参数。
+
+粒度探索部分
+- run_granularity_model.py 多进程run所有模型的所有层
+- randomTest_noc_nop_granularity_model.py 包括探索空间定义和单层探索程序
+- single_engine_predict_granularity.py 具体的层内能量和延迟计算（专用于粒度探索）
+
 
 ## Run 多引擎
 依据需求修改nn_parser_CCASM_hetero/run_configs.py.

@@ -97,6 +97,7 @@ def calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partit
 
 	energy_MAC = P*Q*K*C*R*S * MAC_energy_ratio
 	compuation_num = runtimeP*runtimeQ*runtimeK*runtimeC*runtimeR*runtimeS
+	compuation_redundance = compuation_num / (P*Q*K*C*R*S)
 	compuation_cycles = compuation_num/runtimeCoreNum/runtimeChipNum/PC0/PK0
 	#print ("compuation_num=",compuation_num)
 	#print ("compuation_cycles=",compuation_cycles)
@@ -386,8 +387,31 @@ def calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partit
 	energy_L2_list = [energy_wr_opt_L2, energy_rd_opt_L2, energy_rd_wgt_L2, energy_rd_act_L2]
 	energy_die2die = 0;	energy_core2core = 0
 	assert(DIE2DIE_energy_ratio!=NOC_energy_ratio)
+	if (if_out_final[data_flow[ol1_cp_id]]!=1):
+		L2_traffic = [core_neu_num_rd_opt/core_neu_num_wr_opt, core_neu_num_rd_act/core_neu_num_wr_opt/2, core_neu_num_rd_wgt/core_neu_num_wr_opt/2]
+	else:
+		L2_traffic = [core_neu_num_rd_opt/core_neu_num_wr_opt, core_neu_num_rd_act/core_neu_num_wr_opt, core_neu_num_rd_wgt/core_neu_num_wr_opt]
 	
+	# 初步计算degrade！！
+	core_degrade_rd_opt = core_neu_num_rd_opt * psum_width / compuation_cycles / noc_link_width
+	if (if_out_final[data_flow[ol1_cp_id]]!=1): 
+		core_degrade_wr_opt = core_neu_num_wr_opt * psum_width / compuation_cycles / noc_link_width
+	else:
+		core_degrade_wr_opt = core_neu_num_wr_opt * act_wgt_width / compuation_cycles / noc_link_width
+	core_degrade_rd_act = core_neu_num_rd_act * act_wgt_width / compuation_cycles / noc_link_width
+	core_degrade_rd_wgt = core_neu_num_rd_wgt * act_wgt_width / compuation_cycles / noc_link_width
 
+
+	chip_degrade_rd_opt = chip_neu_num_rd_opt * psum_width / compuation_cycles / ddr_link_width
+	if (if_out_final[data_flow[ol2_cp_id]]!=1): 
+		chip_degrade_wr_opt = chip_neu_num_wr_opt * psum_width / compuation_cycles / ddr_link_width
+	else:
+		chip_degrade_wr_opt = chip_neu_num_wr_opt * act_wgt_width / compuation_cycles / ddr_link_width
+	chip_degrade_rd_act = chip_neu_num_rd_act * act_wgt_width / compuation_cycles / ddr_link_width
+	chip_degrade_rd_wgt = chip_neu_num_rd_wgt * act_wgt_width / compuation_cycles / ddr_link_width
+
+	degrade_list = [core_degrade_rd_opt, core_degrade_wr_opt, core_degrade_rd_act, core_degrade_rd_wgt, chip_degrade_rd_opt, chip_degrade_wr_opt, chip_degrade_rd_act, chip_degrade_rd_wgt]
+	
 	return(compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
-		energy_dram_list, energy_L2_list,energy_L1_list, energy_MAC,energy_die2die_in_layer)
+		energy_dram_list, energy_L2_list,energy_L1_list, energy_MAC,energy_die2die_in_layer, L2_traffic,compuation_redundance, degrade_list)
 
