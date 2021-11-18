@@ -16,6 +16,11 @@ This repo is developed based on gem5 v20.1.0.
 <img src="https://github.com/fanfancy/hetero_gem5/blob/main/img/baseline_noc_nop.png" width="800" alt="baseline_arch"/><br/>
 </div>
 
+架构更新：每个chiplet有单独的DRAM
+<div align=center>
+<img src="https://github.com/fanfancy/hetero_gem5/blob/main/img/chiplet.png" width="600" alt="new_arch"/><br/>
+</div>
+
 ## Special Support for noc+nop simulation
 - gem5/configs/topologies/hetero_mesh.py 支持仿真link wdith不同的mesh，实际仿真中无效果。(:exclamation:不再使用了)
 - gem5/configs/topologies/hetero_mesh_nopRouter.py 支持仿真noc+nop router,具体配置信息需要在.py中手动配置。脚本中写法如下:
@@ -36,12 +41,15 @@ nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
 - mesh_hetero.py 带有noc+nop router拓扑的实现。
 - randomTest_noc_nop.py 随机生成mapping方案并测试，可以在这里配置硬件、卷积参数。
 - config.py 通用的不常修改的参数。
+- single_engine_predict_noc_nop.py 适用于baseline架构下的性能预测。
 
 粒度探索部分
 - run_granularity_model.py 多进程run所有模型的所有层
 - randomTest_noc_nop_granularity_model.py 包括探索空间定义和单层探索程序
 - single_engine_predict_granularity.py 具体的层内能量和延迟计算（专用于粒度探索）
 
+多DRAM架构
+- single_engine_predict_intralayer.py 新架构下的性能预测。
 
 ## Run 多引擎
 依据需求修改nn_parser_CCASM_hetero/run_configs.py.

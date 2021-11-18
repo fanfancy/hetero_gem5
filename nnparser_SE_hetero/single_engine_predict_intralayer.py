@@ -429,63 +429,23 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	# 对chip构建通信需求
-	bits_per_packet = flit_per_pkt * noc_link_width #全部都是按照noc link width计算的，只有计算link负载时候才转换
+	dram_to_L2_F_cur = L2_to_DRAM_F_cur = 0
 	# 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
 	bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
-	for item in act_chip_dict:
-		dst_list = act_chip_dict[item]
-		if if_multicast == 0:
-			for dst in dst_list:
-				for link in route_table[(dram_node + 1000, dst + 1000)]:
-					F_cur[link] += ( bw_needed / bw_scales[link] )
-					link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_act
-		elif if_multicast == 1:
-			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
-			for link in link_set:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_act
-
+	dram_to_L2_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
+	
 	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
-	for item in wgt_chip_dict:
-		dst_list = wgt_chip_dict[item]
-		if if_multicast == 0:
-			for dst in dst_list:
-				for link in route_table[(dram_node + 1000, dst + 1000)]:
-					F_cur[link] += ( bw_needed / bw_scales[link] )
-					link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_wgt
-		elif if_multicast == 1:
-			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
-			for link in link_set:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_wgt
+	dram_to_L2_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
 
 	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
-	for item in out_chip_dict:
-		dst_list = out_chip_dict[item]
-		if if_multicast == 0:
-			for dst in dst_list:
-				for link in route_table[(dram_node + 1000, dst + 1000)]:
-					F_cur[link] += ( bw_needed / bw_scales[link] )
-					link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_opt
-		elif if_multicast == 1:
-			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
-			for link in link_set:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_opt
+	dram_to_L2_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
 
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
-	for item in out_chip_dict:
-		dst_list = out_chip_dict[item]
-		for dst in dst_list:              #写output不存在多播
-			for link in route_table[(dst + 1000, dram_node+1000)]:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_wr_opt
+	L2_to_DRAM_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
 
-
-	if (max(F_cur.values()) < 1):
+	degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur)
+	if (degrade_ratio < 1):
 			degrade_ratio = 1
-	else:
-		degrade_ratio = max(F_cur.values()) 
 	#print ("F_cur",F_cur)
 	#print ("degrade_ratio",degrade_ratio)
 	runtime_calNum = runtimeP*runtimeQ*runtimeR*runtimeS*runtimeC*runtimeK
@@ -840,62 +800,23 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 				F_cur[link] += ( bw_needed / bw_scales[link] )
 
 	# 对chip构建通信需求
-	bits_per_packet = flit_per_pkt * noc_link_width
+	dram_to_L2_F_cur = L2_to_DRAM_F_cur = 0
 	# 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
 	bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
-	for item in act_chip_dict:
-		dst_list = act_chip_dict[item]
-		if if_multicast == 0:
-			for dst in dst_list:
-				for link in route_table[(dram_node + 1000, dst + 1000)]:
-					F_cur[link] += ( bw_needed / bw_scales[link] )
-					link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_act
-		elif if_multicast == 1:
-			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
-			for link in link_set:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_act
-
+	dram_to_L2_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
+	
 	bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
-	for item in wgt_chip_dict:
-		dst_list = wgt_chip_dict[item]
-		if if_multicast == 0:
-			for dst in dst_list:
-				for link in route_table[(dram_node + 1000, dst + 1000)]:
-					F_cur[link] += ( bw_needed / bw_scales[link] )
-					link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_wgt
-		elif if_multicast == 1:
-			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
-			for link in link_set:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_wgt
+	dram_to_L2_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
 
 	bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
-	for item in out_chip_dict:
-		dst_list = out_chip_dict[item]
-		if if_multicast == 0:
-			for dst in dst_list:
-				for link in route_table[(dram_node + 1000, dst + 1000)]:
-					F_cur[link] += ( bw_needed / bw_scales[link] )
-					link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_opt
-		elif if_multicast == 1:
-			link_set = simple_multicast(dram_node + 1000, [dst + 1000 for dst in dst_list], route_table) 
-			for link in link_set:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_rd_opt
+	dram_to_L2_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
 
 	bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
-	for item in out_chip_dict:
-		dst_list = out_chip_dict[item]
-		for dst in dst_list:              #写output不存在多播
-			for link in route_table[(dst + 1000, dram_node+1000)]:
-				F_cur[link] += ( bw_needed / bw_scales[link] )
-				link_energy[link] += link_energy_ratio[link] * bits_per_packet * chip_pkt_num_wr_opt
+	L2_to_DRAM_F_cur += bw_needed / (ddr_bandwidth/noc_bandwidth)
 
-	if (max(F_cur.values()) < 1):
-			degrade_ratio = 1
-	else:
-		degrade_ratio = max(F_cur.values()) 
+	degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur)
+	if (degrade_ratio < 1):
+			degrade_ratio = 1 
 	print ("F_cur",F_cur)
 	print ("degrade_ratio",degrade_ratio)
 
