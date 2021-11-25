@@ -122,15 +122,15 @@ if __name__ == '__main__':
 	filename = './randomTest_result_'+APP+'_'+str(HW_param["Chiplet"])+'_'+str(HW_param["PE"])+'.xls'
 
 	# --- 生成noc-nop结构图
-	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])
-	debug=0
+	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = 'Mesh')
+	debug = 0
 	if_multicast = 1
 	chiplet_parallel = "P_K_PK"		# choices: "Pq" "All" "Channel" "Hybrid" "P_K_PK" 
 	assert (chiplet_parallel == "P_K_PK") # to simplify communication between chips
 	core_parallel = "All"
 	GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel)
 
-	iterTime = 5 	# run 1w random mapping exploration
+	iterTime = 10000 	# run 1w random mapping exploration
 	fitness_min_ran = 0
 	index = range(iterTime)
 
@@ -143,6 +143,7 @@ if __name__ == '__main__':
 		print("###### test iteration = ",i)
 		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
 		print(fitness_min_ran_list[len(fitness_min_ran_list)-1])
+		print('final = ', compuation_cycles_1 * degrade_ratio_1)
 		f = open("./random_test_record.txt",'a')
 		print("###### test iteration = ",i, file = f)
 		print("fitness:",fitness_min_ran_list[len(fitness_min_ran_list)-1], file=f)
