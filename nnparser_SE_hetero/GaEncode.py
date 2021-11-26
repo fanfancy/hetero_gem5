@@ -169,7 +169,7 @@ class GaEncode:
 		print(self.NoC_node_offset)
 		print(self.NoP2NoCnode)
 
-	def setmappingSet(self, height, lenth, set1, set2):
+	def setmappingSet(self, height, lenth, set1, set2, ol2_node = A_W_offset['o']):
 		num = height * lenth
 		assert(num == set1*set2)
 		list1 = {}
@@ -177,7 +177,7 @@ class GaEncode:
 		node_list = []
 		ID = 0
 		for i in range(num):
-			if i % lenth == 0:
+			if i % lenth == ol2_node:
 				ID += 1
 			node_list.append(ID)
 			ID += 1
