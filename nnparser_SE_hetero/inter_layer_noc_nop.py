@@ -7,7 +7,7 @@ import copy
 from enum import Enum
 from matplotlib import pyplot as plt
 import openpyxl
-from config import neu_per_flit_act_wgt
+from config import *
 
 def getChipletID(p,q,k,dim_mapping_seq, debug_flag = 0):
 	if debug_flag == 0:
@@ -173,7 +173,7 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, paralle
 			if chip_id_i not in comm_inter_layer_dict_i_o:
 				comm_inter_layer_dict_i_o[chip_id_i] = {}
 			comm_inter_layer_dict_i_o[chip_id_i][chip_id] = comm_dict[chip_id_i]
-
+			
 	comm_num_dict = {}
 	comm_type_dict = {"uni-cast":0, "multi-cast":0, "broadcast":0}
 	comm_type_times_dict = {"uni-cast":0, "multi-cast":0, "broadcast":0}
@@ -286,13 +286,15 @@ def setRouteTable(NOC_NODE_NUM, NoC_w):
 	#print(route_table)
 	return route_table, F
 
-def calDegrateRatio(F,routeTable, commDict):
+def calCommCycle(F,routeTable, commDict):
 	F_cur=F.copy()
+
+	link_comm_num_sum = 0
 
 	for send_id in commDict:
 		for packet in commDict[send_id]:
 			commNum = commDict[send_id][packet][0]
-			commFlitNum = math.ceil(commNum / neu_per_flit_act_wgt)
+			commFlitNum = math.ceil(commNum / neu_per_flit_act_nop)
 			dst_list = commDict[send_id][packet][1]
 			link_list = []
 			for dst_id in dst_list:
@@ -300,22 +302,32 @@ def calDegrateRatio(F,routeTable, commDict):
 					if link not in link_list:
 						link_list.append(link)
 						F_cur[link] += commFlitNum
+						link_comm_num_sum += commNum
 
-	worstCommNum = max(F_cur.values()) 
+	worstCommFlitNum = max(F_cur.values()) 
 	worstlinks = []
 	for item in F_cur:
 		if F_cur[item] == max(F_cur.values()): 
 			worstlinks.append(item)
 
-	#print ("F_cur",F_cur)
-	#print ("worstCommNum",worstCommNum)
-	#print(worstlinks)
-	return F_cur, worstCommNum, worstlinks
+	return F_cur, worstCommFlitNum, worstlinks, link_comm_num_sum
 
 def getCalCycle(chiplet_num, network_param_2, PENoCNum):
 	calNum = network_param_2["P"] * network_param_2["Q"] * network_param_2["K"] * network_param_2["C"] * network_param_2["R"] * network_param_2["S"]
 	CalCycle = math.ceil(calNum / PENoCNum / chiplet_num)
 	return CalCycle
+
+def calCommEnergy(link_comm_num_sum, comm_type_dict):
+	d2d_comm_num = link_comm_num_sum # act num
+	d2d_energy = d2d_comm_num * act_wgt_width * DIE2DIE_energy_ratio
+
+	dram_access_num = 0
+	for i in comm_type_dict:
+		dram_access_num += comm_type_dict[i]
+	#print(comm_type_dict)
+	#print(dram_access_num)
+	dram_access_energy = dram_access_num * act_wgt_width * DRAM_energy_ratio
+	return d2d_energy, dram_access_energy
 
 def getInterLayer(network_param_2, parallel_1, parallel_2, NOC_NODE_NUM, NoC_w):
 	dim_seq_1 = ["K","P","Q"]
@@ -326,9 +338,15 @@ def getInterLayer(network_param_2, parallel_1, parallel_2, NOC_NODE_NUM, NoC_w):
 	# 拓扑构建routing table
 	routeTable, F = setRouteTable(NOC_NODE_NUM, NoC_w)
 
-	# 计算链路通信量
-	F_final, worstCommNum, worstlinks = calDegrateRatio(F,routeTable, comm_num_dict)
-	return worstCommNum, chiplet_num
+	# 计算链路通信量-delay
+	F_final, worstCommFlitNum, worstlinks, link_comm_num_sum = calCommCycle(F,routeTable, comm_num_dict)
+
+	# 计算energy
+	d2d_e , dram_e = calCommEnergy(link_comm_num_sum, comm_type_dict)
+
+	edp = 2 * (d2d_e + dram_e) * worstCommFlitNum / freq_1G / PE_freq
+
+	return worstCommFlitNum, d2d_e , dram_e, edp
 
 if __name__ == '__main__':
 
@@ -339,14 +357,17 @@ if __name__ == '__main__':
 
 	# 1表示前一层，2表示当前层
 	#network_param_1 = {"P":224,"Q":224,"C":3,"K":64,"R":3,"S":3}
-	#network_param_2 = {"P":224,"Q":224,"C":64,"K":64,"R":3,"S":3, "stride":1, "padding":1}
-	network_param_2 = {"H":7,"M":7, "P":7,"Q":7,"C":512,"K":2048,"R":1,"S":1, "stride":1, "padding":0}
+	network_param_2 = {"H":56,"M":56, "P":56,"Q":56,"C":64,"K":64,"R":1,"S":1, "stride":1, "padding":0}
+	#network_param_2 = {"H":7,"M":7, "P":7,"Q":7,"C":512,"K":2048,"R":1,"S":1, "stride":1, "padding":0}
 	
 
 	#parallel_type_1 = {"P":{"P":16,"Q":1,"K":1},'Q':{"P":1,"Q":16,"K":1},'K':{"P":1,"Q":1,"K":16},"PQ":{"P":4,"Q":4,"K":1},'PK':{"P":4,"Q":1,"K":4},'QK':{"P":1,"Q":4,"K":4}}
 	#parallel_type_2 = {"P":{"P":16,"Q":1,"K":1},'Q':{"P":1,"Q":16,"K":1},'K':{"P":1,"Q":1,"K":16},"PQ":{"P":4,"Q":4,"K":1},'PK':{"P":4,"Q":1,"K":4},'QK':{"P":1,"Q":4,"K":4}}
-	parallel_type_1 = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
-	parallel_type_2 = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
+	#parallel_type_1 = {'K':{"P":1,"Q":1,"K":16},"P":{"P":16,"Q":1,"K":1},'PK':{"P":4,"Q":1,"K":4}}
+	#parallel_type_2 = {'K':{"P":1,"Q":1,"K":16},"P":{"P":16,"Q":1,"K":1},'PK':{"P":4,"Q":1,"K":4}}
+
+	parallel_type_2 = {"P":{"P":16,"Q":1,"K":1}}
+	parallel_type_1 = {'P':{"P":16,"Q":1,"K":1}}
 
 	times = 0
 	for type2 in parallel_type_2:
@@ -363,25 +384,37 @@ if __name__ == '__main__':
 
 			# 通信量计算
 			comm_num_dict, comm_type_dict, comm_type_times_dict, chiplet_num = getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, 0)
-			
+			print("comm_num_dict", comm_num_dict)
+			print("comm_type_dict", comm_type_dict)
+			print("comm_type_times_dict", comm_type_times_dict)
 			# 拓扑构建routing table
 			routeTable, F = setRouteTable(NOC_NODE_NUM, NoC_w)
 
 			# 计算链路通信量
-			F_final, worstCommNum, worstlinks = calDegrateRatio(F,routeTable, comm_num_dict)
+			F_cur, worstCommFlitNum, worstlinks, link_comm_num_sum = calCommCycle(F,routeTable, comm_num_dict)
 			
+			print("F_cur", F_cur)
+			print("worstCommFlitNum", worstCommFlitNum)
+			print("worstlinks", worstlinks)
+			print("link_comm_num_sum", link_comm_num_sum)
 			# 计算片上计算时间
 			PENoCNum = 16*8*16
 			calCycle_noc = getCalCycle(chiplet_num, network_param_2, PENoCNum)
+			d2d_energy, dram_access_energy = calCommEnergy(link_comm_num_sum, comm_type_dict)
+
+			edp = 2 * (d2d_energy + dram_access_energy) * worstCommFlitNum / freq_1G / PE_freq
 			
-			excel_datas.append([chiplet_num, calCycle_noc, type1+"-"+type2, type1, type2, comm_type_times_dict["uni-cast"], comm_type_times_dict["multi-cast"], comm_type_times_dict["broadcast"], comm_type_dict["uni-cast"], comm_type_dict["multi-cast"], comm_type_dict["broadcast"] , worstCommNum, str(worstlinks), str(F_final)])
+			print("d2d_energy", d2d_energy)
+			print("dram_access_energy", dram_access_energy)
+			print("edp ",edp)
+			#excel_datas.append([chiplet_num, calCycle_noc, type1+"-"+type2, type1, type2, comm_type_times_dict["uni-cast"], comm_type_times_dict["multi-cast"], comm_type_times_dict["broadcast"], comm_type_dict["uni-cast"], comm_type_dict["multi-cast"], comm_type_dict["broadcast"] , worstCommFlitNum, str(worstlinks), str(F_final)])
 			#print(comm_num_dict)
 			times += 1
 	
 	workbook = openpyxl.Workbook()
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
-	column_tite = ["chiplet_num", "calCycle_noc", "parallel-type","parallel-type-i","parallel-type-i+1", "times-uni-cast","times-multi-cast","times-broadcast","num-uni-cast","num-multi-cast","num-broadcast", "worstCommNum", "worstlinks", "F"]
+	column_tite = ["chiplet_num", "calCycle_noc", "parallel-type","parallel-type-i","parallel-type-i+1", "times-uni-cast","times-multi-cast","times-broadcast","num-uni-cast","num-multi-cast","num-broadcast", "worstCommFlitNum", "worstlinks", "F"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
@@ -389,6 +422,6 @@ if __name__ == '__main__':
 		for col, column_data in enumerate(data):
 			sheet.cell(row+2, col+1, column_data)
 
-	setname = str(network_param_2["P"]) + "_" + str(network_param_2["Q"]) + "_" + str(network_param_2["K"]) + "_" + str(network_param_2["C"]) + "_" + str(NoC_w) + "_" + str(NOC_NODE_NUM)
+	#setname = str(network_param_2["P"]) + "_" + str(network_param_2["Q"]) + "_" + str(network_param_2["K"]) + "_" + str(network_param_2["C"]) + "_" + str(NoC_w) + "_" + str(NOC_NODE_NUM)
 
-	workbook.save("./test/1116/inter_layer_output_"+setname+"_topo.xls")
+	#workbook.save("./test/1116/inter_layer_output_"+setname+"_topo.xls")

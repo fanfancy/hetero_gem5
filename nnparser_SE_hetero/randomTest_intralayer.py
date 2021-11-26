@@ -17,6 +17,9 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 	degrade_ratio_list = []
 	excel_datas = []
 
+	edp_res_min = 0
+	energy_min = 0
+	delay_min = 0
 	fitness_min_ran = 0
 	fitness_list = []
 	fitness_min_ran_list = []
@@ -65,6 +68,11 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		print("degrade_ratio_1 = ",degrade_ratio_1)
 		print("######---------over")
 		print("")
+
+		if edp_res_min == 0 or edp_res < edp_res_min:
+			edp_res_min = edp_res
+			energy_min = e_sum
+			delay_min = delay
 		
 		#---生成task file
 	createTaskFile(for_list_1, act_wgt_dict_1, out_dict_1, parallel_dim_list_1, partition_list_1,GATest.network_param, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast)
@@ -89,61 +97,92 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 			sheet.cell(row+2, col+1, column_data)
 
 	workbook.save(filename)
-	return compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list
+	return edp_res_min, energy_min, delay_min
 
-if __name__ == '__main__':
+def getLayerParam(app_name):
+	layer_dict = {}
+	layer_name_list = []
+	f = open("./nn_input_noc_nop/" + app_name + ".txt")
 
-	APP = "VGG16_CONV1"
-	if APP == "VGG16_CONV1":
-		network_param = vgg16_conv1
-	elif APP == "VGG16_CONV12":
-		network_param = vgg16_conv12
-	elif APP == "resnet50_conv1":
-		network_param = resnet50_conv1
-	elif APP == "resnet50_res2a_branch2a":
-		network_param = resnet50_res2a_branch2a
-	elif APP == "resnet50_res2a_branch2b":
-		network_param = resnet50_res2a_branch2b
-	else:
-		print ("fatal: APP not defined")
-		sys.exit()
+	print("network model ----- " + app_name + " -------------")
 
-	HW_param = {"Chiplet":[4,2],"PE":[4,4],"intra_PE":{"C":8,"K":16}}       	# from granularity exploration
+	lines = f.readlines()
+	for line in lines:
+		if line.startswith("#"):
+			pass
+		elif line.startswith("*"):
+			line_item = line.split(" ")
+			for i in line_item:
+				if i == "*" or i == "end":
+					pass
+				else:
+					layer_name_list.append(i)
+		else:
+			line_item = line.split(" ")
+			layer_name = line_item[0]
+			if layer_name in layer_name_list:
+				P = int(line_item[8])
+				Q = int(line_item[9])
+				C = int(line_item[3])
+				K = int(line_item[7])
+				R = int(line_item[4])
+				S = int(line_item[4])
+				stride = int(line_item[5])
+				layer_dict[layer_name] = {"P":P,"Q":Q,"C":C,"K":K,"R":R,"S":S, "stride":stride}
+				print(str(layer_name) + " : " + str(layer_dict[layer_name]))
+	f.close()
+	return layer_dict
+
+def randomTest_NoC(app_name, chiplet_parallel):
+	# --- 硬件参数
+	HW_param = {"Chiplet":[4,4],"PE":[4,4],"intra_PE":{"C":16,"K":16}}       	# from granularity exploration
 	# memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	from nnbaton
-	memory_param = {"OL1":4 ,"OL2":64,"AL1":8,"AL2":128,"WL1":32,"WL2":512}		# from granularity exploration
-	
+	memory_param = {"OL1":8 ,"OL2":128,"AL1":16,"AL2":256,"WL1":64,"WL2":1024}		# from granularity exploration
 	NoC_w = HW_param["PE"][1] + 1
 	NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
 	NoP_w = HW_param["Chiplet"][1] + 1
 	NOP_SIZE = NoP_w * HW_param["Chiplet"][0]
-	
 	TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth}
 	
-	filename = './randomTest_result_'+APP+'_'+str(HW_param["Chiplet"])+'_'+str(HW_param["PE"])+'.xls'
-
 	# --- 生成noc-nop结构图
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"])
 	debug=0
 	if_multicast = 1
-	chiplet_parallel = "P_K_PK"		# choices: "Pq" "All" "Channel" "Hybrid" "P_K_PK" 
-	assert (chiplet_parallel == "P_K_PK") # to simplify communication between chips
 	core_parallel = "All"
-	GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel)
 
-	iterTime = 5 	# run 1w random mapping exploration
-	fitness_min_ran = 0
-	index = range(iterTime)
+	# --- 神经网络参数
+	layer_dict = getLayerParam(app_name)
 
-	random_test_iter = 1
-	f = open("./random_test_record.txt",'w')
-	GATest.printBasicSetFile(f)
+	edp_res_min_dict = {}
+	energy_min_dict = {}
+	delay_min_dict = {}
+
+	for layer_name in layer_dict:
+		# ---输出文件
+		filename = './test/intra_layer_edp_per_layer/'+app_name+"_"+layer_name+"_"+chiplet_parallel+'.xls'
+		network_param = layer_dict[layer_name]
+		GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel)
+
+		iterTime = 10000 	# run 1w random mapping exploration
+
+		random_test_iter = 1
+
+		for i in range(random_test_iter):
+			edp_res_min, energy_min, delay_min = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
+			edp_res_min_dict[layer_name] = edp_res_min
+			energy_min_dict[layer_name] = energy_min
+			delay_min_dict[layer_name] = delay_min
+	file_1 = "./test/intra_layer_edp/" + app_name + "_" + chiplet_parallel + ".txt"
+	f = open(file_1,'w')
+	print(edp_res_min_dict, file=f)
+	print(energy_min_dict, file=f)
+	print(delay_min_dict, file=f)
 	f.close()
 
-	for i in range(random_test_iter):
-		print("###### test iteration = ",i)
-		compuation_cycles_1,degrade_ratio_1, fitness_min_ran_list = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
-		print(fitness_min_ran_list[len(fitness_min_ran_list)-1])
-		f = open("./random_test_record.txt",'a')
-		print("###### test iteration = ",i, file = f)
-		print("fitness:",fitness_min_ran_list[len(fitness_min_ran_list)-1], file=f)
-		f.close()
+if __name__ == '__main__':
+	if str(sys.argv[1]) == "multi":
+		randomTest_NoC(str(sys.argv[2]), "P_stable")
+		randomTest_NoC(str(sys.argv[2]), "PK_stable")
+		randomTest_NoC(str(sys.argv[2]), "K_stable")
+	if str(sys.argv[1]) == "uni":
+		randomTest_NoC(str(sys.argv[2]), str(sys.argv[3]))
