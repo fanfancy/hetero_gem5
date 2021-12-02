@@ -279,8 +279,47 @@ def noc_test(app_name):
 	print(line3, file = f)
 	print(line1, file = f)
 
+def get_set_comm_num_test(app_name):
+
+	para_type = ["P","K","PK"]
+	dim_seq_1 = ["K","P","Q"]
+	dim_seq_2 = ["K","P","Q"]
+	parallel_type_1 = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
+	parallel_type_2 = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
+
+	file_name = "./test/nop_set_comm/" + app_name + "_set_comm.txt"
+	f = open(file_name,'w')
+	line = "app_name " + app_name + "--------------------------------------"
+	print(line, file = f)
+
+	# --- 获得神经网络参数
+	layer_dict, layer_id_list = getLayerParam(app_name)
+	
+	for i in reversed(layer_id_list):
+		if i < layer_id_list[-1]:
+			network_param_2 = layer_dict[i+1]
+
+			line = "layer " + str(i) + "-------------------------"
+			print(line, file = f)
+
+			for para_type_1 in para_type:
+				for para_type_2 in para_type:
+					parallel_1 = parallel_type_1[para_type_1]
+					parallel_2 = parallel_type_2[para_type_2]
+					comm_num_dict, comm_type_dict, comm_type_times_dict, chiplet_num = getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, 0)
+					comm_chip_set_dict, comm_set_dict = getSetComm(comm_num_dict)
+					line0 = "parallel type : " + str(para_type_1) + " to " + str(para_type_2)
+					#line3 = "---initial_comm: " + str(comm_num_dict)
+					line1 = "---comm_chip_set_dict: " + str(comm_chip_set_dict)
+					line2 = "---comm_set_dict: " + str(comm_set_dict)
+					print(line0, file = f)
+					#print(line3, file = f)
+					print(line1, file = f)
+					print(line2, file = f)
+	f.close()
 
 if __name__ == '__main__':
 	app_name = str(sys.argv[1])
-	nop_noc_test(app_name)
-	noc_test(app_name)
+	#nop_noc_test(app_name)
+	#noc_test(app_name)
+	get_set_comm_num_test(app_name)

@@ -175,6 +175,7 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, paralle
 			comm_inter_layer_dict_i_o[chip_id_i][chip_id] = comm_dict[chip_id_i]
 			
 	comm_num_dict = {}
+	comm_set_dict = {} # 组间通信情况
 	comm_type_dict = {"uni-cast":0, "multi-cast":0, "broadcast":0}
 	comm_type_times_dict = {"uni-cast":0, "multi-cast":0, "broadcast":0}
 	for chip_id_i in comm_inter_layer_dict_i_o:
@@ -203,6 +204,45 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, paralle
 			comm_num_dict[chip_id_i][num] = [commNum, chip_id_list]
 			num += 1
 	return comm_num_dict, comm_type_dict,comm_type_times_dict, chiplet_num
+
+def getSetComm(comm_all , set_e_num = 4):
+	comm_chip_set_dict = {}
+	comm_set_dict = {}
+	for chip_id_i in comm_all:
+		set_id_i = int(chip_id_i / set_e_num)
+		if set_id_i not in comm_set_dict:
+			comm_set_dict[set_id_i] = {}
+		for packet_id in comm_all[chip_id_i]:
+			chip_id_list = comm_all[chip_id_i][packet_id][1];
+			packet_num = comm_all[chip_id_i][packet_id][0];
+			chip_id_list_set = []
+			set_id_list = []
+			for chip_id_o in chip_id_list:
+				set_id_o = int(chip_id_o / set_e_num)
+				if set_id_o == set_id_i:
+					pass
+				else:
+					chip_id_list_set.append(chip_id_o)
+					if set_id_o not in set_id_list:
+						set_id_list.append(set_id_o)
+			if len(chip_id_list_set) > 0:
+				if chip_id_i not in comm_chip_set_dict:
+					comm_chip_set_dict[chip_id_i] = {}
+				chip_id_list_set_str = str(chip_id_list_set)
+				if chip_id_list_set_str not in comm_chip_set_dict[chip_id_i]:
+					comm_chip_set_dict[chip_id_i][chip_id_list_set_str] = packet_num
+				else:
+					comm_chip_set_dict[chip_id_i][chip_id_list_set_str] += packet_num
+			if len(set_id_list) > 0:
+				set_id_list = sorted(set_id_list)
+				set_id_list_str = str(set_id_list)
+				if set_id_list_str not in comm_set_dict[set_id_i]:
+					comm_set_dict[set_id_i][set_id_list_str] = packet_num
+				else:
+					comm_set_dict[set_id_i][set_id_list_str] += packet_num
+
+	return comm_chip_set_dict, comm_set_dict
+
 
 def setRouteTable(NOC_NODE_NUM, NoC_w):
 	# mesh 4*4
@@ -334,7 +374,7 @@ def getInterLayer(network_param_2, parallel_1, parallel_2, NOC_NODE_NUM, NoC_w):
 	dim_seq_2 = ["K","P","Q"]
 	# 通信量计算
 	comm_num_dict, comm_type_dict, comm_type_times_dict, chiplet_num = getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, 0)
-			
+	
 	# 拓扑构建routing table
 	routeTable, F = setRouteTable(NOC_NODE_NUM, NoC_w)
 
