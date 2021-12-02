@@ -27,6 +27,15 @@ out_tag =  (int(1003))
 # memory_param = {"OL1":,"OL2":,"AL1":,"AL2":,"WL1":,"WL2":}
 # 卷积配置 从basicParam_noc_nop中import进来
 
+def calPSumAllReduce(output_num, chiplet_num, PC3):
+    output_flit_num = int(output_num / neu_per_flit_psum_nop)
+    delay = (output_flit_num / chiplet_num) * 2 * (PC3-1)
+    d2d_energy = (output_num * psum_width / chiplet_num) * 2 * (PC3-1) * chiplet_num * DIE2DIE_energy_ratio
+    dram_energy = (output_num * psum_width / chiplet_num) * PC3 * 2 * chiplet_num * DRAM_energy_ratio
+    energy_list = [d2d_energy, dram_energy, d2d_energy+dram_energy]
+    return delay, energy_list
+
+
 def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast):
     route_table = NoC_param["route_table"]
     bw_scales = NoC_param["bw_scales"]
@@ -62,8 +71,8 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     Q1,Q2,Q3 = partition_list["Q"][0],partition_list["Q"][1],partition_list["Q"][2]
     C1,C2,C3 = partition_list["C"][0],partition_list["C"][1],partition_list["C"][2]
     K1,K2,K3 = partition_list["K"][0],partition_list["K"][1],partition_list["K"][2]
-    PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
-    PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
+    PP2,PQ2,PC2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2],parallel_dim_list[0][3]
+    PP3,PQ3,PC3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2],parallel_dim_list[1][3]
     PK0 = HW_param["intra_PE"]["K"]
     PC0 = HW_param["intra_PE"]["C"]
 
@@ -92,11 +101,11 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     runtimeP = PP3*P3*PP2*P2*P1
     runtimeQ = PQ3*Q3*PQ2*Q2*Q1
     runtimeK = PK3*K3*PK2*K2*K1*PK0
-    runtimeC = C3*C2*C1*PC0
+    runtimeC = PC3*C3*PC2*C2*C1*PC0
     runtimeR = R # R S不拆分,在PE level的时序for参数里
     runtimeS = S
-    runtimeCoreNum = PK2*PQ2*PP2
-    runtimeChipNum = PP3*PQ3*PK3
+    runtimeCoreNum = PK2*PQ2*PP2*PC2
+    runtimeChipNum = PP3*PQ3*PK3*PC3
 
     assert(runtimeP>=P);assert(runtimeQ>=Q);assert(runtimeK>=K);assert(runtimeC>=C)
     assert(runtimeCoreNum <= CoreNum);assert(runtimeChipNum <= ChipNum)
@@ -163,10 +172,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         al2_need_Ppart = al1_need_Ppart * PP2
         al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride
         al2_need_P_final = al2_need_Ppart * stride + al2_need_Ppart - stride
-        al2_need = al1_need_CKpart * al2_need_Qpart * al2_need_Ppart
+        al2_need = al1_need_CKpart * al2_need_Qpart * al2_need_Ppart * PC2 #wxy add new , 不确定正不正确
         
         AL2_need[param] = al2_need #这里有点问题
-        WL2_need[param] = wl1_need * PK2 
+        WL2_need[param] = wl1_need * PK2  * PC2
 
     repeat = 1
     repeat_num = {}
@@ -480,6 +489,14 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         else:
             print ("FATAL: link's energy ratio is incorrect!")
             sys.exit()
+    if PC3 > 1:
+        output_num = runtimeP * runtimeQ * runtimeK
+        chiplet_num = runtimeChipNum
+        delay_psum, energy_psum_list = calPSumAllReduce(output_num, chiplet_num, PC3)
+    else:
+        delay_psum = 0
+        energy_psum_list = [0,0,0]
+
     worstlinks = []
     for item in F_cur:
         if F_cur[item] == degrade_ratio: 
@@ -490,7 +507,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
             worstlinks.append("L2toDRAM")
 
     return(degrade_ratio*compuation_cycles, degrade_ratio, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
-        energy_dram_list, energy_L2_list,energy_L1_list, energy_die2die, energy_MAC, worstlinks)
+        energy_dram_list, energy_L2_list,energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks)
 
 # end 性能测评
 
@@ -533,8 +550,8 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     Q1,Q2,Q3 = partition_list["Q"][0],partition_list["Q"][1],partition_list["Q"][2]
     C1,C2,C3 = partition_list["C"][0],partition_list["C"][1],partition_list["C"][2]
     K1,K2,K3 = partition_list["K"][0],partition_list["K"][1],partition_list["K"][2]
-    PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
-    PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
+    PP2,PQ2,PC2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2],parallel_dim_list[0][3]
+    PP3,PQ3,PC3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2],parallel_dim_list[1][3]
     PK0 = HW_param["intra_PE"]["K"]
     PC0 = HW_param["intra_PE"]["C"]
 
@@ -562,11 +579,13 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     runtimeP = PP3*P3*PP2*P2*P1
     runtimeQ = PQ3*Q3*PQ2*Q2*Q1
     runtimeK = PK3*K3*PK2*K2*K1*PK0
-    runtimeC = C3*C2*C1*PC0
+    runtimeC = PC3*C3*PC2*C2*C1*PC0
     runtimeR = R
     runtimeS = S
-    runtimeCoreNum = PK2*PQ2*PP2
-    runtimeChipNum = PP3*PQ3*PK3
+    runtimeCoreNum = PK2*PQ2*PP2*PC2
+    runtimeChipNum = PP3*PQ3*PK3*PC3
+    print("runtimeCoreNum ", runtimeCoreNum)
+    print("runtimeChipNum ", runtimeChipNum)
 
     assert(runtimeP>=P);assert(runtimeQ>=Q);assert(runtimeK>=K);assert(runtimeC>=C)
     assert(runtimeCoreNum <= CoreNum);assert(runtimeChipNum <= ChipNum)
@@ -630,10 +649,10 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
         al2_need_Ppart = al1_need_Ppart * PP2
         al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride
         al2_need_P_final = al2_need_Ppart * stride + al2_need_Ppart - stride
-        al2_need = al1_need_CKpart * al2_need_Qpart * al2_need_Ppart
+        al2_need = (al1_need_CKpart * al2_need_Qpart * al2_need_Ppart) * PC2
         
         AL2_need[param] = al2_need #这里有点问题
-        WL2_need[param] = wl1_need * PK2 
+        WL2_need[param] = wl1_need * PK2 * PC2
 
     repeat = 1
     repeat_num = {}

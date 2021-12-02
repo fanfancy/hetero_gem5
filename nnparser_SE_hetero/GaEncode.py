@@ -47,8 +47,10 @@ def setPartition(num, dim):
 	return list
 
 # 将P_num个并行量进行拆分，随机选两个维度d1、d2，以及对应的并行量p1、p2.
-def setParallel(P_num, level, parallel_select, parallel_type):
+def setParallel(P_num, level, parallel_select, parallel_type, size):
 	parallel_t = parallel_type[level]
+	if level == "Chiplet":
+		print("Chiplet parallel type ", parallel_t, " ", parallel_select[level])
 	list_p = setPartition_1(P_num, 2)
 	p1 = list_p[0]
 	p2 = list_p[1]
@@ -70,8 +72,13 @@ def setParallel(P_num, level, parallel_select, parallel_type):
 	else:
 		d1 = random.randint(0,dim-1)
 		d2 = random.randint(0,dim-1)
+		if d1 == d2:
+			p1 = p1 * p2
+			p2 = 1
 	d1 = parallel_select[level][d1]
 	d2 = parallel_select[level][d2]
+	p1 = min(p1, size[dim_list[d1]])
+	p2 = min(p2, size[dim_list[d2]])
 	return d1, d2, p1, p2
 
 # 只对并行量P_num拆分为p1、p2，不决定其维度
@@ -125,7 +132,7 @@ class GaEncode:
 		#Dim_result = {"P":[],"Q":[],"K":[],"C":[]}
 		#loop_order = {"PE":[],"Chiplet":[],"Pakage":[]}
 		self.parallel_select, self.parallel_type = config_parallel_type(chiplet_parallel, core_parallel)
-
+		
 	def getSize(self):
 		for i in self.intra_PE:
 			num = math.ceil(self.network_param[i] / self.intra_PE[i])
@@ -169,9 +176,15 @@ class GaEncode:
 		print(self.NoC_node_offset)
 		print(self.NoP2NoCnode)
 
+	# 获得并行下的节点分组情况
 	def setmappingSet(self, height, lenth, set1, set2, ol2_node = A_W_offset['o']):
 		num = height * lenth
-		assert(num == set1*set2)
+		print("height ",height)
+		print("lenth ",lenth)
+		print("num ",num)
+		print("set1 ", set1)
+		print("set2 ", set2)
+		assert(num >= set1*set2)
 		list1 = {}
 		list2 = {}
 		node_list = []
@@ -181,14 +194,13 @@ class GaEncode:
 				ID += 1
 			node_list.append(ID)
 			ID += 1
-		print(node_list)
-		for i in range(num):
+		for i in range(set1*set2):
 			set1_id = i // set2
 			if set1_id not in list1:
 				list1[set1_id] = []
 			list1[set1_id].append(node_list[i])
 
-		for i in range(num):
+		for i in range(set1*set2):
 			set2_id = i // set1
 			if set2_id not in list2:
 				list2[set2_id] = []
@@ -206,7 +218,7 @@ class GaEncode:
 
 		#---并行度拆分（空间并行）---
 		if Par_type == 4:
-			d1, d2, p1, p2 = setParallel(self.PEs, "PE",self.parallel_select, self.parallel_type)
+			d1, d2, p1, p2 = setParallel(self.PEs, "PE",self.parallel_select, self.parallel_type, self.size)
 			parallel_dim_set.append(d1)
 			parallel_dim_set.append(d2)
 			parallel_num_set.append(p1)
@@ -229,28 +241,13 @@ class GaEncode:
 				p1 = 4
 				p2 = 4
 			else:
-				d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet",self.parallel_select, self.parallel_type)
+				d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet",self.parallel_select, self.parallel_type, self.size)
 			parallel_dim_set.append(d1)
 			parallel_dim_set.append(d2)
 			parallel_num_set.append(p1)
 			parallel_num_set.append(p2)
 			size_i[d1] = math.ceil(size_i[d1]/p1)
 			size_i[d2] = math.ceil(size_i[d2]/p2)
-		elif Par_type == 3:
-			parallel_dim_set.append(3)
-			parallel_dim_set.append(2)
-			parallel_dim_set.append(3)
-			parallel_dim_set.append(2)
-			p1, p2 = setParallelNum(self.PEs)
-			parallel_num_set.append(p1)
-			parallel_num_set.append(p2)
-			size_i[3] = math.ceil(size_i[3]/p1)
-			size_i[2] = math.ceil(size_i[2]/p2)
-			p1, p2 = setParallelNum(self.Chiplets)
-			parallel_num_set.append(p1)
-			parallel_num_set.append(p2)
-			size_i[3] = math.ceil(size_i[3]/p1)
-			size_i[2] = math.ceil(size_i[2]/p2)
 
 		#---维度拆分（时间并行）---
 		ran1 = random.randint(0,2)
@@ -385,9 +382,27 @@ class GaEncode:
 				line = type_list[type] + " " + dim_list[dim] + " in [0 : " + str(num) + "):"
 				print(line)
 
+	def getActWgtSet(self, correlate_p1, correlate_p2, p1_set, p2_set):
+		dict = {}
+		if correlate_p1 == 0 and correlate_p2 == 0:
+			dict[0] = []
+			for set_id_p1 in p1_set:
+				dict[0] += p1_set[set_id_p1]
+		elif correlate_p1 == 1 and correlate_p2 == 0:
+			dict = p1_set
+		elif correlate_p1 == 0 and correlate_p2 == 1:
+			dict = p2_set
+		else:
+			node_num = 0
+			for set_id_p1 in p1_set:
+				for node_id in p1_set[set_id_p1]:
+					dict[node_num] = [node_id]
+					node_num += 1
+		return dict
+
 	# 获得计算核心对于act与wgt的共享情况
-	# para1是activation的组数，para2是weight的组数
-	def getPEDistribution(self, flag, height, lenth, set1, set2):
+	# p1_num, p2_num分别是并行维度1和2的数目
+	def getPEDistribution(self, flag, height, lenth, act_correlate, wgt_correlate, parallel_num):
 		act_PE_dict = {}
 		wgt_PE_dict = {}
 		act_set_type = "0"
@@ -401,11 +416,42 @@ class GaEncode:
 			act_PE_dict["send"] = {0:[0]}
 			wgt_PE_dict["send"] = {0:[0]}
 
+		#---获得p1，p2的列表
+		if len(parallel_num) == 0:
+			p1_num = 1
+			p2_num = 1
+		elif len(parallel_num) == 1:
+			p1_num = parallel_num[0]
+			p2_num = 1
+		else:
+			p1_num = parallel_num[0]
+			p2_num = parallel_num[1]
+		p1_dict, p2_dict = self.setmappingSet(height, lenth, p1_num, p2_num)
 		#---act recv节点列表---
-		act_PE_dict["recv"], wgt_PE_dict["recv"]= self.setmappingSet(height, lenth, set1, set2)
+		if len(act_correlate) == 0:
+			act_p1 = 0
+			act_p2 = 0
+			wgt_p1 = 0
+			wgt_p2 = 0
+		elif len(act_correlate) == 1:
+			act_p1 = act_correlate[0]
+			act_p2 = 0
+			wgt_p1 = wgt_correlate[0]
+			wgt_p2 = 0
+		else:
+			act_p1 = act_correlate[0]
+			act_p2 = act_correlate[1]
+			wgt_p1 = wgt_correlate[0]
+			wgt_p2 = wgt_correlate[1]
+
+		act_PE_dict["recv"] = self.getActWgtSet(act_p1, act_p2, p1_dict, p2_dict)
+		wgt_PE_dict["recv"] = self.getActWgtSet(wgt_p1, wgt_p2, p1_dict, p2_dict)
+
+		act_set_num = len(act_PE_dict["recv"])
+		wgt_set_num = len(wgt_PE_dict["recv"])
 		
-		act_set_type = "set_"+str(set1)+"e_"+str(set2)
-		wgt_set_type = "set_"+str(set2)+"e_"+str(set1)
+		act_set_type = "set_"+str(act_set_num)+"e_"+str(int(height * lenth / act_set_num))
+		wgt_set_type = "set_"+str(wgt_set_num)+"e_"+str(int(height * lenth / wgt_set_num))
 
 		return act_PE_dict, wgt_PE_dict, act_set_type, wgt_set_type
 
@@ -504,10 +550,10 @@ class GaEncode:
 		return list
 
 	# 获得输出特征图的数据节点通信关系
-	def getOutputDict(self):
-		rd_out_PE_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.PEs_h, self.PEs_w, self.PEs, 1)
+	def getOutputDict(self, runtimeCoreNum, runtimeChipNum):
+		rd_out_PE_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.PEs_h, self.PEs_w, [1,1], [1,1], [runtimeCoreNum, 1])
 		wr_out_PE_dict_temp = {"send":rd_out_PE_dict_temp["recv"],"recv":{0:[0]}}
-		rd_out_Chiplet_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.Chiplets_h, self.Chiplets_w, self.Chiplets, 1)
+		rd_out_Chiplet_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.Chiplets_h, self.Chiplets_w, [1,1], [1,1], [runtimeChipNum, 1])
 		wr_out_Chiplet_dict_temp = {"send":rd_out_Chiplet_dict_temp["recv"],"recv":{0:[0]}}
 
 		#if self.PEs == 16:
@@ -541,12 +587,11 @@ class GaEncode:
 		if_wgt_share_PE = {0:0,1:"0"}
 		if_act_share_Chiplet = {0:0,1:"0"}
 		if_wgt_share_Chiplet = {0:0,1:"0"}
-		act_share_PE = [1,1] # [组数, 组内元素数目]
-		wgt_share_PE = [1,1]
-		act_share_Chiplet = [1,1]
-		wgt_share_Chiplet = [1,1]
-		parallel_dim_list = {0:[1,1,1],1:[1,1,1]}
+		parallel_dim_list = {0:[1,1,1,1],1:[1,1,1,1]}
 		index_PQKC = [1,1,1,1]
+		act_correlate = {"chiplet":[], "PE":[]}
+		wgt_correlate = {"chiplet":[], "PE":[]}
+		parallel_set_dcit = {"chiplet":[], "PE":[]}
 		
 		for i in range(len(parse)):
 			for_type = parse[i][0]
@@ -576,43 +621,31 @@ class GaEncode:
 					wl1_ratio.append(1)
 				all_param.append(num)
 			elif for_type == 1:
-				if dim == 0:
-					parallel_dim_list[0][0] *= num
-				elif dim == 1:
-					parallel_dim_list[0][1] *= num
-				elif dim == 3:
-					parallel_dim_list[0][2] *= num
+				parallel_dim_list[0][dim] *= num
+				parallel_set_dcit["PE"].append(num)
 
 				if A_correlation[dim] == 0:
 					if_act_share_PE[0] = 1
-					act_share_PE[1] *= num
-				else:
-					act_share_PE[0] *= num
+
+				act_correlate["PE"].append(A_correlation[dim])
 				
 				if W_correlation[dim] == 0:
 					if_wgt_share_PE[0] = 1
-					wgt_share_PE[1] *= num
-				else:
-					wgt_share_PE[0] *= num
+
+				wgt_correlate["PE"].append(W_correlation[dim])
 			elif for_type == 2:
-				if dim == 0:
-					parallel_dim_list[1][0] *= num
-				elif dim == 1:
-					parallel_dim_list[1][1] *= num
-				elif dim == 3:
-					parallel_dim_list[1][2] *= num
+				parallel_dim_list[1][dim] *= num
+				parallel_set_dcit["chiplet"].append(num)
 
 				if A_correlation[dim] == 0:
 					if_act_share_Chiplet[0] = 1
-					act_share_Chiplet[1] *= num
-				else:
-					act_share_Chiplet[0] *= num
+
+				act_correlate["chiplet"].append(A_correlation[dim])
 
 				if W_correlation[dim] == 0:
 					if_wgt_share_Chiplet[0] = 1
-					wgt_share_Chiplet[1] *= num
-				else:
-					wgt_share_Chiplet[0] *= num
+					
+				wgt_correlate["chiplet"].append(W_correlation[dim])
 
 		out_id = 0		
 		for i in reversed(range(len(ol1_ratio))):
@@ -630,8 +663,8 @@ class GaEncode:
 		wl1_ratio.append(1)
 		all_param.append(1)
 		out_final.append(1)
-		act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution(0, self.PEs_h, self.PEs_w, act_share_PE[0],wgt_share_PE[0])
-		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution(1, self.Chiplets_h, self.Chiplets_w, act_share_Chiplet[0],wgt_share_Chiplet[0])
+		act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution(0, self.PEs_h, self.PEs_w, act_correlate["PE"],wgt_correlate["PE"], parallel_set_dcit["PE"])
+		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet[1], if_wgt_share_Chiplet[1] = self.getPEDistribution(1, self.Chiplets_h, self.Chiplets_w, act_correlate["chiplet"],wgt_correlate["chiplet"], parallel_set_dcit["chiplet"])
 		#if self.PEs == 16:
 		#	act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE[1], if_wgt_share_PE[1] = self.getPEDistribution16(act_share_PE[0],wgt_share_PE[0])
 		#elif self.PEs == 4:
@@ -644,6 +677,7 @@ class GaEncode:
 		wgt_PE_dict = self.getPEExtent(wgt_PE_dict_temp)
 		act_Chiplet_dict = self.getPEExtent(act_Chiplet_dict_temp,1,"o","a")
 		wgt_Chiplet_dict = self.getPEExtent(wgt_Chiplet_dict_temp,1,"o","w")
+
 		return data_flow, ol1_ratio, al1_ratio, wl1_ratio, all_param, out_final, if_act_share_PE, if_wgt_share_PE, if_act_share_Chiplet, if_wgt_share_Chiplet, act_PE_dict, wgt_PE_dict, act_Chiplet_dict, wgt_Chiplet_dict, parallel_dim_list
 
 	def printOut(self, for_list, act_wgt_dict, parallel_dim_list, out_dict):
@@ -699,7 +733,14 @@ class GaEncode:
 		for_list[0], for_list[1], for_list[2], for_list[3], for_list[4], for_list[5], for_list[6], for_list[7], for_list[8], for_list[9], act_wgt_dict["act_core"], act_wgt_dict["wgt_core"], act_wgt_dict["act_chiplet"], act_wgt_dict["wgt_chiplet"], parallel_dim_list = self.parseChange(parse)
 		
 		out_dict = {}
-		out_dict["rd_core"], out_dict["wr_core"], out_dict["rd_chip"], out_dict["wr_chip"] = self.getOutputDict()
+		runtimeCoreNum = 1
+		runtimeChipNum = 1
+		for mm in range(4):
+			runtimeCoreNum *= parallel_dim_list[0][mm]
+			runtimeChipNum *= parallel_dim_list[1][mm]
+		print("runtimeCoreNum ",runtimeCoreNum)
+		print("runtimeChipNum ",runtimeChipNum)
+		out_dict["rd_core"], out_dict["wr_core"], out_dict["rd_chip"], out_dict["wr_chip"] = self.getOutputDict(runtimeCoreNum, runtimeChipNum)
 
 		if self.debug == 1:
 			self.printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict)

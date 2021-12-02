@@ -11,6 +11,9 @@ ddr_link_width = ddr_bandwidth / PE_freq # bit
 neu_per_flit_act_wgt = int ( noc_link_width / act_wgt_width ) 
 neu_per_flit_psum = int ( noc_link_width  / psum_width )
 flit_per_pkt = 5
+nop_link_width = nop_bandwidth / PE_freq # bit
+neu_per_flit_act_nop = int ( nop_link_width / act_wgt_width )
+neu_per_flit_psum_nop = int ( nop_link_width  / psum_width )
 
 freq_1G = 1 * 1000 * 1000 * 1000 
 DRAM_energy_ratio = 8.75    	# PJ/bit  from NNbaton

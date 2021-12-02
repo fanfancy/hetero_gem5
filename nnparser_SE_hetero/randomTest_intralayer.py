@@ -11,7 +11,6 @@ from matplotlib import pyplot as plt
 from config import *
 import openpyxl
 
-
 def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_num , if_multicast, filename):
 
 	degrade_ratio_list = []
@@ -24,15 +23,18 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 	fitness_list = []
 	fitness_min_ran_list = []
 	for i in range(iterTime):
+		print("iterTime")
+		print(iterTime, " ", i)
 		#---生成个代---
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = GATest.GaGetChild()
 		#---计算适应度---
-		delay, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, worstlinks = \
+		delay, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
 			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param, if_multicast)
+		
 		#---比较适应度，并记录相关变量---
 		e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
-		e_sum = e_mem + energy_die2die+energy_MAC
-		edp_res = delay * e_sum  /(PE_freq * freq_1G) # pJ*s
+		e_sum = e_mem + energy_die2die+energy_MAC + energy_psum_list[2]
+		edp_res = (delay + delay_psum) * e_sum  /(PE_freq * freq_1G) # pJ*s
 		fitness = edp_res
 		if fitness_min_ran == 0 or fitness < fitness_min_ran:
 			fitness_min_ran = fitness
@@ -48,11 +50,11 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		degrade_ratio_list.append (degrade_ratio)
 
 		excel_datas.append([i, fitness, degrade_ratio, str(for_list[0]), \
-			parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2], \
-			parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2], \
+			parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2],parallel_dim_list[0][3], \
+			parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2], parallel_dim_list[1][3],\
 			parallel_dim_list[0][0]*parallel_dim_list[1][0], \
 			parallel_dim_list[0][1]*parallel_dim_list[1][1], \
-			parallel_dim_list[0][2]*parallel_dim_list[1][2], \
+			parallel_dim_list[0][3]*parallel_dim_list[1][3], \
 			parallel_dim_list[0][0]*parallel_dim_list[1][0]*parallel_dim_list[0][1]*parallel_dim_list[1][1], \
 			str(partition_list), runtime_list[0], runtime_list[1], runtime_list[2],  \
 			runtime_list[3], runtime_list[4], runtime_list[5], runtime_list[6],\
@@ -60,8 +62,8 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		    utilization_ratio_list[0], utilization_ratio_list[1], utilization_ratio_list[2],utilization_ratio_list[3], utilization_ratio_list[4], utilization_ratio_list[5], \
 			energy_dram_list[0], energy_dram_list[1], energy_dram_list[2], energy_dram_list[3], \
 			energy_L2_list[0], energy_L2_list[1], energy_L2_list[2], energy_L2_list[3], \
-			energy_L1_list[0], energy_L1_list[1], \
-			sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, e_mem, e_sum , delay, edp_res, str(worstlinks), str(code) ])
+			energy_L1_list[0], energy_L1_list[1], energy_psum_list[0], energy_psum_list[1], \
+			sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, energy_psum_list[2], e_mem, e_sum , delay, edp_res, str(worstlinks), str(code) ])
 		print("######---------Times = ", i)
 		print("fitness_min_ran = ",fitness_min_ran)
 		print("compuation_cycles_1 = ",compuation_cycles_1)
@@ -80,15 +82,15 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
 	column_tite = ["index","fitness","degrade_ratio", "dataflow", \
-		"PP2","PQ2","PK2","PP3","PQ3","PK3","PP","PQ","PKtotal","PPPQtotal", \
+		"PP2","PQ2","PC2","PK2","PP3","PQ3","PC3","PK3","PP","PQ","PKtotal","PPPQtotal", \
 		"partition_list",\
 		"runtimeP","runtimeQ", "runtimeC", "runtimeK", "runtimeChipNum", "runtimeCoreNum", "runtime_calNum",\
 		"ol1_cp_id","al1_cp_id","wl1_cp_id","ol2_cp_id","al2_cp_id","wl2_cp_id", \
 		"ol1_util","al1_util","wl1_util","ol2_util","al2_util","wl2_util", \
 		"e_wr_opt_dram", "e_rd_opt_dram", "e_rd_wgt_dram", "e_rd_act_dram", \
 		"e_wr_opt_L2", "e_rd_opt_L2", "e_rd_wgt_L2", "e_rd_act_L2", \
-		"e_rd_wgt_L1", "e_rd_act_L1", \
-		"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_mem",  "e_sum", "delay", "EDP pJ*s", "worstlinks", "code"]
+		"e_rd_wgt_L1", "e_rd_act_L1", "e_psum_d2d", "e_psum_dram", \
+		"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_psum","e_mem",  "e_sum", "delay", "EDP pJ*s", "worstlinks", "code"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	# 写入每一行
@@ -133,7 +135,7 @@ def getLayerParam(app_name):
 	f.close()
 	return layer_dict
 
-def randomTest_NoC(app_name, chiplet_parallel):
+def randomTest_NoC(app_name, chiplet_parallel = "All", core_parallel = "All"):
 	# --- 硬件参数
 	HW_param = {"Chiplet":[4,4],"PE":[4,4],"intra_PE":{"C":16,"K":16}}       	# from granularity exploration
 	# memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	from nnbaton
@@ -146,9 +148,8 @@ def randomTest_NoC(app_name, chiplet_parallel):
 	
 	# --- 生成noc-nop结构图
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = 'Mesh')
-	debug = 0
+	debug = 1
 	if_multicast = 1
-	core_parallel = "All"
 
 	# --- 神经网络参数
 	layer_dict = getLayerParam(app_name)
@@ -181,8 +182,8 @@ def randomTest_NoC(app_name, chiplet_parallel):
 
 if __name__ == '__main__':
 	if str(sys.argv[1]) == "multi":
-		randomTest_NoC(str(sys.argv[2]), "P_stable")
-		randomTest_NoC(str(sys.argv[2]), "PK_stable")
-		randomTest_NoC(str(sys.argv[2]), "K_stable")
+		randomTest_NoC(str(sys.argv[2]), "P_stable", "All")
+		randomTest_NoC(str(sys.argv[2]), "PK_stable", "All")
+		randomTest_NoC(str(sys.argv[2]), "K_stable", "All")
 	if str(sys.argv[1]) == "uni":
-		randomTest_NoC(str(sys.argv[2]), str(sys.argv[3]))
+		randomTest_NoC(str(sys.argv[2]), str(sys.argv[3]), str(sys.argv[3]))
