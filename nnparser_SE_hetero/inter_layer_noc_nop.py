@@ -205,6 +205,26 @@ def getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, paralle
 			num += 1
 	return comm_num_dict, comm_type_dict,comm_type_times_dict, chiplet_num
 
+def convertDictIndex(dict):
+	out_dict = {}
+	pac_id = 0
+	for id_i in dict:
+		out_dict[id_i] = {}
+		pac_id = 0
+		for list_str_in in dict[id_i]:
+			list_str = list_str_in.replace("[","start, ")
+			list_str = list_str.replace("]",", end")
+			id_list = list_str.split(", ")
+			list = []
+			for i in range(len(id_list)):
+				if i > 0 and i < len(id_list)-1:
+					id_o = int(id_list[i])
+					list.append(id_o)
+			pac_id_str = "pacID" + str(pac_id)
+			out_dict[id_i][pac_id_str] = [list , dict[id_i][list_str_in]]
+			pac_id += 1
+	return out_dict
+
 def getSetComm(comm_all , set_e_num = 4):
 	comm_chip_set_dict = {}
 	comm_set_dict = {}
@@ -240,8 +260,12 @@ def getSetComm(comm_all , set_e_num = 4):
 					comm_set_dict[set_id_i][set_id_list_str] = packet_num
 				else:
 					comm_set_dict[set_id_i][set_id_list_str] += packet_num
+	
+	# convert comm_chip_set
+	comm_chip_set_dict_out = convertDictIndex(comm_chip_set_dict)
+	comm_set_dict_out = convertDictIndex(comm_set_dict)
 
-	return comm_chip_set_dict, comm_set_dict
+	return comm_chip_set_dict_out, comm_set_dict_out
 
 
 def setRouteTable(NOC_NODE_NUM, NoC_w):

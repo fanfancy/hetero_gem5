@@ -294,6 +294,9 @@ def get_set_comm_num_test(app_name):
 
 	# --- 获得神经网络参数
 	layer_dict, layer_id_list = getLayerParam(app_name)
+
+	comm_set_layer = {}
+	comm_chip_set_layer = {}
 	
 	for i in reversed(layer_id_list):
 		if i < layer_id_list[-1]:
@@ -302,24 +305,34 @@ def get_set_comm_num_test(app_name):
 			line = "layer " + str(i) + "-------------------------"
 			print(line, file = f)
 
+			comm_set_layer[i] = {}
+			comm_chip_set_layer[i] = {}
+
 			for para_type_1 in para_type:
 				for para_type_2 in para_type:
 					parallel_1 = parallel_type_1[para_type_1]
 					parallel_2 = parallel_type_2[para_type_2]
 					comm_num_dict, comm_type_dict, comm_type_times_dict, chiplet_num = getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, 0)
 					comm_chip_set_dict, comm_set_dict = getSetComm(comm_num_dict)
+
 					line0 = "parallel type : " + str(para_type_1) + " to " + str(para_type_2)
-					#line3 = "---initial_comm: " + str(comm_num_dict)
 					line1 = "---comm_chip_set_dict: " + str(comm_chip_set_dict)
 					line2 = "---comm_set_dict: " + str(comm_set_dict)
 					print(line0, file = f)
-					#print(line3, file = f)
 					print(line1, file = f)
 					print(line2, file = f)
+
+					par_type_str = str(para_type_1) + "_" + str(para_type_2)
+					comm_chip_set_layer[i][par_type_str] = comm_chip_set_dict
+					comm_set_layer[i][par_type_str] = comm_set_dict
+	
+	print("comm_chip_set_layer ", comm_chip_set_layer, file = f)
+	print("comm_set_layer ", comm_set_layer, file = f)
 	f.close()
+	return comm_chip_set_layer, comm_set_layer # [layer_num][parallel_type][pac_id][packet_num, recv_id_list] , parallel_type = parallel_layer_i + "_" + parallel_layer_(i+1)
 
 if __name__ == '__main__':
 	app_name = str(sys.argv[1])
 	#nop_noc_test(app_name)
 	#noc_test(app_name)
-	get_set_comm_num_test(app_name)
+	comm_chip_set_layer, comm_set_layer = get_set_comm_num_test(app_name)
