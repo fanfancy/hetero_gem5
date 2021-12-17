@@ -49,8 +49,6 @@ def setPartition(num, dim):
 # 将P_num个并行量进行拆分，随机选两个维度d1、d2，以及对应的并行量p1、p2.
 def setParallel(P_num, level, parallel_select, parallel_type, size):
 	parallel_t = parallel_type[level]
-	if level == "Chiplet":
-		print("Chiplet parallel type ", parallel_t, " ", parallel_select[level])
 	list_p = setPartition_1(P_num, 2)
 	p1 = list_p[0]
 	p2 = list_p[1]
@@ -84,15 +82,17 @@ def setParallel(P_num, level, parallel_select, parallel_type, size):
 # 只对并行量P_num拆分为p1、p2，不决定其维度
 def setParallelNum(P_num):
 	index = math.ceil(math.log(P_num, 2))
-	p1 = random.randint(0,index)
+	p1 = random.randint(1,index-1)
 	p2 = index - p1
+	assert(p1 >= 1)
+	assert(p2 >= 1)
 	p1 = pow(2,p1)
 	p2 = pow(2,p2)
 	return p1, p2
 
 
 class GaEncode:
-	def __init__(self, network_param, HW_param, debug=0, parallel_level=3, debug_file="./random_test_record.txt", chiplet_parallel="All",core_parallel="All"):
+	def __init__(self, network_param, HW_param, debug=0, parallel_level=3, debug_file="./random_test_record.txt", chiplet_parallel="All",core_parallel="All", flag = "ours"):
 		self.HW_param = HW_param
 		self.Chiplets_h = HW_param["Chiplet"][0]
 		self.Chiplets_w = HW_param["Chiplet"][1]
@@ -123,6 +123,7 @@ class GaEncode:
 		#self.setmapppingSet("Chiplet")
 		#self.setmapppingSet("PE")
 
+		self.flag = flag
 
 		self.debug = debug
 		self.debug_file = debug_file
@@ -225,21 +226,46 @@ class GaEncode:
 			parallel_num_set.append(p2)
 			size_i[d1] = math.ceil(size_i[d1]/p1)
 			size_i[d2] = math.ceil(size_i[d2]/p2)
+			
 			if self.chiplet_parallel == "P_stable":
 				d1 = 0
 				d2 = 0
-				p1 = 16
+				p1 = self.Chiplets
 				p2 = 1
 			elif self.chiplet_parallel == "K_stable":
 				d1 = 3
 				d2 = 3
-				p1 = 16
+				p1 = self.Chiplets
 				p2 = 1
 			elif self.chiplet_parallel == "PK_stable":
 				d1 = 0
 				d2 = 3
+				p1 = int(self.Chiplets**0.5)
+				p2 = int(self.Chiplets**0.5)
+			elif self.chiplet_parallel == "PK_1_stable":
+				assert(self.flag == "nnbaton")
+				assert(self.Chiplets == 8)
+				d1 = 0
+				d2 = 3
 				p1 = 4
+				p2 = 2
+			elif self.chiplet_parallel == "PK_2_stable":
+				assert(self.flag == "nnbaton")
+				assert(self.Chiplets == 8)
+				d1 = 0
+				d2 = 3
+				p1 = 2
 				p2 = 4
+			elif self.chiplet_parallel == "C_stable":
+				d1 = 2
+				d2 = 2
+				p1 = self.Chiplets
+				p2 = 1
+			elif self.chiplet_parallel == "KC_stable":
+				d1 = 2
+				d2 = 3
+				p1 = int(self.Chiplets**0.5)
+				p2 = int(self.Chiplets**0.5)
 			else:
 				d1, d2, p1, p2 = setParallel(self.Chiplets,"Chiplet",self.parallel_select, self.parallel_type, self.size)
 			parallel_dim_set.append(d1)
@@ -281,11 +307,40 @@ class GaEncode:
 			code += list1
 		return code
 
+	def codeChange(self, code, type):
+		code_par = code[0:20]
+		code_order = code[20:]
+
+		parallel_code = code_par[0:8]
+		P_par = code_par[8:11]
+		Q_par = code_par[11:14]
+		C_par = code_par[14:17]
+		K_par = code_par[17:20]
+
+		loop1 = code_order[0:6]
+		loop2 = code_order[6:10]
+		loop3 = code_order[10:14]
+
+		if type == "simba":
+			K1 = K_par[0]*K_par[1]*K_par[2]
+			C1 = C_par[0]*C_par[1]*C_par[2]
+			K_par = [K1,1,1]
+			C_par = [C1,1,1]
+			loop1 = [1,0,2,3,4,5]
+			loop2 = [1,0,2,3]
+			loop3 = [1,0,2,3]
+		elif type == "nnbaton":
+			pass
+		code = parallel_code + P_par + Q_par + C_par + K_par + loop1 + loop2 + loop3
+		return code
+
 	# 获得GA code（for拆分+for_loop顺序）
 	def getChild(self):
 		code1 = self.getPartitionChild()
 		code2 = self.getOrderCode()
 		code = code1 + code2
+		if self.flag == "simba":
+			code = self.codeChange(code, "simba")
 		return code
 
 	# 把GA code进行解析，解析成{[for_type, dim, for_num]}

@@ -27,7 +27,7 @@ out_tag =  (int(1003))
 # memory_param = {"OL1":,"OL2":,"AL1":,"AL2":,"WL1":,"WL2":}
 # 卷积配置 从basicParam_noc_nop中import进来
 
-def calPSumAllReduce(output_num, chiplet_num, PC3):
+def calPSumAllReduce(output_num, chiplet_num, PC3 ):
     output_flit_num = int(output_num / neu_per_flit_psum_nop)
     delay = (output_flit_num / chiplet_num) * 2 * (PC3-1)
     d2d_energy = (output_num * psum_width / chiplet_num) * 2 * (PC3-1) * chiplet_num * DIE2DIE_energy_ratio
@@ -36,7 +36,7 @@ def calPSumAllReduce(output_num, chiplet_num, PC3):
     return delay, energy_list
 
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, flag = "ours"):
     route_table = NoC_param["route_table"]
     bw_scales = NoC_param["bw_scales"]
     F = NoC_param["F"]
@@ -87,14 +87,13 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     # memory node id
     ol2_node = PE_height * (PE_lenth + 1) + A_W_offset['o']
-    if PE_height == 2:
-        al2_node = ol2_node + PE_lenth + 1
-        wl2_node = ol2_node + PE_lenth + 1
-    else:
-        assert(PE_height > 1)
-        al2_node = ol2_node + PE_lenth + 1
-        wl2_node = ol2_node + (PE_lenth + 1) * 2
+
+    al2_node = ol2_node + PE_lenth + 1
+    wl2_node = ol2_node + (PE_lenth + 1) * 2
     dram_node  = 0
+    print("ol2_node", ol2_node)
+    print("al2_node", al2_node)
+    print("wl2_node", wl2_node)
     #print(route_table)
 
 
@@ -224,6 +223,8 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     act_core_dict = act_wgt_dict["act_core"][0]["recv"]
     wgt_core_dict = act_wgt_dict["wgt_core"][0]["recv"]
+    print("wgt_core_dict ",wgt_core_dict)
+    print("act_core_dict ",act_core_dict)
     act_chip_dict = act_wgt_dict["act_chiplet"]["recv"]
     wgt_chip_dict = act_wgt_dict["wgt_chiplet"]["recv"]
     out_core_dict = out_dict["rd_core"][0]["recv"]
@@ -314,13 +315,20 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         core_neu_num_rd_wgt = core_neu_num_rd_wgt * CoreNum * ChipNum  
         core_neu_num_rd_act = core_neu_num_rd_act * CoreNum * ChipNum  
 
+    energy_l2 = SRAM_energy(OL2)
+    if flag == "nnbaton":
+        energy_l2_w = DRAM_energy_ratio
+    else:
+        energy_l2_w = energy_l2
+
+
     if (if_out_final[data_flow[ol1_cp_id]]!=1):
-        energy_wr_opt_L2 = core_neu_num_wr_opt * SRAM_energy(OL2) * psum_width 
+        energy_wr_opt_L2 = core_neu_num_wr_opt * energy_l2 * psum_width 
     else: 
-        energy_wr_opt_L2 = core_neu_num_wr_opt * SRAM_energy(OL2) * act_wgt_width 
-    energy_rd_opt_L2 = core_neu_num_rd_opt * SRAM_energy(OL2) * psum_width
-    energy_rd_wgt_L2 = core_neu_num_rd_wgt * SRAM_energy(WL2) * act_wgt_width
-    energy_rd_act_L2 = core_neu_num_rd_act * SRAM_energy(AL2) * act_wgt_width
+        energy_wr_opt_L2 = core_neu_num_wr_opt * energy_l2 * act_wgt_width 
+    energy_rd_opt_L2 = core_neu_num_rd_opt * energy_l2 * psum_width
+    energy_rd_wgt_L2 = core_neu_num_rd_wgt * energy_l2_w * act_wgt_width
+    energy_rd_act_L2 = core_neu_num_rd_act * energy_l2 * act_wgt_width
 
     # L2 用于统计通信总量 & prediction
     chip_pkt_num_wr_opt = 0; chip_neu_num_wr_opt = 0
@@ -363,7 +371,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     cur = data_flow[wl2_cp_id]; inner = data_flow[wl2_cp_id-1]  
     #print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
-    chip_pkt_num_rd_wgt += int(math.ceil(WL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
+    if flag == "nnbaton":
+        chip_pkt_num_rd_wgt = 0
+    else:
+        chip_pkt_num_rd_wgt += int(math.ceil(WL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
     chip_wgt_data_num += WL2_need[inner] # 用于生成仿真指令
     chip_neu_num_rd_wgt += WL2_need[inner] * repeat_num[cur]
 
@@ -371,12 +382,18 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     if if_multicast == 1:
         chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
         chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
-        chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum /PP3 / PQ3
+        if flag == "nnbaton":
+            chip_neu_num_rd_wgt = 0
+        else:
+            chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum /PP3 / PQ3
         chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum /PK3 
     elif if_multicast == 0:
         chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
         chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
-        chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum  
+        if flag == "nnbaton":
+            chip_neu_num_rd_wgt = 0
+        else:
+            chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum  
         chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum 
     
     if (if_out_final[cur]!=1): 
@@ -486,10 +503,13 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
             energy_die2die += link_energy[item]
         elif link_energy_ratio[item] == NOC_energy_ratio:
             energy_core2core += link_energy[item]
+        elif link_energy_ratio[item] == DIE2DIE_energy_ratio + DRAM_energy_ratio:
+            energy_die2die += link_energy[item]
+            energy_dram_list[2] += link_energy[item]
         else:
             print ("FATAL: link's energy ratio is incorrect!")
             sys.exit()
-    if PC3 > 1:
+    if PC3 < 1:
         output_num = runtimeP * runtimeQ * runtimeK
         chiplet_num = runtimeChipNum
         delay_psum, energy_psum_list = calPSumAllReduce(output_num, chiplet_num, PC3)

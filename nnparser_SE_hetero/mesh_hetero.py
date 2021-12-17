@@ -933,10 +933,6 @@ def construct_noc_nop_Torus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
     noc_dict["energy_ratio"]= energy_ratio 
     return noc_dict,ALL_SIM_NODE_NUM    
 
-
-
-
-
 def construct_noc_nop_CMesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
     noc_dict = {}
     CORE_NUM = NOC_NODE_NUM*NOP_SIZE
@@ -1219,7 +1215,6 @@ def construct_noc_nop_CMesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_rati
     noc_dict["energy_ratio"] = energy_ratio
     return noc_dict, ALL_SIM_NODE_NUM
 
-
 def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
     noc_dict = {}
     CORE_NUM = NOC_NODE_NUM*NOP_SIZE
@@ -1416,6 +1411,356 @@ def construct_noc_nop_Mesh(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
     noc_dict["F"] = F
     noc_dict["bw_scales"] = bw_scales
     noc_dict["energy_ratio"] = energy_ratio
+    return noc_dict, ALL_SIM_NODE_NUM 
+
+def construct_noc_nop_Bus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
+    noc_dict = {}
+    CORE_NUM = NOC_NODE_NUM*NOP_SIZE
+    ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
+    print('CORE_NUM = ', CORE_NUM)
+    print('NOP_SIZE = ', NOP_SIZE)
+    w_l2_node_offset = NoC_w * 2 
+    bus_node_src_offset = 2000
+    bus_node_dst_offset = 2001
+
+    F = {} # fitness value for each link
+    bw_scales = {}
+    energy_ratio = {}
+    # construct noc nodes
+    for nop_id in range (NOP_SIZE): 
+        bus_node_src = bus_node_src_offset + NOC_NODE_NUM * nop_id
+        bus_node_dst = bus_node_dst_offset + NOC_NODE_NUM * nop_id
+        w_l2_node = w_l2_node_offset + NOC_NODE_NUM * nop_id
+
+        F[(bus_node_src,bus_node_dst)] = 0
+        bw_scales[(bus_node_src,bus_node_dst)] = 4
+        energy_ratio[(bus_node_src,bus_node_dst)] = NOC_energy_ratio
+
+        for src_local_id in range (NOC_NODE_NUM):
+            src = src_local_id + NOC_NODE_NUM * nop_id
+            local = src + 1000
+
+            F[(local,src)] = 0
+            F[(src,local)] = 0
+            if src == w_l2_node:
+                bw_scales[(local,src)] = nop_scale_ratio
+                bw_scales[(src,local)] = nop_scale_ratio
+                energy_ratio[(local,src)] = DIE2DIE_energy_ratio + DRAM_energy_ratio
+                energy_ratio[(src,local)] = DIE2DIE_energy_ratio + DRAM_energy_ratio
+            else:
+                bw_scales[(local,src)] = 1
+                bw_scales[(src,local)] = 1
+                energy_ratio[(local,src)] = NOC_energy_ratio
+                energy_ratio[(src,local)] = NOC_energy_ratio
+
+            F[(src,bus_node_src)] = 0
+            F[(bus_node_dst,src)] = 0
+            bw_scales[(src,bus_node_src)] = 1
+            bw_scales[(bus_node_dst,src)] = 1
+            energy_ratio[(src,bus_node_src)] = NOC_energy_ratio
+            energy_ratio[(bus_node_dst,src)] = NOC_energy_ratio
+
+        
+    # construct NoP nodes
+    for src_nop_id in range (NOP_SIZE):
+        for dst_nop_id in range (NOP_SIZE):
+            src =  NOC_NODE_NUM * NOP_SIZE + src_nop_id
+            dst =  NOC_NODE_NUM * NOP_SIZE + dst_nop_id
+            local = src + 1000
+            F[(local,src)] = 0
+            F[(src,local)] = 0
+            bw_scales[(local,src)] = nop_scale_ratio
+            bw_scales[(src,local)] = nop_scale_ratio
+            energy_ratio[(local,src)] = DIE2DIE_energy_ratio
+            energy_ratio[(src,local)] = DIE2DIE_energy_ratio
+            src_x = src_nop_id %  NoP_w
+            src_y = int(src_nop_id / NoP_w)
+            dst_x = dst_nop_id %  NoP_w
+            dst_y = int(dst_nop_id / NoP_w)
+            if (src_x == dst_x) :
+                if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+                    
+            elif (src_y == dst_y) :
+                if (src_x - dst_x == 1) or (src_x - dst_x == -1):
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+
+    # construct noc and nop connection
+    for nop_id in range (NOP_SIZE):
+        nop_router_id = nop_id + NOC_NODE_NUM * NOP_SIZE 
+        noc_router_id = nop_id * NOC_NODE_NUM
+        F[(noc_router_id,nop_router_id)] = 0
+        F[(nop_router_id,noc_router_id)] = 0
+        bw_scales[(noc_router_id,nop_router_id)] = nop_scale_ratio
+        bw_scales[(nop_router_id,noc_router_id)] = nop_scale_ratio
+        energy_ratio[(noc_router_id,nop_router_id)] = DIE2DIE_energy_ratio
+        energy_ratio[(nop_router_id,noc_router_id)] = DIE2DIE_energy_ratio
+        # print ("(nop_router_id,noc_router_id)", (nop_router_id,noc_router_id))
+
+
+    
+    print ("len(F)", len(F))
+    print ("F",F)
+    print ("bw_scales",bw_scales)
+    print ("len bw_scales",len(bw_scales))
+    print ("----- finish construct the heterogeneous mesh ---- \n\n")
+
+    noc_route_table = {}
+    hops = {}
+
+    def noc_id (real_id):
+        return (real_id % NOC_NODE_NUM)
+
+    def chip_id (real_id):
+        return (int (real_id /NOC_NODE_NUM) )
+
+    def comm_id (real_id): # the communication router id in one chip
+        return (chip_id(real_id)*NOC_NODE_NUM)
+
+    def nop_id (real_id):
+        return (real_id - NOC_NODE_NUM*NOP_SIZE)
+       
+    for src in range (0,NOC_NODE_NUM*NOP_SIZE):
+        for dst in range (0,NOC_NODE_NUM*NOP_SIZE):
+            # print ("src = ",src,"dst = ",dst)
+            noc_route_table[(src,dst)] = []
+            cur_src = src
+            cur_dst = src
+            if chip_id(cur_src) != chip_id(dst):
+                while cur_src != comm_id(src): # go to the first noc node
+                    src_noc_x = noc_id(cur_src) %  NoC_w
+                    src_noc_y = int(noc_id(cur_src) / NoC_w)
+                    dst_noc_x = noc_id(comm_id(src)) % NoC_w
+                    dst_noc_y = int(noc_id(comm_id(src))/ NoC_w)
+                    # print (comm_id(src),src_noc_x,src_noc_y,dst_noc_x,dst_noc_y)
+                    if (src_noc_x > dst_noc_x):  # go west
+                        cur_noc_dst = src_noc_x-1 +  src_noc_y * NoC_w
+                    elif (src_noc_x < dst_noc_x): # go east
+                        cur_noc_dst = src_noc_x+1 +  src_noc_y * NoC_w
+                    elif (src_noc_y < dst_noc_y): # go north
+                        cur_noc_dst = src_noc_x + (src_noc_y+1) * NoC_w
+                    elif (src_noc_y > dst_noc_y): # go south
+                        cur_noc_dst = src_noc_x + (src_noc_y-1) * NoC_w
+                    cur_dst = chip_id(cur_src) * NOC_NODE_NUM + cur_noc_dst
+                    noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                    cur_src = cur_dst
+                    
+                # go to the nop node
+                cur_dst = chip_id(cur_src) + NOC_NODE_NUM * NOP_SIZE
+                noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                cur_src = cur_dst
+
+                while cur_src != chip_id(dst) + NOC_NODE_NUM * NOP_SIZE : # nop router of the destination node
+                    src_nop_x = nop_id(cur_src) % NoP_w
+                    src_nop_y = int (nop_id(cur_src) / NoP_w)
+                    dst_nop_x = chip_id(dst) % NoP_w
+                    dst_nop_y = int(chip_id(dst) / NoP_w)
+                    if (src_nop_x > dst_nop_x):  # go west
+                        cur_nop_dst = src_nop_x-1 +  src_nop_y * NoP_w
+                    elif (src_nop_x < dst_nop_x): # go east
+                        cur_nop_dst = src_nop_x+1 +  src_nop_y * NoP_w
+                    elif (src_nop_y < dst_nop_y): # go north
+                        cur_nop_dst = src_nop_x + (src_nop_y+1) * NoP_w
+                    elif (src_nop_y > dst_nop_y): # go south
+                        cur_nop_dst = src_nop_x + (src_nop_y-1) * NoP_w
+                    cur_dst = cur_nop_dst+NOC_NODE_NUM*NOP_SIZE
+                    noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                    cur_src = cur_dst
+                
+                # go to the communication id 
+                cur_dst = chip_id(dst) * NOC_NODE_NUM
+                noc_route_table[(src,dst)].append((cur_src,cur_dst))
+                cur_src = cur_dst
+
+            chiplet_id = chip_id(dst)
+            bus_node_src = bus_node_src_offset + chiplet_id * NOC_NODE_NUM
+            bus_node_dst = bus_node_dst_offset + chiplet_id * NOC_NODE_NUM
+            noc_route_table[(src,dst)].append((cur_src,bus_node_src))
+            noc_route_table[(src,dst)].append((bus_node_src,bus_node_dst))
+            noc_route_table[(src,dst)].append((bus_node_dst,dst))
+            
+    # print ("----noc_route_table------")
+    # for route_item in noc_route_table:
+    #     print (route_item,noc_route_table[route_item])
+
+    route_table = {}
+    for src in range (1000,1000+NOC_NODE_NUM*NOP_SIZE):
+        for dst in range (1000,1000+NOC_NODE_NUM*NOP_SIZE):
+            route_table[(src,dst)] = []
+            noc_src = src - 1000
+            noc_dst = dst -1000
+            route_table[(src,dst)] = noc_route_table[(noc_src,noc_dst)].copy()
+            if (src!=dst):
+                route_table[(src,dst)].append((noc_dst,dst))
+                route_table[(src,dst)].insert(0,(src,noc_src))
+
+
+    for item in route_table:
+        hops[item] = len(route_table[item])
+        # print (item,route_table[item])
+
+    print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM/NOP_SIZE/NOP_SIZE)
+    noc_dict["route_table"] = route_table
+    noc_dict["F"] = F
+    noc_dict["bw_scales"] = bw_scales
+    noc_dict["energy_ratio"] = energy_ratio
+    #print("route_table ",route_table)
+    print("bw_scales ",bw_scales)
+    #print("energy_ratio ",energy_ratio)
+    return noc_dict, ALL_SIM_NODE_NUM   
+
+def construct_noc_nop_Bus_1(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio):
+    noc_dict = {}
+    NOP_SIZE = 1
+    CORE_NUM = NOC_NODE_NUM  *NOP_SIZE
+    ALL_SIM_NODE_NUM = CORE_NUM + NOP_SIZE
+
+    L2_w_node = NoC_w * 2
+
+
+    F = {} # fitness value for each link
+    bw_scales = {}
+    energy_ratio = {}
+    # construct noc nodes
+    for nop_id in range (NOP_SIZE): 
+        bus_1 = 0 + 2000 + NOC_NODE_NUM * nop_id
+        bus_2 = 1 + 2000 + NOC_NODE_NUM * nop_id
+        F[(bus_1,bus_2)] = 0
+        bw_scales[(bus_1,bus_2)] = 4 / 32
+        energy_ratio[(bus_1,bus_2)] = NOC_energy_ratio
+        for src_local_id in range (NOC_NODE_NUM):  
+            src = src_local_id + NOC_NODE_NUM * nop_id  + 10
+            bus_1 = 0 + 2000 + NOC_NODE_NUM * nop_id
+            bus_2 = 1 + 2000 + NOC_NODE_NUM * nop_id
+            local = src + 1000
+            F[(local,src)] = 0
+            F[(src,local)] = 0
+            bw_scales[(local,src)] = 1
+            bw_scales[(src,local)] = 1
+            if src_local_id == L2_w_node:
+                energy_ratio[(local,src)] = DIE2DIE_energy_ratio + DRAM_energy_ratio
+                energy_ratio[(src,local)] = DIE2DIE_energy_ratio + DRAM_energy_ratio
+            else:
+                energy_ratio[(local,src)] = 0
+                energy_ratio[(src,local)] = 0
+            F[(bus_2,src)] = 0
+            F[(src,bus_1)] = 0
+            bw_scales[(bus_2,src)] = 1
+            bw_scales[(src,bus_1)] = 1
+            energy_ratio[(bus_2,src)] = NOC_energy_ratio
+            energy_ratio[(src,bus_1)] = NOC_energy_ratio
+
+    # construct NoP nodes
+    for src_nop_id in range (NOP_SIZE):
+        for dst_nop_id in range (NOP_SIZE):
+            src =  NOC_NODE_NUM * NOP_SIZE + src_nop_id +10
+            dst =  NOC_NODE_NUM * NOP_SIZE + dst_nop_id +10
+            local = src + 1000
+            F[(local,src)] = 0
+            F[(src,local)] = 0
+            bw_scales[(local,src)] = nop_scale_ratio
+            bw_scales[(src,local)] = nop_scale_ratio
+            energy_ratio[(local,src)] = DIE2DIE_energy_ratio
+            energy_ratio[(src,local)] = DIE2DIE_energy_ratio
+            src_x = src_nop_id %  NoP_w
+            src_y = int(src_nop_id / NoP_w)
+            dst_x = dst_nop_id %  NoP_w
+            dst_y = int(dst_nop_id / NoP_w)
+            if (src_x == dst_x) :
+                if (src_y - dst_y == 1) or (src_y- dst_y == -1) :
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+                    
+            elif (src_y == dst_y) :
+                if (src_x - dst_x == 1) or (src_x - dst_x == -1):
+                    F[(src,dst)] = 0
+                    bw_scales[(src,dst)] = nop_scale_ratio
+                    energy_ratio[(src,dst)] = DIE2DIE_energy_ratio
+
+    # construct noc and nop connection
+    for nop_id in range (NOP_SIZE):
+        nop_router_id = nop_id + NOC_NODE_NUM * NOP_SIZE + 100
+        bus_1 = 0 + 2000 + NOC_NODE_NUM * nop_id
+        bus_2 = 1 + 2000 + NOC_NODE_NUM * nop_id
+        F[(bus_2,nop_router_id)] = 0
+        F[(nop_router_id,bus_1)] = 0
+        bw_scales[(bus_2,nop_router_id)] = 1
+        bw_scales[(nop_router_id,bus_1)] = 1
+        energy_ratio[(bus_2,nop_router_id)] = DIE2DIE_energy_ratio
+        energy_ratio[(nop_router_id,bus_1)] = DIE2DIE_energy_ratio
+        # print ("(nop_router_id,noc_router_id)", (nop_router_id,noc_router_id))
+
+
+    
+    print ("len(F)", len(F))
+    print ("F",F)
+    print ("bw_scales",bw_scales)
+    print ("len bw_scales",len(bw_scales))
+    print ("----- finish construct the heterogeneous bus ---- \n\n")
+
+    noc_route_table = {}
+    hops = {}
+
+    def noc_id (real_id):
+        return (real_id % NOC_NODE_NUM)
+
+    def chip_id (real_id):
+        return (int (real_id /NOC_NODE_NUM) )
+
+    def comm_id (real_id): # the communication router id in one chip
+        return (chip_id(real_id)*NOC_NODE_NUM)
+
+    def nop_id (real_id):
+        return (real_id - NOC_NODE_NUM*NOP_SIZE)
+       
+    for src in range (0,NOC_NODE_NUM*NOP_SIZE):
+        src = src + 10
+        for dst in range (0,NOC_NODE_NUM*NOP_SIZE):
+            # print ("src = ",src,"dst = ",dst)
+            dst = dst + 10
+            noc_route_table[(src,dst)] = []
+
+            bus_1 = 0 + 2000 + NOC_NODE_NUM * 0
+            bus_2 = 1 + 2000 + NOC_NODE_NUM * 0
+            noc_route_table[(src,dst)].append((src,bus_1))
+            noc_route_table[(src,dst)].append((bus_1,bus_2))
+            noc_route_table[(src,dst)].append((bus_2,dst))
+            
+    # print ("----noc_route_table------")
+    # for route_item in noc_route_table:
+    #     print (route_item,noc_route_table[route_item])
+
+    route_table = {}
+    for src in range (1000,1000+NOC_NODE_NUM*NOP_SIZE):
+        src += 10
+        for dst in range (1000,1000+NOC_NODE_NUM*NOP_SIZE):
+            dst += 10
+            route_table[(src,dst)] = []
+            noc_src = src - 1000
+            noc_dst = dst -1000
+            route_table[(src,dst)] = noc_route_table[(noc_src,noc_dst)].copy()
+            if (src!=dst):
+                route_table[(src,dst)].append((noc_dst,dst))
+                route_table[(src,dst)].insert(0,(src,noc_src))
+
+
+    for item in route_table:
+        hops[item] = len(route_table[item])
+        # print (item,route_table[item])
+
+    print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM/NOP_SIZE/NOP_SIZE)
+    noc_dict["route_table"] = route_table
+    noc_dict["F"] = F
+    noc_dict["bw_scales"] = bw_scales
+    noc_dict["energy_ratio"] = energy_ratio
+    print("route_table ",route_table)
+    print("bw_scales ",bw_scales)
+    print("energy_ratio ",energy_ratio)
     return noc_dict, ALL_SIM_NODE_NUM    
 
 
@@ -1432,14 +1777,17 @@ def construct_noc_nop_topo(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio
         noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_Ring(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio)
     elif topology == 'RandomRouterless':
         noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_RandomRouterless(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio, NoC_w, ol2_node)
+    elif topology == 'Bus':
+        noc_dict, ALL_SIM_NODE_NUM = construct_noc_nop_Bus(NOC_NODE_NUM, NoC_w, NOP_SIZE, NoP_w, nop_scale_ratio)
     else:
         raise NotImplementedError
 
-    assert len(noc_dict["route_table"]) == (NOC_NODE_NUM * NOP_SIZE) ** 2, "len(noc_dict['route_table']) = %d which is wrong" % len(noc_dict['route_table'])
-    assert len(noc_dict['F']) == len(noc_dict['bw_scales']), "len(noc_dict['F']) != len(noc_dict['bw_scales'])"
+    #assert len(noc_dict["route_table"]) == (NOC_NODE_NUM * NOP_SIZE) ** 2, "len(noc_dict['route_table']) = %d which is wrong" % len(noc_dict['route_table'])
+    #assert len(noc_dict['F']) == len(noc_dict['bw_scales']), "len(noc_dict['F']) != len(noc_dict['bw_scales'])"
 
     return noc_dict, ALL_SIM_NODE_NUM
 
 if __name__ == '__main__':
-    TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6, "nop_scale_ratio":0.5, "topology": 'CMesh'}
-    NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = TOPO_param["topology"])
+    #TOPO_param = {"NoC_w":5, "NOC_NODE_NUM": 20, "NoP_w": 3, "NOP_SIZE": 6, "nop_scale_ratio":0.5, "topology": 'CMesh'}
+    #NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = TOPO_param["topology"])
+    NoC_param, all_sim_node_num = construct_noc_nop_Bus(40, 5, 2, 2, 0.5)

@@ -11,7 +11,7 @@ from matplotlib import pyplot as plt
 from config import *
 import openpyxl
 
-def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_num , if_multicast, filename):
+def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_num , if_multicast, filename, flag = "ours"):
 
 	degrade_ratio_list = []
 	excel_datas = []
@@ -29,7 +29,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = GATest.GaGetChild()
 		#---计算适应度---
 		delay, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param, if_multicast)
+			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GATest.network_param, HW_param, memory_param, NoC_param, if_multicast, flag = flag)
 		
 		#---比较适应度，并记录相关变量---
 		e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
@@ -45,6 +45,7 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 			partition_list_1 = copy.deepcopy(partition_list)
 			compuation_cycles_1 = compuation_cycles
 			degrade_ratio_1 = degrade_ratio
+			code_min = code
 		fitness_list.append(fitness)
 		fitness_min_ran_list.append(fitness_min_ran)
 		degrade_ratio_list.append (degrade_ratio)
@@ -99,7 +100,8 @@ def randomTest(GATest,iterTime, HW_param, memory_param, NoC_param, all_sim_node_
 			sheet.cell(row+2, col+1, column_data)
 
 	workbook.save(filename)
-	return edp_res_min, energy_min, delay_min
+	print(filename)
+	return edp_res_min, energy_min, delay_min, code_min
 
 def getLayerParam(app_name):
 	layer_dict = {}
@@ -135,11 +137,61 @@ def getLayerParam(app_name):
 	f.close()
 	return layer_dict
 
-def randomTest_NoC(app_name, chiplet_parallel = "All", core_parallel = "All"):
+def randomTest_NoC_ours(app_name, chiplet_parallel = "All", core_parallel = "All", dataflow = "ours"):
 	# --- 硬件参数
 	HW_param = {"Chiplet":[4,4],"PE":[4,4],"intra_PE":{"C":16,"K":16}}       	# from granularity exploration
 	# memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	from nnbaton
 	memory_param = {"OL1":8 ,"OL2":128,"AL1":16,"AL2":256,"WL1":64,"WL2":1024}		# from granularity exploration
+	NoC_w = HW_param["PE"][1] + 1
+	NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
+	NoP_w = HW_param["Chiplet"][1] + 1
+	NOP_SIZE = NoP_w * HW_param["Chiplet"][0]
+	TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth}
+	
+	# --- 生成noc-nop结构图
+	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = 'Ring')
+	debug = 1
+	if_multicast = 1
+
+	# --- 神经网络参数
+	layer_dict = getLayerParam(app_name)
+
+	edp_res_min_dict = {}
+	energy_min_dict = {}
+	delay_min_dict = {}
+	code_min_dict = {}
+
+	for layer_name in layer_dict:
+		# ---输出文件
+		filename = './final_test/intra_layer_edp_per_layer/ours_'+dataflow+"_"+app_name+"_"+layer_name+"_"+chiplet_parallel+'.xls'
+		network_param = layer_dict[layer_name]
+		GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel, flag=dataflow)
+
+		iterTime = 10000 	# run 1w random mapping exploration
+
+		random_test_iter = 1
+
+		for i in range(random_test_iter):
+			edp_res_min, energy_min, delay_min, code_min = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
+			edp_res_min_dict[layer_name] = edp_res_min
+			energy_min_dict[layer_name] = energy_min
+			delay_min_dict[layer_name] = delay_min
+			code_min_dict[layer_name] = code_min
+	file_1 = "./final_test/intra_layer_edp/ours_"+dataflow+"_"+ app_name + "_" + chiplet_parallel + ".txt"
+	f = open(file_1,'w')
+	print(edp_res_min_dict, file=f)
+	print(energy_min_dict, file=f)
+	print(delay_min_dict, file=f)
+	print(code_min_dict, file = f)
+	f.close()
+
+def randomTest_NoC_simba(app_name, chiplet_parallel = "KC", core_parallel = "KC", dataflow = "simba"):
+	# --- 硬件参数
+	HW_param = {"Chiplet":[8,8],"PE":[4,4],"intra_PE":{"C":8,"K":8}}       	# from granularity exploration
+	# memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	from nnbaton
+	memory_param = {"OL1":3 ,"OL2":48,"AL1":8,"AL2":48,"WL1":32,"WL2":32}		# simba mem
+	#memory_param = {"OL1":8 ,"OL2":128,"AL1":16,"AL2":256,"WL1":64,"WL2":1024}		# our mem
+	
 	NoC_w = HW_param["PE"][1] + 1
 	NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
 	NoP_w = HW_param["Chiplet"][1] + 1
@@ -157,33 +209,124 @@ def randomTest_NoC(app_name, chiplet_parallel = "All", core_parallel = "All"):
 	edp_res_min_dict = {}
 	energy_min_dict = {}
 	delay_min_dict = {}
-
+	code_min_dict = {}
 	for layer_name in layer_dict:
 		# ---输出文件
-		filename = './test/intra_layer_edp_per_layer/'+app_name+"_"+layer_name+"_"+chiplet_parallel+'.xls'
+		filename = './final_test/intra_layer_edp_per_layer/simba_'+ dataflow +"_"+app_name+"_"+layer_name+"_"+chiplet_parallel+'.xls'
 		network_param = layer_dict[layer_name]
-		GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel)
+		GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel, flag = dataflow)
 
 		iterTime = 10000 	# run 1w random mapping exploration
 
 		random_test_iter = 1
 
 		for i in range(random_test_iter):
-			edp_res_min, energy_min, delay_min = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
+			edp_res_min, energy_min, delay_min, code_min = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
 			edp_res_min_dict[layer_name] = edp_res_min
 			energy_min_dict[layer_name] = energy_min
 			delay_min_dict[layer_name] = delay_min
-	file_1 = "./test/intra_layer_edp/" + app_name + "_" + chiplet_parallel + ".txt"
+			code_min_dict[layer_name] = code_min
+
+	file_1 = "./final_test/intra_layer_edp/simba_" + dataflow +"_" + app_name + "_" + chiplet_parallel + ".txt"
 	f = open(file_1,'w')
 	print(edp_res_min_dict, file=f)
 	print(energy_min_dict, file=f)
 	print(delay_min_dict, file=f)
+	print(code_min_dict, file = f)
+	print()
+	f.close()
+	print(filename)
+
+def randomTest_NoC_nnbaton(app_name, chiplet_parallel = "All", core_parallel = "All"):
+	# --- 硬件参数
+	HW_param = {"Chiplet":[2,4],"PE":[8,4],"intra_PE":{"C":16,"K":16}}       	# from granularity exploration
+	# memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	from nnbaton
+	memory_param = {"OL1":8 ,"OL2":8 * 32,"AL1":4,"AL2":4 * 32,"WL1":144,"WL2":10000} # nnbaton mem
+	# memory_param = {"OL1":8 ,"OL2":128,"AL1":16,"AL2":256,"WL1":64,"WL2":10000} # ours mem
+	NoC_w = HW_param["PE"][1] + 1
+	NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
+	NoP_w = HW_param["Chiplet"][1] + 1
+	NOP_SIZE = NoP_w * HW_param["Chiplet"][0]
+	TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth}
+	
+	# --- 生成noc-nop结构图
+	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = 'Bus')
+	debug = 1
+	if_multicast = 1
+
+	# --- 神经网络参数
+	layer_dict = getLayerParam(app_name)
+
+	edp_res_min_dict = {}
+	energy_min_dict = {}
+	delay_min_dict = {}
+	code_min_dict = {}
+
+	for layer_name in layer_dict:
+		# ---输出文件
+		filename = './final_test/intra_layer_edp_per_layer/nnbaton_'+app_name+"_"+layer_name+"_"+chiplet_parallel+'.xls'
+		network_param = layer_dict[layer_name]
+		GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel,flag = "nnbaton")
+
+		iterTime = 10000 	# run 1w random mapping exploration
+
+		random_test_iter = 1
+
+		for i in range(random_test_iter):
+			edp_res_min, energy_min, delay_min, code_min = randomTest(GATest, iterTime, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, filename)
+			edp_res_min_dict[layer_name] = edp_res_min
+			energy_min_dict[layer_name] = energy_min
+			delay_min_dict[layer_name] = delay_min
+			code_min_dict[layer_name] = code_min
+	file_1 = "./final_test/intra_layer_edp/nnbaton_" + app_name + "_" + chiplet_parallel + ".txt"
+	f = open(file_1,'w')
+	print(edp_res_min_dict, file=f)
+	print(energy_min_dict, file=f)
+	print(delay_min_dict, file=f)
+	print(code_min_dict, file = f)
 	f.close()
 
 if __name__ == '__main__':
-	if str(sys.argv[1]) == "multi":
-		randomTest_NoC(str(sys.argv[2]), "P_stable", "All")
-		randomTest_NoC(str(sys.argv[2]), "PK_stable", "All")
-		randomTest_NoC(str(sys.argv[2]), "K_stable", "All")
-	if str(sys.argv[1]) == "uni":
-		randomTest_NoC(str(sys.argv[2]), str(sys.argv[3]), str(sys.argv[3]))
+	app_name = str(sys.argv[3])
+	struct_name = str(sys.argv[1])
+
+	if struct_name == "ours":
+		dataflow = str(sys.argv[5])
+		if str(sys.argv[2]) == "multi":
+			if dataflow == "simba":
+				randomTest_NoC_ours(app_name, "K_stable", "KC", dataflow)
+				randomTest_NoC_ours(app_name, "KC_stable", "KC", dataflow)
+				randomTest_NoC_ours(app_name, "C_stable", "KC", dataflow)
+			else :
+				randomTest_NoC_ours(app_name, "P_stable", "All", dataflow)
+				randomTest_NoC_ours(app_name, "PK_stable", "All", dataflow)
+				randomTest_NoC_ours(app_name, "K_stable", "All", dataflow)
+		if str(sys.argv[2]) == "uni":
+			if dataflow == "simba":
+				randomTest_NoC_ours(app_name, str(sys.argv[4]), "KC", dataflow)
+			else:
+				randomTest_NoC_ours(app_name, str(sys.argv[4]), "All", dataflow)
+	elif struct_name == "simba":
+		dataflow = str(sys.argv[5])
+		if str(sys.argv[2]) == "multi":
+			if dataflow == "simba":
+				randomTest_NoC_simba(app_name, "K_stable", "KC", dataflow)
+				randomTest_NoC_simba(app_name, "KC_stable", "KC", dataflow)
+				randomTest_NoC_simba(app_name, "C_stable", "KC", dataflow)
+			elif dataflow == "ours":
+				randomTest_NoC_simba(app_name, "P_stable", "All", dataflow)
+				randomTest_NoC_simba(app_name, "PK_stable", "All", dataflow)
+				randomTest_NoC_simba(app_name, "K_stable", "All", dataflow)
+		if str(sys.argv[2]) == "uni":
+			if dataflow == "simba":
+				randomTest_NoC_simba(app_name, str(sys.argv[4]), "KC", dataflow)
+			elif dataflow == "ours":
+				randomTest_NoC_simba(app_name, str(sys.argv[4]), "All", dataflow)
+	elif struct_name == "nnbaton":
+		if str(sys.argv[2]) == "multi":
+			randomTest_NoC_nnbaton(app_name, "P_stable", "All")
+			randomTest_NoC_nnbaton(app_name, "PK_1_stable", "All")
+			randomTest_NoC_nnbaton(app_name, "PK_2_stable", "All")
+			randomTest_NoC_nnbaton(app_name, "K_stable", "All")
+		if str(sys.argv[2]) == "uni":
+			randomTest_NoC_nnbaton(app_name, str(sys.argv[4]), "All")

@@ -268,7 +268,7 @@ def getSetComm(comm_all , set_e_num = 4):
 	return comm_chip_set_dict_out, comm_set_dict_out
 
 
-def setRouteTable(NOC_NODE_NUM, NoC_w):
+def setRouteTable_Mesh(NOC_NODE_NUM, NoC_w):
 	# mesh 4*4
 	F = {}
 	bw_scales = {}
@@ -348,9 +348,70 @@ def setRouteTable(NOC_NODE_NUM, NoC_w):
 	#print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM)
 	#print("route_table=========")
 	#print(route_table)
-	return route_table, F
+	return route_table, F, bw_scales
 
-def calCommCycle(F,routeTable, commDict):
+def setRouteTable_Ring(NOC_NODE_NUM):
+	# mesh 4*4
+	F = {}
+	bw_scales = {}
+	for src in range (NOC_NODE_NUM):
+		local = src + 1000
+		F[(local,src)] = 0
+		F[(src,local)] = 0
+		bw_scales[(src,local)] = 1
+		bw_scales[(local,src)] = 1
+
+		beside_node = (src + 1) % NOC_NODE_NUM
+		F[(src,beside_node)] = 0
+		bw_scales[(src,beside_node)] = 2
+
+	# print ("F",F)
+
+	noc_route_table = {}
+	hops = {}
+	noc_route_ids = {}
+
+	for src in range (0,NOC_NODE_NUM):
+		for dst in range (0,NOC_NODE_NUM):
+			cur_dst = src
+			cur_src = src
+			noc_route_table[(src,dst)] = []
+			noc_route_ids[(src,dst)] = []
+			while cur_dst != dst:
+				cur_dst += 1
+				cur_dst = cur_dst % NOC_NODE_NUM
+				noc_route_table[(src,dst)].append((cur_src,cur_dst))
+				cur_src = cur_dst
+				noc_route_ids[(src,dst)].append(cur_dst)
+
+	route_table = {}
+	for src in range (1000,1000+NOC_NODE_NUM):
+		for dst in range (1000,1000+NOC_NODE_NUM):
+			route_table[(src,dst)] = []
+			noc_src = src - 1000
+			noc_dst = dst -1000
+			route_table[(src,dst)] = noc_route_table[(noc_src,noc_dst)].copy()
+			if (src!=dst):
+				route_table[(src,dst)].append((noc_dst,dst))
+				route_table[(src,dst)].insert(0,(src,noc_src))
+				F[(noc_dst,dst)] = 0
+				F[(src,noc_src)] = 0
+				bw_scales[(src,noc_src)] = 1
+				bw_scales[(noc_dst,dst)] = 1
+
+
+
+
+	for item in route_table:
+		hops[item] = len(route_table[item])
+		#print (item,route_table[item])
+
+	#print ("hops==========",sum(hops.values())/NOC_NODE_NUM/NOC_NODE_NUM)
+	#print("route_table=========")
+	#print(route_table)
+	return route_table, F, bw_scales
+
+def calCommCycle(F,routeTable, bw_scales, commDict):
 	F_cur=F.copy()
 
 	link_comm_num_sum = 0
@@ -365,7 +426,7 @@ def calCommCycle(F,routeTable, commDict):
 				for link in routeTable[(send_id + 1000, dst_id + 1000)]:
 					if link not in link_list:
 						link_list.append(link)
-						F_cur[link] += commFlitNum
+						F_cur[link] += commFlitNum / bw_scales[link]
 						link_comm_num_sum += commNum
 
 	worstCommFlitNum = max(F_cur.values()) 
@@ -373,6 +434,8 @@ def calCommCycle(F,routeTable, commDict):
 	for item in F_cur:
 		if F_cur[item] == max(F_cur.values()): 
 			worstlinks.append(item)
+
+	print(F_cur)
 
 	return F_cur, worstCommFlitNum, worstlinks, link_comm_num_sum
 
@@ -393,17 +456,20 @@ def calCommEnergy(link_comm_num_sum, comm_type_dict):
 	dram_access_energy = dram_access_num * act_wgt_width * DRAM_energy_ratio
 	return d2d_energy, dram_access_energy
 
-def getInterLayer(network_param_2, parallel_1, parallel_2, NOC_NODE_NUM, NoC_w):
+def getInterLayer(network_param_2, parallel_1, parallel_2, NOC_NODE_NUM, NoC_w, topology="mesh"):
 	dim_seq_1 = ["K","P","Q"]
 	dim_seq_2 = ["K","P","Q"]
 	# 通信量计算
 	comm_num_dict, comm_type_dict, comm_type_times_dict, chiplet_num = getInterLayerComm(dim_seq_1, dim_seq_2, parallel_1, network_param_2, parallel_2, 0)
 	
 	# 拓扑构建routing table
-	routeTable, F = setRouteTable(NOC_NODE_NUM, NoC_w)
+	if topology == "mesh":
+		routeTable, F, bw_scales = setRouteTable_Mesh(NOC_NODE_NUM, NoC_w)
+	elif topology == "ring":
+		routeTable, F, bw_scales = setRouteTable_Ring(NOC_NODE_NUM)
 
 	# 计算链路通信量-delay
-	F_final, worstCommFlitNum, worstlinks, link_comm_num_sum = calCommCycle(F,routeTable, comm_num_dict)
+	F_final, worstCommFlitNum, worstlinks, link_comm_num_sum = calCommCycle(F,routeTable, bw_scales, comm_num_dict)
 
 	# 计算energy
 	d2d_e , dram_e = calCommEnergy(link_comm_num_sum, comm_type_dict)
@@ -411,6 +477,47 @@ def getInterLayer(network_param_2, parallel_1, parallel_2, NOC_NODE_NUM, NoC_w):
 	edp = 2 * (d2d_e + dram_e) * worstCommFlitNum / freq_1G / PE_freq
 
 	return worstCommFlitNum, d2d_e , dram_e, edp
+
+def calInterComm_simba(par_C_pre, par_K_pre, par_C_cur, par_K_cur, network_param_2):
+	P = network_param_2["P"]
+	Q = network_param_2["Q"]
+	H = network_param_2["H"]
+	M = network_param_2["M"]
+	C = network_param_2["C"]
+	chiplet_pre = par_C_pre * par_K_pre
+	chiplet_cur = par_C_cur * par_K_cur
+	chiplet_ratio = (chiplet_cur / chiplet_pre)
+
+	if par_C_cur >= par_K_pre:
+		if chiplet_ratio <= 1:
+			worstCommFlitNum = 0
+			d2d_energy = 0
+			dram_energy = 0
+			EDP = 0
+		elif chiplet_ratio > 1:
+			comm_num = H * M * C
+			comm_num_flit = math.ceil(comm_num / neu_per_flit_act_nop)
+			worstCommFlitNum = comm_num_flit / par_C_cur
+			d2d_energy = comm_num / par_C_cur * (chiplet_cur - chiplet_pre) * act_wgt_width * DIE2DIE_energy_ratio
+			dram_energy = chiplet_cur * (comm_num / par_C_cur) * act_wgt_width * DRAM_energy_ratio
+			EDP = worstCommFlitNum * (d2d_energy + dram_energy) / freq_1G / PE_freq
+	elif par_C_cur < par_K_pre:
+		ratio = math.ceil(par_K_pre/par_C_cur)
+		comm_num = H * M * C
+		comm_num_flit = math.ceil(comm_num / neu_per_flit_act_nop)
+		num_pre_per_chip = comm_num / par_K_pre
+		worstCommFlitNum = math.ceil(num_pre_per_chip / neu_per_flit_act_nop) * (ratio - 1)
+		d2d_energy = num_pre_per_chip * (ratio - 1) * chiplet_pre * act_wgt_width * DIE2DIE_energy_ratio
+		dram_energy =  comm_num * act_wgt_width * DRAM_energy_ratio * par_K_cur
+		if par_K_cur > par_C_pre * ratio:
+			worstCommFlitNum += comm_num_flit / par_C_cur
+			d2d_energy += comm_num / par_C_cur * (chiplet_cur - chiplet_pre) * act_wgt_width * DIE2DIE_energy_ratio
+		EDP = worstCommFlitNum * (d2d_energy + dram_energy) / freq_1G / PE_freq
+	return worstCommFlitNum, d2d_energy , dram_energy, EDP
+
+
+
+
 
 if __name__ == '__main__':
 
@@ -452,10 +559,10 @@ if __name__ == '__main__':
 			print("comm_type_dict", comm_type_dict)
 			print("comm_type_times_dict", comm_type_times_dict)
 			# 拓扑构建routing table
-			routeTable, F = setRouteTable(NOC_NODE_NUM, NoC_w)
+			routeTable, F, bw_scales = setRouteTable_Mesh(NOC_NODE_NUM, NoC_w)
 
 			# 计算链路通信量
-			F_cur, worstCommFlitNum, worstlinks, link_comm_num_sum = calCommCycle(F,routeTable, comm_num_dict)
+			F_cur, worstCommFlitNum, worstlinks, link_comm_num_sum = calCommCycle(F,routeTable,bw_scales, comm_num_dict)
 			
 			print("F_cur", F_cur)
 			print("worstCommFlitNum", worstCommFlitNum)

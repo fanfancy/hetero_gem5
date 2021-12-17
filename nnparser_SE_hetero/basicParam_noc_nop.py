@@ -66,8 +66,8 @@ def config_parallel_type(chiplet_parallel,core_parallel):
     elif chiplet_parallel == "P_K_PK":
         parallel_select["Chiplet"] = [0,3]
         parallel_type["Chiplet"] = 0
-    elif chiplet_parallel == ("P_stable" or "K_stable" or "PK_stable"):
-        parallel_select["Chiplet"] = [0,3]
+    elif chiplet_parallel == "P_stable" or chiplet_parallel ==  "K_stable" or chiplet_parallel ==  "PK_stable" or chiplet_parallel ==  "PK_1_stable" or chiplet_parallel ==  "PK_2_stable" or chiplet_parallel ==  "C_stable" or chiplet_parallel ==  "KC_stable":
+        parallel_select["Chiplet"] = [0,2,3]
         parallel_type["Chiplet"] = 0
     elif chiplet_parallel == "KC":
         parallel_select["Chiplet"] = [2,3]
