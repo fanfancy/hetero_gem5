@@ -57,8 +57,8 @@ def calFitness_granu(for_list, act_wgt_dict, out_dict, parallel_dim_list, partit
 	Q1,Q2,Q3 = partition_list["Q"][0],partition_list["Q"][1],partition_list["Q"][2]
 	C1,C2,C3 = partition_list["C"][0],partition_list["C"][1],partition_list["C"][2]
 	K1,K2,K3 = partition_list["K"][0],partition_list["K"][1],partition_list["K"][2]
-	PP2,PQ2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2]
-	PP3,PQ3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2]
+	PP2,PQ2,PC2,PK2 = parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2],parallel_dim_list[0][3]
+	PP3,PQ3,PC3,PK3 = parallel_dim_list[1][0],parallel_dim_list[1][1],parallel_dim_list[1][2],parallel_dim_list[1][3]
 	PK0 = HW_param["intra_PE"]["K"]
 	PC0 = HW_param["intra_PE"]["C"]
 
