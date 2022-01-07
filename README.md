@@ -45,6 +45,7 @@ nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
 
 粒度探索部分
 - run_granularity_model.py 多进程run所有模型的所有层
+- process_model_results.py 处理run_granularity_model.py得到的结果 (!不一定准确，需要check)
 - randomTest_noc_nop_granularity_model.py 包括探索空间定义和单层探索程序
 - single_engine_predict_granularity.py 具体的层内能量和延迟计算（专用于粒度探索）
 
