@@ -7,26 +7,34 @@ import math
 def calCommCycle(F, routeTable, bw_scales, commDict, topology = 'mesh'):
     F_cur=F.copy()
     link_comm_num_sum = 0
-    # print('---------')
+    print('---------')
     for send_id in commDict:
-        # print('send_id = ', send_id)
+        print('send_id = ', send_id)
         for packet in commDict[send_id]:
             commNum = commDict[send_id][packet][0]
             commFlitNum = math.ceil(commNum / neu_per_flit_act_nop)
             dst_list = commDict[send_id][packet][1]
-            # print('dst_list = ', dst_list)
+            print('dst_list = ', dst_list)
             link_list = []
             for dst_id in dst_list:
                 if topology == 'IODie' and (send_id // 4 == dst_id // 4):
                     continue
-                # print('routeTable[(send_id + 1000, dst_id + 1000)] = ', routeTable[(send_id + 1000, dst_id + 1000)])
-                for link in routeTable[(send_id + 1000, dst_id + 1000)]:
-                    # print('link = ', link)
-                    if link not in link_list:
-                        link_list.append(link)
-                        F_cur[link] += commFlitNum / bw_scales[link]
-                        link_comm_num_sum += commNum
-            # print('F_cur = ', F_cur)
+                
+                if topology == 'FatTree':
+                    print('routeTable[(1000, ' + str(dst_id) + ')] = ', routeTable[(1000, dst_id)])
+                    for link in routeTable[(1000, dst_id)]:
+                        if link not in link_list:
+                            link_list.append(link)
+                            F_cur[link] += commFlitNum / bw_scales[link]
+                            link_comm_num_sum += commNum
+                else:
+                    print('routeTable[(send_id + 1000, dst_id + 1000)] = ', routeTable[(send_id + 1000, dst_id + 1000)])
+                    for link in routeTable[(send_id + 1000, dst_id + 1000)]:
+                        if link not in link_list:
+                            link_list.append(link)
+                            F_cur[link] += commFlitNum / bw_scales[link]
+                            link_comm_num_sum += commNum
+            print('F_cur = ', F_cur)
 
     worstCommFlitNum = max(F_cur.values()) 
     worstlinks = []
@@ -137,7 +145,6 @@ def setRouteTable_IODie(NOC_NODE_NUM):
         return route
 
     route_table = {}
-    hops = {}
     for src in range (1000, 1000 + NOC_NODE_NUM):
         for dst in range (1000, 1000 + NOC_NODE_NUM):
             route_table[(src, dst)] = []
@@ -147,10 +154,42 @@ def setRouteTable_IODie(NOC_NODE_NUM):
                 route_table[(src, dst)] = cmesh_route(noc_src, noc_dst)
                 route_table[(src, dst)].append((noc_dst, dst))
                 route_table[(src, dst)].insert(0, (src, noc_src))
-                F[(noc_dst, dst)] = 0
-                F[(src, noc_src)] = 0
-                bw_scales[(src, noc_src)] = 1
-                bw_scales[(noc_dst, dst)] = 1
+    
+    print("F", F)
+    print("route_table=========")
+    for item in route_table:
+        print(item, route_table[item])
+    return route_table, F, bw_scales
+
+def setRouteTable_FatTree(NOC_NODE_NUM):
+    # FatTree 4*4
+    FatTree_dict = {0:[1, 2, 3], 4:[5, 6, 7], 8:[9, 10, 11], 12:[13, 14, 15]}
+    assert NOC_NODE_NUM == len(FatTree_dict.keys()) * 4, "NOC_NODE_NUM != 16！"
+
+    mc = 1000
+    F = {}
+    bw_scales = {}
+    # IODie link
+    for dst_root in FatTree_dict.keys():
+        F[(mc, dst_root)] = 0
+        F[(dst_root, mc)] = 0
+        bw_scales[(mc, dst_root)] = 4 * ddr_bandwidth / nop_bandwidth
+        bw_scales[(dst_root, mc)] = 4 * ddr_bandwidth / nop_bandwidth
+
+        for dst in FatTree_dict[dst_root]:
+            F[(dst_root, dst)] = 0
+            bw_scales[(dst_root, dst)] = 1
+
+            F[(dst, dst_root)] = 0
+            bw_scales[(dst, dst_root)] = 1
+
+    route_table = {}
+    for dst in range(NOC_NODE_NUM):
+        dst_root = (dst // 4) * 4
+        route_table[(mc, dst)] = [(mc, dst_root)]
+
+        if dst_root != dst:
+            route_table[(mc, dst)].append((dst_root, dst))
     
     print("F", F)
     print("route_table=========")
@@ -161,7 +200,7 @@ def setRouteTable_IODie(NOC_NODE_NUM):
 if __name__ == '__main__':
     NOC_NODE_NUM = 16
     NoC_w = 4
-    topology = 'ring'
+    topology = 'mesh'
 
     # 拓扑构建routing table
     if topology == "mesh":
@@ -170,6 +209,8 @@ if __name__ == '__main__':
         routeTable, F, bw_scales = setRouteTable_Ring(NOC_NODE_NUM)
     elif topology == 'IODie':
         routeTable, F, bw_scales = setRouteTable_IODie(NOC_NODE_NUM)
+    elif topology == 'FatTree':
+        routeTable, F, bw_scales = setRouteTable_FatTree(NOC_NODE_NUM)
     else:
         raise NotImplementedError
 
@@ -180,14 +221,13 @@ if __name__ == '__main__':
     network_param_2 = {"H":64,"M":64, "P":64,"Q":64,"C":64,"K":64,"R":3,"S":3, "stride":1, "padding":1}
     # network_param_2 = {"H":7,"M":7, "P":7,"Q":7,"C":512,"K":2048,"R":1,"S":1, "stride":1, "padding":0}
     
-    parallel_type_1 = {'K':{"P":1,"Q":1,"K":16},"P":{"P":16,"Q":1,"K":1},'PK':{"P":4,"Q":1,"K":4}}
-    parallel_type_2 = {'K':{"P":1,"Q":1,"K":16},"P":{"P":16,"Q":1,"K":1},'PK':{"P":4,"Q":1,"K":4}}
-    # parallel_type_1 = {'P':{"P":16,"Q":1,"K":1}}
+    # parallel_type_1 = {'K':{"P":1,"Q":1,"K":16},"P":{"P":16,"Q":1,"K":1},'PK':{"P":4,"Q":1,"K":4}}
+    # parallel_type_2 = {'K':{"P":1,"Q":1,"K":16},"P":{"P":16,"Q":1,"K":1},'PK':{"P":4,"Q":1,"K":4}}
+    parallel_type_1 = {'P':{"P":16,"Q":1,"K":1}}
     # parallel_type_1 = {'K':{"P":1,"Q":1,"K":16}}
-    # parallel_type_1 = {'P':{"P":16,"Q":1,"K":1}}
     # parallel_type_2 = {"PK":{"P":4,"Q":1,"K":4}}
     # parallel_type_2 = {'P':{"P":16,"Q":1,"K":1}}
-
+    parallel_type_2 = {'K':{"P":1,"Q":1,"K":16}}
     excel_datas = []
 
     times = 0
