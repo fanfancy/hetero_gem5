@@ -6,9 +6,9 @@ import random
 app_name = str(sys.argv[1])
 
 layer_list = {"resnet18":[1,2,2,2,2,6,7,7,7,10,11,11,11,14,15,15,15],"resnet50":[1,2,3,4,5,3,4,5,3,4,11,12,13,14,15,13,14,15,13,14,15,13,23,24,25,26,27,25,26,27,25,26,27,25,26,27,25,26,27,25,41,42,43,44,45,43,44,45,43,50],"VGG16":[1,2,3,4,5,6,6,8,9,9,11,11,11],"alexnet":[1,2,3,4,5,6,7,8],"lenet":[1,2,3,4,5]}
-file_K = "mem_simba_simba_" + str(app_name) + "_K_stable.txt"
-file_C = "mem_simba_simba_" + str(app_name) + "_C_stable.txt"
-file_KC = "mem_simba_simba_" + str(app_name) + "_KC_stable.txt"
+file_K = "ours_simba_" + str(app_name) + "_K_stable.txt"
+file_C = "ours_simba_" + str(app_name) + "_C_stable.txt"
+file_KC = "ours_simba_" + str(app_name) + "_KC_stable.txt"
 f_k = open(file_K)
 f_c = open(file_C)
 f_kc = open(file_KC)
@@ -169,10 +169,10 @@ for layer_id in result_k:
 	energy_list[layer_id] = "\t" + str(result_e_k[layer_id]) + "\t" + str(result_e_c[layer_id]) + "\t" + str(result_e_kc[layer_id])
 	par_real_list[layer_id] = "\t" + str(par_real_k[layer_id]) + "\t" + str(par_real_c[layer_id]) + "\t" + str(par_real_kc[layer_id])
 
-fout = open("mem_simba_" + app_name + "_intra_layer.txt", 'w')
-fout_e = open("mem_simba_" + app_name + "_intra_layer_energy.txt", 'w')
-fout_d = open("mem_simba_" + app_name + "_intra_layer_delay.txt", 'w')
-fout_par = open("mem_simba_" + app_name + "_intra_layer_parallel.txt", 'w')
+fout = open("ours_simba_" + app_name + "_intra_layer.txt", 'w')
+fout_e = open("ours_simba_" + app_name + "_intra_layer_energy.txt", 'w')
+fout_d = open("ours_simba_" + app_name + "_intra_layer_delay.txt", 'w')
+fout_par = open("ours_simba_" + app_name + "_intra_layer_parallel.txt", 'w')
 line1 = app_name + "\t" + "K" + "\t" + "C" + "\t" + "KC"
 print(line1, file = fout_d)
 print(line1, file = fout)
