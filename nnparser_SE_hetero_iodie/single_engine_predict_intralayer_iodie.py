@@ -17,6 +17,7 @@ wgt_tag =  (int(1001))
 act_tag =  (int(1002))
 out_tag =  (int(1003))
 
+debug = 0
 # 建立DNN模型
 #print ("task = ",task)
 #print (DNN1.layer_list[0].i_H)
@@ -101,10 +102,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     al2_node = ol2_node + PE_lenth + 1
     wl2_node = ol2_node + (PE_lenth + 1) * 2
     dram_node  = 0
-    print("ol2_node", ol2_node)
-    print("al2_node", al2_node)
-    print("wl2_node", wl2_node)
-    #print(route_table)
 
 
     runtimeP = PP3*P3*PP2*P2*P1
@@ -151,7 +148,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         ol1_need = ol1_need * ol1_ratio[id] # 单位:neuron
 
         # al1 need calculation
-        if "K" == param[0] or "C" == param[0]:
+        if "C" == param[0]:
             al1_need_CKpart = al1_need_CKpart * all_param[id]
         elif "Q" == param[0]:
             al1_need_Qpart = al1_need_Qpart * all_param[id]
@@ -218,6 +215,15 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     ape_cp,ape_cp_id,ape_utilization_ratio = find_cp(data_flow,AL1_need,A_PE_mem)
     wpe_cp,wpe_cp_id,wpe_utilization_ratio = find_cp(data_flow,WL1_need,W_PE_mem)
 
+    if debug == 1:
+        print("Debug in find_cp:")
+        print("---OL1_mem:{} OL1_need:{}".format(OL1_mem, OL1_need))
+        print("---ol1_cp:{} ol1_cp_id:{}".format(ol1_cp, ol1_cp_id))
+        print("---AL1_mem:{} AL1_need:{}".format(AL1_mem, AL1_need))
+        print("---al1_cp:{} al1_cp_id:{}".format(al1_cp, al1_cp_id))
+        print("---WL1_mem:{} WL1_need:{}".format(WL1_mem, WL1_need))
+        print("---wl1_cp:{} wl1_cp_id:{}".format(wl1_cp, wl1_cp_id))
+
 
     #print ("OL1_need",OL1_need); print ("OL2_need",OL2_need)
     #print ("AL1_need",AL1_need); print ("AL2_need",AL2_need)
@@ -233,8 +239,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     act_core_dict = act_wgt_dict["act_core"][0]["recv"]
     wgt_core_dict = act_wgt_dict["wgt_core"][0]["recv"]
-    print("wgt_core_dict ",wgt_core_dict)
-    print("act_core_dict ",act_core_dict)
     act_chip_dict = act_wgt_dict["act_chiplet"]["recv"]
     wgt_chip_dict = act_wgt_dict["wgt_chiplet"]["recv"]
     out_core_dict = out_dict["rd_core"][0]["recv"]
@@ -765,13 +769,13 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 
     cur = data_flow[ol1_cp_id]; inner = data_flow[ol1_cp_id-1]  
     if (if_out_final[cur]!=1): 
-        print("CORE: read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
+        #print("CORE: read opt mem ", OL1_need[inner],"repeat ",repeat_num[cur]) 
         core_pkt_num_rd_opt += int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit_psum)) * repeat_num[cur]
         core_rd_out_data_num += OL1_need[inner]
     else:
         core_pkt_num_rd_opt += 0
         core_rd_out_data_num += 0
-    print("CORE: write opt mem ", OL1_need[inner],"repeat ",repeat_num[cur])
+   # print("CORE: write opt mem ", OL1_need[inner],"repeat ",repeat_num[cur])
     if (if_out_final[cur]!=1):
         core_pkt_num_wr_opt += int(math.ceil(OL1_need[inner]/flit_per_pkt/neu_per_flit_psum)) *repeat_num[cur]
     else:
@@ -779,12 +783,12 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     core_out_data_num += OL1_need[inner] # 用于生成仿真指令
         
     cur = data_flow[al1_cp_id]; inner = data_flow[al1_cp_id-1]  
-    print("CORE: read act mem ",AL1_need[inner],"repeat ",repeat_num[cur])
+    #print("CORE: read act mem ",AL1_need[inner],"repeat ",repeat_num[cur])
     core_pkt_num_rd_act +=  int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
     core_act_data_num += AL1_need[inner] # 用于生成仿真指令
 
     cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
-    print("CORE: read wgt mem ",WL1_need[inner],"repeat ",repeat_num[cur]) 
+    #print("CORE: read wgt mem ",WL1_need[inner],"repeat ",repeat_num[cur]) 
     core_pkt_num_rd_wgt += int(math.ceil(WL1_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
     core_wgt_data_num += WL1_need[inner] # 用于生成仿真指令
 
@@ -802,13 +806,13 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 
     cur = data_flow[ol2_cp_id]; inner = data_flow[ol2_cp_id-1]  
     if (if_out_final[cur]!=1): 
-        print("Chip: read opt mem ", OL2_need[inner],"repeat ",repeat_num[cur]) 
+        #print("Chip: read opt mem ", OL2_need[inner],"repeat ",repeat_num[cur]) 
         chip_pkt_num_rd_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_psum)) * repeat_num[cur]
         chip_rd_out_data_num += OL2_need[inner]
     else:
         chip_pkt_num_rd_opt += 0
         chip_rd_out_data_num += 0
-    print("Chip: write opt mem ", OL2_need[inner],"repeat ",repeat_num[cur])
+    #print("Chip: write opt mem ", OL2_need[inner],"repeat ",repeat_num[cur])
     if (if_out_final[cur]!=1): 
         chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_psum)) *repeat_num[cur]
     else:
@@ -816,12 +820,12 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     chip_out_data_num += OL2_need[inner] # 用于生成仿真指令
         
     cur = data_flow[al2_cp_id]; inner = data_flow[al2_cp_id-1]  
-    print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
+    #print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
     chip_pkt_num_rd_act +=  int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
     chip_act_data_num += AL2_need[inner] # 用于生成仿真指令
 
     cur = data_flow[wl2_cp_id]; inner = data_flow[wl2_cp_id-1]  
-    print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
+    #print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
     chip_pkt_num_rd_wgt += int(math.ceil(WL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
     chip_wgt_data_num += WL2_need[inner] # 用于生成仿真指令
 
@@ -893,8 +897,8 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur)
     if (degrade_ratio < 1):
             degrade_ratio = 1 
-    print ("F_cur",F_cur)
-    print ("degrade_ratio",degrade_ratio)
+    #print ("F_cur",F_cur)
+    #print ("degrade_ratio",degrade_ratio)
 
     # --------------------- 生成用于仿真的指令 ---------------------
 
@@ -909,8 +913,8 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     wl2_repeat_interval = int(repeat_num[inner_cp] / repeat_num[wl2_cp]) 
 
     cal_cycle_per_run = cal_cycles[data_flow[inner_cp_id-1]]
-    print ("ol1_repeat_interval",ol1_repeat_interval, "al1_repeat_interval",al1_repeat_interval,"wl1_repeat_interval",wl1_repeat_interval)
-    print ("ol2_repeat_interval",ol2_repeat_interval, "al2_repeat_interval",al2_repeat_interval,"wl2_repeat_interval",wl2_repeat_interval)
+    #print ("ol1_repeat_interval",ol1_repeat_interval, "al1_repeat_interval",al1_repeat_interval,"wl1_repeat_interval",wl1_repeat_interval)
+    #print ("ol2_repeat_interval",ol2_repeat_interval, "al2_repeat_interval",al2_repeat_interval,"wl2_repeat_interval",wl2_repeat_interval)
 
     # 计算最小循环单位中的packet传输数目
     core_out_packet = int(math.ceil(core_out_data_num/flit_per_pkt/neu_per_flit_psum))
@@ -1032,7 +1036,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
 
 
     ## summary 
-    print ("\n------------summary------------")
-    print ("repeat times = ", repeat_num[inner_cp])
-    print ("prediced latency = ", compuation_cycles*degrade_ratio, "degrade_ratio = ",degrade_ratio)
+    #print ("\n------------summary------------")
+    #print ("repeat times = ", repeat_num[inner_cp])
+    #print ("prediced latency = ", compuation_cycles*degrade_ratio, "degrade_ratio = ",degrade_ratio)
 # TODO 广播的处理方式
