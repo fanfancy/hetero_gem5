@@ -166,7 +166,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         L1_need[param] = wl1_need + al1_need + ol1_need
         if_out_final[param] = out_final[id]
         # L2
-        OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
+        OL2_need[param] = ol1_need * PK2 * PQ2 * PP2 * PC2 # WXY ADD NEW IN 2022.4.7
         al2_need_Qpart = al1_need_Qpart * PQ2 
         al2_need_Ppart = al1_need_Ppart * PP2
         al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride

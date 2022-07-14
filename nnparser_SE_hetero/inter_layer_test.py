@@ -64,7 +64,7 @@ def getIntraLayerEDP(app_name, file_type = "intra_layer", struct_type = ""):
 def getIntraLayerEDP_simba(app_name, file_type = "intra_layer", struct_type = "simba"):
 	EDP_intra_layer = {}
 
-	file_name = "./final_test/intra_layer_edp/" + struct_type + "_" + app_name + "_" + file_type +".txt"
+	file_name = "./../check/intra_layer_edp_8T/" + struct_type + "_" + app_name + "_" + file_type +".txt"
 	f = open(file_name)
 	lines = f.readlines()
 	layer_num = 0
@@ -528,10 +528,10 @@ def nop_noc_test_simba(app_name, struct = "simba"):
 	parallel_type_dict = {"K":[],"C":[],"KC":[]}
 
 	para_type = ["K","KC","C"]
-	parallel_type_1 = {"K":{"K":64,"C":1}, "KC":{"K":8,"C":8}, "C":{"K":1,"C":64}}
-	parallel_type_2 = {"K":{"K":64,"C":1}, "KC":{"K":8,"C":8}, "C":{"K":1,"C":64}}
+	parallel_type_1 = {"K":{"K":16,"C":1}, "KC":{"K":4,"C":4}, "C":{"K":1,"C":16}}
+	parallel_type_2 = {"K":{"K":16,"C":1}, "KC":{"K":4,"C":4}, "C":{"K":1,"C":16}}
 	
-	file_name = "./final_test/noc_nop/" + struct +"_"+ app_name + "_noc_nop.txt"
+	file_name = "./final_test/noc_nop_simba/" + struct +"_"+ app_name + "_noc_nop.txt"
 	f = open(file_name,'w')
 
 	# --- 获得神经网络参数
@@ -1799,8 +1799,8 @@ if __name__ == '__main__':
 		#nop_noc_test_nnbaton(app_name)
 		noc_test_nnbaton(app_name)
 	elif struct_name == "simba" or struct_name == "mem_simba":
-		#nop_noc_test_simba(app_name, struct_name)
-		noc_test_simba(app_name, struct_name)
+		nop_noc_test_simba(app_name, struct_name)
+		#noc_test_simba(app_name, struct_name)
 	elif struct_name == "ours_simba":
 		noc_test_simba_on_ours(app_name, struct_name)
 	elif struct_name == "simba_ours":
