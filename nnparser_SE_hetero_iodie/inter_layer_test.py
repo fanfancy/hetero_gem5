@@ -61,10 +61,10 @@ def getIntraLayerEDP(app_name, file_type = "intra_layer", struct_type = ""):
 	print(file_type," : ", EDP_intra_layer)
 	return EDP_intra_layer
 
-def getIntraLayerEDP_simba(app_name, file_type = "intra_layer", struct_type = "simba"):
+def getIntraLayerEDP_simba(app_name, file_type = "intra_layer", struct_type = "ours_simba"):
 	EDP_intra_layer = {}
 
-	file_name = "./final_test/intra_layer_edp/" + struct_type + "_" + app_name + "_" + file_type +".txt"
+	file_name = "./final_test/intra_layer_edp_simba_128T/" + struct_type + "_" + app_name + "_" + file_type +".txt"
 	f = open(file_name)
 	lines = f.readlines()
 	layer_num = 0
@@ -501,7 +501,6 @@ def nop_noc_test_ours_iodie(app_name):
 
 	workbook.save("./final_test/noc_nop_xls/"+app_name+"_noc_nop.xls")
 
-
 def nop_noc_test_simba_ours(app_name):
 	NOC_NODE_NUM = 64
 	NoC_w = 8
@@ -704,7 +703,8 @@ def calPSumAllReduce(output_num, chiplet_num, PC3):
 	if PC3 == 1:
 		dram_energy = 0
 	else:
-		dram_energy = (output_num * psum_width / chiplet_num) * PC3 * chiplet_num * SRAM_energy(1) + (output_num * act_wgt_width / chiplet_num) * PC3 * chiplet_num * SRAM_energy(1)
+		#dram_energy = (output_num * psum_width / chiplet_num) * PC3 * chiplet_num * SRAM_energy(1) + (output_num * act_wgt_width / chiplet_num) * PC3 * chiplet_num * SRAM_energy(1)
+		dram_energy = (output_num * psum_width / chiplet_num) * PC3 * chiplet_num * DRAM_energy_ratio + (output_num * act_wgt_width / chiplet_num) * PC3 * chiplet_num * DRAM_energy_ratio
 	energy_list = [d2d_energy, dram_energy, d2d_energy+dram_energy]
 	return delay, energy_list
 
@@ -978,10 +978,8 @@ def nop_noc_test_ours_simba(app_name):
 	parallel_type_dict = {"K":[],"C":[],"KC":[]}
 
 	para_type = ["K","KC","C"]
-	parallel_type_1 = {"K":{"K":16,"C":1}, "KC":{"K":4,"C":4}, "C":{"K":1,"C":16}}
-	parallel_type_2 = {"K":{"K":16,"C":1}, "KC":{"K":4,"C":4}, "C":{"K":1,"C":16}}
 	
-	file_name = "./final_test/noc_nop/ours_simba_" + app_name + "_noc_nop.txt"
+	file_name = "./final_test/noc_nop_ours_simba_128T/ours_simba_" + app_name + "_noc_nop.txt"
 	f = open(file_name,'w')
 
 	# --- 获得神经网络参数
@@ -1008,7 +1006,11 @@ def nop_noc_test_ours_simba(app_name):
 		for par_type in para_type:
 			PC3 = para_each_layer[i][par_type]["C"]
 			chiplet_num = para_each_layer[i][par_type]["C"] * para_each_layer[i][par_type]["K"]
-			psum_delay, psum_energy_list = calPSumAllReduce(output_num, chiplet_num, PC3)
+			if PC3 == 16:
+				psum_delay, psum_energy_list = calPSumAllReduce(output_num, 4, 4)
+			else:
+				psum_delay = 0
+				psum_energy_list = [0,0,0]
 			Psum_edp_dict[i][par_type] = psum_delay * psum_energy_list[2] / freq_1G / PE_freq
 			Psum_energy_dict[i][par_type] = psum_energy_list[2]
 			Psum_delay_dict[i][par_type] = psum_delay
@@ -1092,11 +1094,33 @@ def nop_noc_test_ours_simba(app_name):
 				delay_inter_num = {}
 				EDP_num_only = {}
 				inter_layer_edp_dict[i][para_type_1] = {}
-				par_C_pre = para_each_layer[i][para_type_1]["C"]
-				par_K_pre = para_each_layer[i][para_type_1]["K"]
+				if 4 <= para_each_layer[i][para_type_1]["C"] <= 16:
+					par_C_pre = para_each_layer[i][para_type_1]["C"] / 4
+				else:
+					par_C_pre = 1
+				
+				if 4 < para_each_layer[i][para_type_1]["K"] <= 16:
+					par_K_pre = para_each_layer[i][para_type_1]["K"] / 4
+				elif para_each_layer[i][para_type_1]["K"] == 4 and para_each_layer[i][para_type_1]["C"] == 1:
+					par_K_pre = 1
+				else:
+					par_K_pre = para_each_layer[i][para_type_1]["K"]
+				#par_C_pre = para_each_layer[i][para_type_1]["C"]
+				#par_K_pre = para_each_layer[i][para_type_1]["K"]
 				for para_type_2 in para_type:
-					par_C_cur = para_each_layer[i+1][para_type_2]["C"]
-					par_K_cur = para_each_layer[i+1][para_type_2]["K"]
+					if 4 <= para_each_layer[i+1][para_type_2]["C"] <= 16:
+						par_C_cur = para_each_layer[i+1][para_type_2]["C"] / 4
+					else:
+						par_C_cur = 1
+					
+					if 4 < para_each_layer[i+1][para_type_2]["K"] <= 16:
+						par_K_cur = para_each_layer[i+1][para_type_2]["K"] / 4
+					elif para_each_layer[i+1][para_type_2]["K"] == 4 and para_each_layer[i+1][para_type_2]["C"] == 1:
+						par_K_cur = 1
+					else:
+						par_K_cur = para_each_layer[i+1][para_type_2]["K"]
+					#par_C_cur = para_each_layer[i+1][para_type_2]["C"]
+					#par_K_cur = para_each_layer[i+1][para_type_2]["K"]
 
 					worstCommFlitNum, d2d_e , dram_e, EDP = calInterComm_simba(par_C_pre, par_K_pre, par_C_cur, par_K_cur, network_param_2)
 					
@@ -1213,7 +1237,7 @@ def nop_noc_test_ours_simba(app_name):
 		for col, column_data in enumerate(data):
 			sheet.cell(row+2, col+1, column_data)
 
-	workbook.save("./final_test/noc_nop_xls/simba_"+app_name+"_noc_nop.xls")
+	workbook.save("./final_test/noc_nop_ours_simba_128T_xls/simba_"+app_name+"_noc_nop.xls")
 
 def nop_noc_test_nnbaton(app_name):
 	NOC_NODE_NUM = 8
@@ -1435,7 +1459,7 @@ def noc_test_ours(app_name):
 	EDP_sum_dict = {"P":0, "K":0, "PK":0}
 
 	para_type = ["P","K","PK"]
-	parallel_type = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
+	parallel_type = {"P":{"P":4,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":4},'PK':{"P":4,"Q":1,"K":1}}
 	
 	file_name = "./final_test/noc_nop/" + app_name + "_noc.txt"
 	f = open(file_name,'w')
@@ -1443,9 +1467,9 @@ def noc_test_ours(app_name):
 	# --- 获得神经网络参数
 	layer_dict, layer_id_list = getLayerParam(app_name)
 	# --- 获得片内EDP数值
-	EDP_intra_layer = getIntraLayerEDP(app_name)
-	energy_intra_layer = getIntraLayerEDP(app_name, "intra_layer_energy")
-	delay_intra_layer = getIntraLayerEDP(app_name, "intra_layer_delay")
+	EDP_intra_layer = getIntraLayerEDP(app_name,struct_type="ours_ours_")
+	energy_intra_layer = getIntraLayerEDP(app_name, "intra_layer_energy",struct_type="ours_ours_")
+	delay_intra_layer = getIntraLayerEDP(app_name, "intra_layer_delay",struct_type="ours_ours_")
 
 
 	para_list = []
@@ -1608,7 +1632,7 @@ def noc_test_nnbaton(app_name):
 	EDP_sum_dict = {"P":0, "K":0, "PK_1":0, "PK_2":0}
 
 	para_type = ["P","K","PK_1", "PK_2"]
-	parallel_type = {"P":{"P":8,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":8},'PK_1':{"P":4,"Q":1,"K":2},'PK_2':{"P":2,"Q":1,"K":4}}
+	parallel_type = {"P":{"P":1,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":8},'PK_1':{"P":4,"Q":1,"K":2},'PK_2':{"P":2,"Q":1,"K":4}}
 	
 	file_name = "./final_test/nnbaton_noc/mem_nnbaton_" + app_name + "_noc.txt"
 	f = open(file_name,'w')
@@ -1816,7 +1840,7 @@ def noc_test_simba_on_ours(app_name, struct):
 
 	para_type = ["K","KC","C"]
 	
-	file_name = "./final_test/simba_noc/" + struct +"_"+ app_name + "_noc.txt"
+	file_name = "./final_test/noc_ours_simba_128T/" + struct +"_"+ app_name + "_noc.txt"
 	f = open(file_name,'w')
 
 	# --- 获得神经网络参数
@@ -1843,7 +1867,11 @@ def noc_test_simba_on_ours(app_name, struct):
 		for par_type in para_type:
 			PC3 = para_each_layer[i][par_type]["C"]
 			chiplet_num = para_each_layer[i][par_type]["C"] * para_each_layer[i][par_type]["K"]
-			psum_delay, psum_energy_list = calPSumAllReduce(output_num, chiplet_num, PC3)
+			if PC3 == 16:
+				psum_delay, psum_energy_list = calPSumAllReduce(output_num, 4, 4)
+			else:
+				psum_delay = 0
+				psum_energy_list = [0,0,0]
 			Psum_edp_dict[i][par_type] = psum_delay * psum_energy_list[2] / freq_1G / PE_freq
 			Psum_energy_dict[i][par_type] = psum_energy_list[2]
 			Psum_delay_dict[i][par_type] = psum_delay
@@ -1895,6 +1923,31 @@ def noc_test_simba_on_ours(app_name, struct):
 		if i > layer_id_list[0]:
 			network_param_2 = layer_dict[i]
 			print(network_param_2)
+
+			if 4 <= para_each_layer[i-1][para_list[layer_num - 1]]["C"] <= 16:
+				par_C_pre = para_each_layer[i-1][para_list[layer_num - 1]]["C"] / 4
+			else:
+				par_C_pre = 1
+				
+			if 4 < para_each_layer[i-1][para_list[layer_num - 1]]["K"] <= 16:
+				par_K_pre = para_each_layer[i-1][para_list[layer_num - 1]]["K"] / 4
+			elif para_each_layer[i-1][para_list[layer_num - 1]]["K"] == 4 and para_each_layer[i-1][para_list[layer_num - 1]]["C"] == 1:
+				par_K_pre = 1
+			else:
+				par_K_pre = para_each_layer[i-1][para_list[layer_num - 1]]["K"]
+			
+			if 4 <= para_each_layer[i][para_list[layer_num]]["C"] <= 16:
+				par_C_cur = para_each_layer[i][para_list[layer_num]]["C"] / 4
+			else:
+				par_C_cur = 1
+				
+			if 4 < para_each_layer[i][para_list[layer_num]]["K"] == 16:
+				par_K_cur = para_each_layer[i][para_list[layer_num]]["K"] / 4
+			elif para_each_layer[i][para_list[layer_num]]["K"] == 4 and para_each_layer[i][para_list[layer_num]]["C"] == 1:
+				par_K_cur = 1
+			else:
+				par_K_cur = para_each_layer[i][para_list[layer_num]]["K"]
+
 			par_C_pre = para_each_layer[i-1][para_list[layer_num - 1]]["C"]
 			par_K_pre = para_each_layer[i-1][para_list[layer_num - 1]]["K"]
 
@@ -1987,7 +2040,7 @@ def get_set_comm_num_test(app_name):
 
 if __name__ == '__main__':
 
-	# python3 inter_layer_test.py ours resnet50
+	# python3 inter_layer_test.py ours_simba resnet50
 	app_name = str(sys.argv[2])
 	struct_name = str(sys.argv[1])
 	if struct_name == "ours":
@@ -2001,5 +2054,6 @@ if __name__ == '__main__':
 		noc_test_simba(app_name, struct_name)
 	elif struct_name == "ours_simba":
 		noc_test_simba_on_ours(app_name, struct_name)
+		nop_noc_test_ours_simba(app_name)
 	elif struct_name == "simba_ours":
 		noc_test_ours_on_simba(app_name)

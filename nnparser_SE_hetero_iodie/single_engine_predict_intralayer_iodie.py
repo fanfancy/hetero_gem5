@@ -80,10 +80,25 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     # io die : ddr bandwidth
     ddr_bandwidth_io_die_weight = ddr_bandwidth
     ddr_bandwidth_io_die_input = ddr_bandwidth
-    if PP3 == 16:
-        ddr_bandwidth_io_die_input /= 4
-    if PK3 == 16 or PK3 == 4:
-        ddr_bandwidth_io_die_weight /= 4
+    if ChipNum == 16:
+        #if PP3 == ChipNum:
+        #    ddr_bandwidth_io_die_input /= 4
+        #if PK3 == ChipNum or PK3 == 4:
+        #    ddr_bandwidth_io_die_weight /= 4
+        #simba
+        if PC3 == 4 or PC3 == 16:
+            ddr_bandwidth_io_die_input /= 4
+            ddr_bandwidth_io_die_weight /= 4
+        elif PK3 == ChipNum:
+            ddr_bandwidth_io_die_weight /= 4
+    elif ChipNum == 4:
+        if PP3 == 4:
+            ddr_bandwidth_io_die_input /= 4
+        elif PP3 == 2:
+            ddr_bandwidth_io_die_input /= 2
+            ddr_bandwidth_io_die_weight /= 2
+        elif PP3 == 1:
+            ddr_bandwidth_io_die_weight /= 4
     ddr_bandwidth_io_die_output = ddr_bandwidth / 4
 
 
@@ -662,7 +677,7 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
         ol1_need = ol1_need * ol1_ratio[id] # 单位:neuron
 
         # al1 need calculation
-        if "K" == param[0] or "C" == param[0]:
+        if "C" == param[0]:
             al1_need_CKpart = al1_need_CKpart * all_param[id]
         elif "Q" == param[0]:
             al1_need_Qpart = al1_need_Qpart * all_param[id]
