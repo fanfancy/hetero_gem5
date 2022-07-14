@@ -267,7 +267,6 @@ def getSetComm(comm_all , set_e_num = 4):
 
 	return comm_chip_set_dict_out, comm_set_dict_out
 
-
 def setRouteTable_Mesh(NOC_NODE_NUM, NoC_w):
 	# mesh 4*4
 	F = {}
@@ -514,9 +513,6 @@ def calInterComm_simba(par_C_pre, par_K_pre, par_C_cur, par_K_cur, network_param
 			d2d_energy += comm_num / par_C_cur * (chiplet_cur - chiplet_pre) * act_wgt_width * DIE2DIE_energy_ratio
 		EDP = worstCommFlitNum * (d2d_energy + dram_energy) / freq_1G / PE_freq
 	return worstCommFlitNum, d2d_energy , dram_energy, EDP
-
-
-
 
 
 if __name__ == '__main__':
