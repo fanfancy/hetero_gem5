@@ -166,7 +166,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         ol1_need = ol1_need * ol1_ratio[id] # 单位:neuron
 
         # al1 need calculation
-        #if "K" == param[0] or "C" == param[0]:
         if "C" == param[0]:
             al1_need_CKpart = al1_need_CKpart * all_param[id]
         elif "Q" == param[0]:
@@ -535,7 +534,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         else:
             print ("FATAL: link's energy ratio is incorrect!")
             sys.exit()
-    if PC3 < 1:
+    if PC3 > 1:
         output_num = runtimeP * runtimeQ * runtimeK
         chiplet_num = runtimeChipNum
         delay_psum, energy_psum_list = calPSumAllReduce(output_num, chiplet_num, PC3)
@@ -674,7 +673,6 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
         ol1_need = ol1_need * ol1_ratio[id] # 单位:neuron
 
         # al1 need calculation
-        #if "K" == param[0] or "C" == param[0]:
         if "C" == param[0]:
             al1_need_CKpart = al1_need_CKpart * all_param[id]
         elif "Q" == param[0]:

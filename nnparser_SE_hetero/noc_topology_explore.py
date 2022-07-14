@@ -3,6 +3,7 @@ import copy
 from multicast_method import simple_multicast
 from mesh_hetero import *
 from matplotlib import pyplot as plt
+from basicParam_noc_nop import *
 
 degrade_ratio_list = []
 excel_datas = []
@@ -125,6 +126,7 @@ def check_topology():
 
     if_multicast = True
     debug = False
+    set_out = {0: [1,2,3,4, 6,7,8,9, 11,12,13,14, 16,17,18,19]}
     set_act, set_wgt = setmappingSet(4, 4, act_wgt_group[0], act_wgt_group[1])
     if debug:
         print('set_act = ', set_act)
@@ -147,7 +149,7 @@ def check_topology():
     for j, act_bw in enumerate(act_bw_array):
         for k, wgt_bw in enumerate(wgt_bw_array):
             print('###### act_bw = %f, wgt_bw = %f ######' % (act_bw, wgt_bw))
-            degrade_ratio, F_cur = cal_degrade_ratio(HW_param, NoC_param, topology, set_act, set_wgt, act_bw, wgt_bw, if_multicast, debug = debug)
+            degrade_ratio, F_cur = cal_degrade_ratio(HW_param, NoC_param, topology, set_act, set_wgt, set_out, act_bw, wgt_bw, if_multicast, debug = debug)
 
             if debug:
                 print('degrade_ratio = ', degrade_ratio)
@@ -166,7 +168,7 @@ def check_topology():
     plt.show()
 
 def search_random(TOPO_param, HW_param, set_act, set_wgt, set_out, if_multicast, debug, ol2_node, al2_node, wl2_node):
-    NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"], TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], 'RandomRouterless', TOPO_param["NoC_w"] - 1, ol2_node, al2_node, wl2_node)
+    NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"], TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], 'RandomRouterless', TOPO_param["NoC_w"] - 1)
     degrade_ratio, F_cur = cal_degrade_ratio(HW_param, NoC_param, 'RandomRouterless', set_act, set_wgt, set_out, 16, 16, if_multicast, debug, ol2_node, al2_node, wl2_node)
     
     return NoC_param, degrade_ratio
@@ -207,13 +209,15 @@ def search_random_multithread(TOPO_param, HW_param, set_act, set_wgt, set_out, i
 
 
         def run(self):
-            NoC_param, degrade_ratio = search_random(self.TOPO_param, self.HW_param, self.set_act, self.set_wgt, self.set_out, self.if_multicast, self.debug)
+            NoC_param, degrade_ratio = search_random(self.TOPO_param, self.HW_param, self.set_act, self.set_wgt, self.set_out, self.if_multicast, self.debug, self.ol2_node, self.al2_node, self.wl2_node)
             self.child_pipe.send([NoC_param, float(degrade_ratio)])
 
     process_list = []
     parent_pipe_list = []
+    parallel_thread = 50
+
     # simulator
-    for i in range(100):
+    for i in range(parallel_thread):
         parent, child = Pipe()
         process_list.append(myProcess(i, child, TOPO_param, HW_param, set_act, set_wgt, set_out, if_multicast, debug, ol2_node, al2_node, wl2_node))
         parent_pipe_list.append(parent)
@@ -223,7 +227,7 @@ def search_random_multithread(TOPO_param, HW_param, set_act, set_wgt, set_out, i
     # find min RandomRouterless
     min_degrade_ratio = float('inf')
 
-    for i in range(100):
+    for i in range(parallel_thread):
         process_list[i].join()
         message = parent_pipe_list[i].recv()
         degrade_ratio = message[1]
@@ -243,7 +247,7 @@ def check_random():
     HW_param = {"Chiplet":[1, 1], "PE":[4, 4], "intra_PE":{"C":8,"K":8}}
     # Topology_list = ['Mesh', 'Torus', 'Routerless', 'Ring']
     # color_list = ['b', 'r', 'y', 'g']
-    Topology_list = ['Mesh', 'Torus']
+    Topology_list = ['Mesh']
     color_list = ['b', 'r']
     Sample_Num = 20
 
@@ -252,15 +256,18 @@ def check_random():
     NoP_w = HW_param["Chiplet"][1]
     NOP_SIZE = NoP_w * HW_param["Chiplet"][0]
     
-
     if_multicast = True
     debug = False
     act_wgt_group = [4, 4]
     set_act, set_wgt = setmappingSet(4, 4, act_wgt_group[0], act_wgt_group[1])
-    set_out = {0: [1,2, 3,4, 6,7, 8,9, 11,12, 13,14, 16,17, 18,19]}
-    ol2_node = 0
-    al2_node = [5, 5, 5, 5]
-    wl2_node = 10
+    set_out = {0: [0,1, 3,4, 5,6, 8,9, 10,11, 13,14, 15,16, 18,19]}
+    ol2_node = A_W_offset['o']
+    if A_W_offset['o'] == 0:
+        al2_node = [A_W_offset['a']] * 4
+    else:
+        al2_node = [A_W_offset['a']] * 2 + [A_W_offset['a'] + NoC_w * 2] * 2 
+    wl2_node = A_W_offset['w']
+
     TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth, "ol2_node":ol2_node, "al2_node":al2_node, "wl2_node":wl2_node, }
 
     if debug:
@@ -273,7 +280,7 @@ def check_random():
     print(min_NoC_param['Ring'])
     print(min_degrade_ratio)
     print(min_NoC_param['route_table'])
-    debug = True
+    debug = False
 
     act_bw_array = np.linspace(2, 16, Sample_Num)
     wgt_bw_array = np.linspace(2, 16, Sample_Num)

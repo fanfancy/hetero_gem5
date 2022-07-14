@@ -272,12 +272,14 @@ def setRouteTable_Mesh(NOC_NODE_NUM, NoC_w):
 	F = {}
 	bw_scales = {}
 	for src in range (NOC_NODE_NUM):
+		local = src + 1000
+		F[(local, src)] = 0
+		F[(src, local)] = 0
+		bw_scales[(local, src)] = ddr_bandwidth / nop_bandwidth
+		bw_scales[(src, local)] = ddr_bandwidth / nop_bandwidth
+		src_x = src %  NoC_w
+		src_y = int(src / NoC_w)
 		for dst in range (NOC_NODE_NUM):
-			local = src + 1000
-			F[(local,src)] = 0
-			F[(src,local)] = 0
-			src_x = src %  NoC_w
-			src_y = int(src / NoC_w)
 			dst_x = dst %  NoC_w
 			dst_y = int(dst / NoC_w)
 			if (src_x == dst_x) :
@@ -332,13 +334,6 @@ def setRouteTable_Mesh(NOC_NODE_NUM, NoC_w):
 			if (src!=dst):
 				route_table[(src,dst)].append((noc_dst,dst))
 				route_table[(src,dst)].insert(0,(src,noc_src))
-				F[(noc_dst,dst)] = 0
-				F[(src,noc_src)] = 0
-				bw_scales[(src,noc_src)] = 1
-				bw_scales[(noc_dst,dst)] = 1
-
-
-
 
 	for item in route_table:
 		hops[item] = len(route_table[item])
@@ -357,8 +352,8 @@ def setRouteTable_Ring(NOC_NODE_NUM):
 		local = src + 1000
 		F[(local,src)] = 0
 		F[(src,local)] = 0
-		bw_scales[(src,local)] = 1
-		bw_scales[(local,src)] = 1
+		bw_scales[(src, local)] = ddr_bandwidth / nop_bandwidth
+		bw_scales[(local, src)] = ddr_bandwidth / nop_bandwidth
 
 		beside_node = (src + 1) % NOC_NODE_NUM
 		F[(src,beside_node)] = 0
@@ -393,10 +388,7 @@ def setRouteTable_Ring(NOC_NODE_NUM):
 			if (src!=dst):
 				route_table[(src,dst)].append((noc_dst,dst))
 				route_table[(src,dst)].insert(0,(src,noc_src))
-				F[(noc_dst,dst)] = 0
-				F[(src,noc_src)] = 0
-				bw_scales[(src,noc_src)] = 1
-				bw_scales[(noc_dst,dst)] = 1
+
 
 
 

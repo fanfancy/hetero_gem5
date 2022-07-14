@@ -3,36 +3,36 @@ import os
 import sys
 import random
 
-layer_list = {"resnet18":[1,2,2,2,2,6,7,7,7,10,11,11,11,14,15,15,15],"resnet50":[1,2,3,4,5,3,4,5,3,4,11,12,13,14,15,13,14,15,13,14,15,13,23,24,25,26,27,25,26,27,25,26,27,25,26,27,25,26,27,25,41,42,43,44,45,43,44,45,43,50],"VGG16":[1,2,3,4,5,6,6,8,9,9,11,11,11],"alexnet":[1,2,3,4,5,6,7,8],"lenet":[1,2,3,4,5]}
+app_name = str(sys.argv[1])
 
-ratio = {}
-#ratio = {"layer1":[12,16,6],"layer2":[8,16,16],"layer3":[1,4,16],"layer4":[1,4,16],"layer5":[1,4,10]}
-
-
-struct_name = str(sys.argv[1])
-if struct_name == "ours":
-	struct_name = "ours_ours_"
-elif struct_name == "simba_ours":
-	struct_name = "simba_ours_"
-app_name = str(sys.argv[2])
-
-file_p = struct_name + str(app_name) + "_P_stable.txt"
-file_K = struct_name + str(app_name) + "_K_stable.txt"
-file_PK = struct_name + str(app_name) + "_PK_stable.txt"
+file_p = "nnbaton_" + str(app_name) + "_P_stable.txt"
+file_K = "nnbaton_" + str(app_name) + "_K_stable.txt"
+file_PK_1 = "nnbaton_" + str(app_name) + "_PK_1_stable.txt"
+file_PK_2 = "nnbaton_" + str(app_name) + "_PK_2_stable.txt"
 f_p = open(file_p)
-f_pk = open(file_PK)
+f_pk_1 = open(file_PK_1)
+f_pk_2 = open(file_PK_2)
 f_k = open(file_K)
 
+layer_list = {"resnet18":[1,2,2,2,2,6,7,7,7,10,11,11,11,14,15,15,15],"resnet50":[1,2,3,4,5,3,4,5,3,4,11,12,13,14,15,13,14,15,13,14,15,13,23,24,25,26,27,25,26,27,25,26,27,25,26,27,25,26,27,25,41,42,43,44,45,43,44,45,43,50],"VGG16":[1,2,3,4,5,6,6,8,9,9,11,11,11],"alexnet":[1,2,3,4,5,6,7,8],"lenet":[1,2,3,4,5]}
+
+#ratio = {"layer1":[8,8,8,6],"layer2":[4,8,8,8],"layer3":[1,2,4,8],"layer4":[1,2,4,8],"layer5":[1,2,4,8]}
+ratio = {}
 lines_p = f_p.readlines()
 line_p = lines_p[0]
 line_e_p = lines_p[1]
 line_d_p = lines_p[2]
 line_par_p = lines_p[3]
-lines_pk = f_pk.readlines()
-line_pk = lines_pk[0]
-line_e_pk = lines_pk[1]
-line_d_pk = lines_pk[2]
-line_par_pk = lines_pk[3]
+lines_pk_1 = f_pk_1.readlines()
+line_pk_1 = lines_pk_1[0]
+line_e_pk_1 = lines_pk_1[1]
+line_d_pk_1 = lines_pk_1[2]
+line_par_pk_1 = lines_pk_1[3]
+lines_pk_2 = f_pk_2.readlines()
+line_pk_2 = lines_pk_2[0]
+line_e_pk_2 = lines_pk_2[1]
+line_d_pk_2 = lines_pk_2[2]
+line_par_pk_2 = lines_pk_2[3]
 lines_k = f_k.readlines()
 line_k = lines_k[0]
 line_e_k = lines_k[1]
@@ -133,7 +133,7 @@ def getScaleRatio(line, layer_param, PEs = 16, K0 = 16):
 		item_num += 1
 	return result_dict
 
-def lineParse(line, dim = 0, ratio_list = {}, chiplet=16):
+def lineParse(line , dim = 0, ratio_list = {}, chiplet=8):
 	line = line.replace(")","(")
 	line = line.replace(",","")
 	line = line.replace("\'","")
@@ -157,37 +157,40 @@ def lineParse(line, dim = 0, ratio_list = {}, chiplet=16):
 
 layer_param_list = getLayerParam(app_name)
 scale_p = getScaleRatio(line_par_p, layer_param_list)
-scale_pk = getScaleRatio(line_par_pk, layer_param_list)
+scale_pk_1 = getScaleRatio(line_par_pk_1, layer_param_list)
+scale_pk_2 = getScaleRatio(line_par_pk_2, layer_param_list)
 scale_k = getScaleRatio(line_par_k, layer_param_list)
 
 result_p = lineParse(line_p, dim=0, ratio_list=scale_p)
-result_pk = lineParse(line_pk, dim=1, ratio_list=scale_pk)
-result_k = lineParse(line_k, dim=2, ratio_list=scale_k)
+result_pk_1 = lineParse(line_pk_1, dim=1, ratio_list=scale_pk_1)
+result_pk_2 = lineParse(line_pk_2, dim=2, ratio_list=scale_pk_2)
+result_k = lineParse(line_k, dim=3, ratio_list=scale_k)
 
 result_e_p = lineParse(line_e_p, dim=0, ratio_list=scale_p)
-result_e_pk = lineParse(line_e_pk, dim=1, ratio_list=scale_pk)
-result_e_k = lineParse(line_e_k, dim=2, ratio_list=scale_k)
+result_e_pk_1 = lineParse(line_e_pk_1, dim=1, ratio_list=scale_pk_1)
+result_e_pk_2 = lineParse(line_e_pk_2, dim=2, ratio_list=scale_pk_2)
+result_e_k = lineParse(line_e_k, dim=3, ratio_list=scale_k)
 
 result_d_p = lineParse(line_d_p)
-result_d_pk = lineParse(line_d_pk)
+result_d_pk_1 = lineParse(line_d_pk_1)
+result_d_pk_2 = lineParse(line_d_pk_2)
 result_d_k = lineParse(line_d_k)
 
 edp_list = {}
 energy_list = {}
 delay_list = {}
 for layer_id in result_p:
-	edp_list[layer_id] = "\t" + str(result_p[layer_id]) + "\t" + str(result_pk[layer_id]) + "\t" + str(result_k[layer_id])
-	delay_list[layer_id] = "\t" + str(result_d_p[layer_id]) + "\t" + str(result_d_pk[layer_id]) + "\t" + str(result_d_k[layer_id])
-	energy_list[layer_id] = "\t" + str(result_e_p[layer_id]) + "\t" + str(result_e_pk[layer_id]) + "\t" + str(result_e_k[layer_id])
+	edp_list[layer_id] = "\t" + str(result_p[layer_id]) + "\t" + str(result_pk_1[layer_id]) + "\t" + str(result_pk_2[layer_id]) + "\t" + str(result_k[layer_id])
+	delay_list[layer_id] = "\t" + str(result_d_p[layer_id]) + "\t" + str(result_d_pk_1[layer_id]) + "\t" + str(result_d_pk_2[layer_id]) + "\t" + str(result_d_k[layer_id])
+	energy_list[layer_id] = "\t" + str(result_e_p[layer_id]) + "\t" + str(result_e_pk_1[layer_id]) + "\t" + str(result_e_pk_2[layer_id]) + "\t" + str(result_e_k[layer_id])
 
-
-fout = open("./../intra_layer_edp_parse/"+struct_name + app_name + "_intra_layer.txt", 'w')
-fout_e = open("./../intra_layer_edp_parse/"+struct_name + app_name + "_intra_layer_energy.txt", 'w')
-fout_d = open("./../intra_layer_edp_parse/"+struct_name + app_name + "_intra_layer_delay.txt", 'w')
-line1 = app_name + "\t" + "P" + "\t" + "PK" + "\t" + "K"
+fout = open("nnbaton_" + app_name + "_intra_layer.txt", 'w')
+fout_e = open("nnbaton_" + app_name + "_intra_layer_energy.txt", 'w')
+fout_d = open("nnbaton_" + app_name + "_intra_layer_delay.txt", 'w')
+line1 = app_name + "\t" + "P" + "\t" + "PK_1" + "\t" + "PK_2" + "\t" + "K"
+print(line1, file = fout_d)
 print(line1, file = fout)
 print(line1, file = fout_e)
-print(line1, file = fout_d)
 
 layer_num = 1
 for index in layer_list[app_name]:
@@ -203,21 +206,26 @@ for index in layer_list[app_name]:
 
 	layer_num += 1
 
+
 print(result_k)
 print(result_p)
-print(result_pk)
+print(result_pk_1)
+print(result_pk_2)
 fout.close()
 
 print(result_e_k)
 print(result_e_p)
-print(result_e_pk)
+print(result_e_pk_1)
+print(result_e_pk_2)
 fout_e.close()
 
 print(result_d_k)
 print(result_d_p)
-print(result_d_pk)
+print(result_d_pk_1)
+print(result_d_pk_2)
 fout_d.close()
 
 f_p.close()
 f_k.close()
-f_pk.close()
+f_pk_1.close()
+f_pk_2.close()

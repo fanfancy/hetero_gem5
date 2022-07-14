@@ -1459,7 +1459,7 @@ def noc_test_ours(app_name):
 	EDP_sum_dict = {"P":0, "K":0, "PK":0}
 
 	para_type = ["P","K","PK"]
-	parallel_type = {"P":{"P":16,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":16},'PK':{"P":4,"Q":1,"K":4}}
+	parallel_type = {"P":{"P":4,"Q":1,"K":1},'K':{"P":1,"Q":1,"K":4},'PK':{"P":4,"Q":1,"K":1}}
 	
 	file_name = "./final_test/noc_nop/" + app_name + "_noc.txt"
 	f = open(file_name,'w')
@@ -2045,7 +2045,7 @@ if __name__ == '__main__':
 	struct_name = str(sys.argv[1])
 	if struct_name == "ours":
 		nop_noc_test_ours_iodie(app_name)
-		noc_test_ours(app_name)
+		#noc_test_ours(app_name)
 	elif struct_name == "nnbaton":
 		#nop_noc_test_nnbaton(app_name)
 		noc_test_nnbaton(app_name)

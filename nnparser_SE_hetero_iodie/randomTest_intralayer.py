@@ -139,7 +139,7 @@ def getLayerParam(app_name):
 
 def randomTest_NoC_ours(app_name, chiplet_parallel = "All", core_parallel = "All", dataflow = "ours"):
 	# --- 硬件参数
-	HW_param = {"Chiplet":[2,4],"PE":[4,4],"intra_PE":{"C":16,"K":16}}       	# from granularity exploration
+	HW_param = {"Chiplet":[4,4],"PE":[4,4],"intra_PE":{"C":16,"K":16}}       	# from granularity exploration
 	# memory_param = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	from nnbaton
 	memory_param = {"OL1":8 ,"OL2":128,"AL1":16,"AL2":256,"WL1":64,"WL2":1024}		# from granularity exploration
 	NoC_w = HW_param["PE"][1] + 1
@@ -347,7 +347,7 @@ def randomTest_NoC_nnbaton(app_name, chiplet_parallel = "All", core_parallel = "
 
 if __name__ == '__main__':
 
-	# python3 randomTest_intralayer.py ours uni resnet50 ours P_stable
+	# python3 randomTest_intralayer.py ours multi resnet18 ours 
 	app_name = str(sys.argv[3])
 	struct_name = str(sys.argv[1])
 
