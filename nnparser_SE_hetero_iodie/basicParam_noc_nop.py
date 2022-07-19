@@ -1,5 +1,6 @@
 import math
 import os
+from platform import architecture
 import sys
 import random
 import numpy as np
@@ -44,10 +45,13 @@ Par_type = 4
 
 # encode parameter
 dim_list = ['P','Q','C','K','R','S']
+dim2id = {'P':0, 'Q':1, 'C':2, 'K':3, 'R':4, 'S':5}
 type_list = ["for","parallel-for-1","parallel-for-2"]
+architecture = ["pe", "chiplet", "package"]
+architecture_dim_num = [6, 4, 4]
 #chiplet PE todo
 # parallel_select = {"Chiplet":[0,1],"PE":[0,1]}
-# parallel_type = {"Chiplet":0,"PE":0} # 2: hybrid, 1 single, 0 no limit
+# parallel_type = {"Chiplet":0,"PE":0} # 2: hybrid, 1 single, 0 no limit, 3: 均匀分布
 
 def config_parallel_type(chiplet_parallel,core_parallel):
     parallel_select = {}; parallel_type = {}
@@ -66,9 +70,21 @@ def config_parallel_type(chiplet_parallel,core_parallel):
     elif chiplet_parallel == "P_K_PK":
         parallel_select["Chiplet"] = [0,3]
         parallel_type["Chiplet"] = 0
-    elif chiplet_parallel == "P_stable" or chiplet_parallel ==  "K_stable" or chiplet_parallel ==  "PK_stable" or chiplet_parallel ==  "PK_1_stable" or chiplet_parallel ==  "PK_2_stable" or chiplet_parallel ==  "C_stable" or chiplet_parallel ==  "KC_stable":
-        parallel_select["Chiplet"] = [0,2,3]
-        parallel_type["Chiplet"] = 0
+    elif chiplet_parallel == "P_stable":
+        parallel_select["Chiplet"] = [0]
+        parallel_type["Chiplet"] = 1
+    elif chiplet_parallel == "K_stable":
+        parallel_select["Chiplet"] = [3]
+        parallel_type["Chiplet"] = 1
+    elif chiplet_parallel == "PK_stable" or chiplet_parallel == "PK_1_stable" or chiplet_parallel ==  "PK_2_stable":
+        parallel_select["Chiplet"] = [0,3]
+        parallel_type["Chiplet"] = 3
+    elif chiplet_parallel == "C_stable":
+        parallel_select["Chiplet"] = [2]
+        parallel_type["Chiplet"] = 1
+    elif chiplet_parallel == "KC_stable":
+        parallel_select["Chiplet"] = [2,3]
+        parallel_type["Chiplet"] = 3
     elif chiplet_parallel == "KC":
         parallel_select["Chiplet"] = [2,3]
         parallel_type["Chiplet"] = 0
@@ -79,10 +95,10 @@ def config_parallel_type(chiplet_parallel,core_parallel):
     if core_parallel == "Channel":
         parallel_select["PE"] = [3]
         parallel_type["PE"] = 1
-    elif core_parallel == "Pq":
+    elif core_parallel == "PQ":
         parallel_select["PE"] = [0,1]
         parallel_type["PE"] = 0
-    elif core_parallel == "Hybrid":
+    elif core_parallel == "PK":
         parallel_select["PE"] = [0,3]
         parallel_type["PE"] = 2
     elif core_parallel == "All":

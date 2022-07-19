@@ -511,7 +511,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     F_cur[(ol2_node + 1000, ol2_node)] = 0
     F_cur[(al2_node + 1000, al2_node)] = 0
     F_cur[(wl2_node + 1000, wl2_node)] = 0
-
     degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur)
     if (degrade_ratio < 1):
             degrade_ratio = 1

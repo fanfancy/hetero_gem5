@@ -166,9 +166,9 @@ def randomTest_NoC_ours(app_name, chiplet_parallel = "All", core_parallel = "All
 
 	for layer_name in layer_dict:
 		# ---输出文件
-		filename = './final_test/intra_layer_edp_per_layer_32T/ours_'+dataflow+"_"+app_name+"_"+layer_name+"_"+chiplet_parallel+'.xls'
+		filename = './final_test/intra_layer_edp_per_layer/ours_'+dataflow+"_"+app_name+"_"+layer_name+"_"+chiplet_parallel+'.xls'
 		network_param = layer_dict[layer_name]
-		GATest = GaEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel, flag=dataflow)
+		GATest = RandomEncode(network_param, HW_param, debug, chiplet_parallel = chiplet_parallel, core_parallel = core_parallel, flag=dataflow)
 
 		iterTime = 10000 	# run 1w random mapping exploration
 
@@ -182,7 +182,7 @@ def randomTest_NoC_ours(app_name, chiplet_parallel = "All", core_parallel = "All
 			code_min_dict[layer_name] = code_min
 			degrade_ratio_min_dict[layer_name] = degrade_ratio_1
 			compuation_cycles_min_dict[layer_name] = compuation_cycles_1
-	file_1 = "./final_test/intra_layer_edp_32T/ours_"+dataflow+"_"+ app_name + "_" + chiplet_parallel + ".txt"
+	file_1 = "./final_test/ours_"+dataflow+"_"+ app_name + "_" + chiplet_parallel + ".txt"
 	f = open(file_1,'w')
 	print(edp_res_min_dict, file=f)
 	print(energy_min_dict, file=f)
@@ -347,7 +347,7 @@ def randomTest_NoC_nnbaton(app_name, chiplet_parallel = "All", core_parallel = "
 
 if __name__ == '__main__':
 
-	# python3 randomTest_intralayer.py ours multi resnet18 ours 
+	# python3 randomTest_intralayer.py ours uni resnet50 ours PK_stable
 	app_name = str(sys.argv[3])
 	struct_name = str(sys.argv[1])
 
