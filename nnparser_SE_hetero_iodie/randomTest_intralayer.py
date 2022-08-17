@@ -150,7 +150,7 @@ def randomTest_NoC_ours(app_name, chiplet_parallel = "All", core_parallel = "All
 	
 	# --- 生成noc-nop结构图
 	NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = 'Ring')
-	debug = 1
+	debug = 0
 	if_multicast = 1
 
 	# --- 神经网络参数

@@ -22,11 +22,13 @@ num_children_r = int(50)
 num_iter = 10
 
 class GASolver():
-	def __init__(self, num_children, num_iter, memory_param, NoC_param, if_multicast, record_filename, debug = 0):
+	def __init__(self, num_children, num_iter, memory_param, NoC_param, if_multicast, record_filename, input_act_enough=0, fuse_tag = "initial", debug = 0):
 		self.GAGen = None
 		self.memory_param = memory_param
 		self.NoC_param = NoC_param
 		self.if_multicast = if_multicast
+		self.input_act_enough = input_act_enough
+		self.fuse_tag = fuse_tag
 		self.debug = debug
 
 		self.num_children = num_children
@@ -76,7 +78,7 @@ class GASolver():
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = self.GAGen.GaGetChild(Ga_code)
 		#---计算适应度---
 		delay, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GAGen.HW_param, self.memory_param, self.NoC_param, self.if_multicast, flag = flag)
+			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GAGen.HW_param, self.memory_param, self.NoC_param, self.if_multicast, self.input_act_enough, self.fuse_tag, flag = flag)
 		#---比较适应度，并记录相关变量---
 		e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
 		e_sum = e_mem + energy_die2die+energy_MAC + energy_psum_list[2]

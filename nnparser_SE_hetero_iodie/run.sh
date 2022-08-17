@@ -1,9 +1,12 @@
 python3 test_intralayer.py \
 	--architecture ours \
-	--app_name resnet50 \
-	--alg GA \
-	--encode_type num \
+	--app_name resnet50_layer23 \
+	--alg random \
+	--encode_type index \
 	--dataflow ours \
+	--chiplet_num_max 8 \
+	--chiplet_num_min 8 \
 	--chiplet_parallel PK_stable \
 	--PE_parallel All \
-	--save_all_records 1
+	--save_all_records 0 \
+	--layer_fuse_tag 0

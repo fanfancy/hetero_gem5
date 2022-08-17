@@ -37,7 +37,7 @@ def calPSumAllReduce(output_num, chiplet_num, PC3 ):
     return delay, energy_list
 
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, flag = "ours"):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, i_act_SRAM_enough=0, fuse_tag = "initial", flag = "ours", io_die_tag = 0):
     route_table = NoC_param["route_table"]
     bw_scales = NoC_param["bw_scales"]
     F = NoC_param["F"]
@@ -80,27 +80,28 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     # io die : ddr bandwidth
     ddr_bandwidth_io_die_weight = ddr_bandwidth
     ddr_bandwidth_io_die_input = ddr_bandwidth
-    if ChipNum == 16:
-        #if PP3 == ChipNum:
-        #    ddr_bandwidth_io_die_input /= 4
-        #if PK3 == ChipNum or PK3 == 4:
-        #    ddr_bandwidth_io_die_weight /= 4
-        #simba
-        if PC3 == 4 or PC3 == 16:
-            ddr_bandwidth_io_die_input /= 4
-            ddr_bandwidth_io_die_weight /= 4
-        elif PK3 == ChipNum:
-            ddr_bandwidth_io_die_weight /= 4
-    elif ChipNum == 4:
-        if PP3 == 4:
-            ddr_bandwidth_io_die_input /= 4
-        elif PP3 == 2:
-            ddr_bandwidth_io_die_input /= 2
-            ddr_bandwidth_io_die_weight /= 2
-        elif PP3 == 1:
-            ddr_bandwidth_io_die_weight /= 4
-    ddr_bandwidth_io_die_output = ddr_bandwidth / 4
-
+    ddr_bandwidth_io_die_output = ddr_bandwidth
+    if io_die_tag == 1:
+        if ChipNum == 16:
+            #if PP3 == ChipNum:
+            #    ddr_bandwidth_io_die_input /= 4
+            #if PK3 == ChipNum or PK3 == 4:
+            #    ddr_bandwidth_io_die_weight /= 4
+            #simba
+            if PC3 == 4 or PC3 == 16:
+                ddr_bandwidth_io_die_input /= 4
+                ddr_bandwidth_io_die_weight /= 4
+            elif PK3 == ChipNum:
+                ddr_bandwidth_io_die_weight /= 4
+        elif ChipNum == 4:
+            if PP3 == 4:
+                ddr_bandwidth_io_die_input /= 4
+            elif PP3 == 2:
+                ddr_bandwidth_io_die_input /= 2
+                ddr_bandwidth_io_die_weight /= 2
+            elif PP3 == 1:
+                ddr_bandwidth_io_die_weight /= 4
+        ddr_bandwidth_io_die_output = ddr_bandwidth / 4
 
     # network parameter
     P = network_param["P"]
@@ -190,10 +191,11 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         # L2
         OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
         al2_need_Qpart = al1_need_Qpart * PQ2 
-        al2_need_Ppart = al1_need_Ppart * PP2
-        al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride
-        al2_need_P_final = al2_need_Ppart * stride + al2_need_Ppart - stride
-        al2_need = al1_need_CKpart * al2_need_Qpart * al2_need_Ppart * PC2 #wxy add new , 不确定正不正确
+        al2_need_Ppart = al1_need_Ppart * PP2        
+
+        al2_need_Q_final = al2_need_Qpart * stride + al1_need_Spart - stride
+        al2_need_P_final = al2_need_Ppart * stride + al1_need_Rpart - stride
+        al2_need = al1_need_CKpart * al2_need_Q_final * al2_need_P_final * PC2
         
         AL2_need[param] = al2_need #这里有点问题
         WL2_need[param] = wl1_need * PK2  * PC2
@@ -239,16 +241,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         print("---WL1_mem:{} WL1_need:{}".format(WL1_mem, WL1_need))
         print("---wl1_cp:{} wl1_cp_id:{}".format(wl1_cp, wl1_cp_id))
 
-
-    #print ("OL1_need",OL1_need); print ("OL2_need",OL2_need)
-    #print ("AL1_need",AL1_need); print ("AL2_need",AL2_need)
-    #print ("WL1_need",WL1_need); print ("WL2_need",WL2_need)
-
-    #print ("repeat_num",repeat_num)
-    #print ("cal_cycles",cal_cycles)
-    #print ("ol1_cp=",ol1_cp,"al1_cp=",al1_cp,"wl1_cp=",wl1_cp)
-    #print ("ol2_cp=",ol2_cp,"al2_cp=",al2_cp,"wl2_cp=",wl2_cp)
-
     # ------------------ 构建mem cal core 位置和属性等 ------------------
     # 从wxy import进来
 
@@ -275,11 +267,11 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     cur = data_flow[ape_cp_id]; inner = data_flow[ape_cp_id-1]  
     if ape_cp == "top":
-        pe_neu_num_rd_act += AL1_need[data_flow[ape_cp_id]] * 1
+        pe_neu_num_rd_act += AL1_need[inner] * 1
     else:
-        pe_neu_num_rd_act += AL1_need[data_flow[ape_cp_id]] * repeat_num[data_flow[ape_cp_id+1]]
+        pe_neu_num_rd_act += AL1_need[inner] * repeat_num[cur]
 
-    cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
+    cur = data_flow[wpe_cp_id]; inner = data_flow[wpe_cp_id-1]  
     pe_neu_num_rd_wgt += WL1_need[inner] * repeat_num[cur]
 
     pe_neu_num_rd_wgt = pe_neu_num_rd_wgt * CoreNum * ChipNum # 考虑到片上有CoreNum * ChipNum个PE
@@ -322,9 +314,9 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     core_pkt_num_rd_act +=  int(math.ceil(AL1_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
     core_act_data_num += AL1_need[inner] # 用于生成仿真指令
     if al1_cp == "top":
-        core_neu_num_rd_act += AL1_need[data_flow[al1_cp_id]] * 1
+        core_neu_num_rd_act += AL1_need[inner] * 1
     else:
-        core_neu_num_rd_act += AL1_need[data_flow[al1_cp_id]] * repeat_num[data_flow[al1_cp_id+1]]
+        core_neu_num_rd_act += AL1_need[inner] * repeat_num[cur]
 
     cur = data_flow[wl1_cp_id]; inner = data_flow[wl1_cp_id-1]  
     #print("CORE: read wgt mem ",WL1_need[inner],"repeat ",repeat_num[cur]) 
@@ -382,21 +374,47 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         chip_rd_out_data_num += 0
         chip_neu_num_rd_opt += 0
     #print("Chip: write opt mem ", OL2_need[inner],"repeat ",repeat_num[cur])
+
+	# -- update in 22.7.20 : 一旦片上放得下所有的输出结果，就不再将输出输出到DRAM
     if (if_out_final[cur]!=1): 
         chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_psum)) *repeat_num[cur]
+    elif ol2_cp == "top":
+        chip_pkt_num_wr_opt += 0
     else:
         chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
-    chip_out_data_num += OL2_need[inner] # 用于生成仿真指令
-    chip_neu_num_wr_opt += OL2_need[inner] * repeat_num[cur]
+    if ol2_cp == "top":
+        chip_out_data_num += 0 # 用于生成仿真指令
+        chip_neu_num_wr_opt += 0
+    else:
+        chip_out_data_num += OL2_need[inner] # 用于生成仿真指令
+        chip_neu_num_wr_opt += OL2_need[inner] * repeat_num[cur]
+
+    #if (if_out_final[cur]!=1): 
+    #    chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_psum)) *repeat_num[cur]
+    #else:
+    #    chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
+    #chip_out_data_num += OL2_need[inner] # 用于生成仿真指令
+    #chip_neu_num_wr_opt += OL2_need[inner] * repeat_num[cur]
         
     cur = data_flow[al2_cp_id]; inner = data_flow[al2_cp_id-1]  
     #print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
-    chip_pkt_num_rd_act +=  int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
+    assert(fuse_tag == "tailLayer" or fuse_tag == "initial" or fuse_tag == "headLayer")
+    if al2_cp == "top":
+        if fuse_tag == "tailLayer":
+            chip_pkt_num_rd_act += 0
+        else:
+            chip_pkt_num_rd_act += int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
+    else:
+        chip_pkt_num_rd_act += int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * repeat_num[cur]
+    #chip_pkt_num_rd_act +=  int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
     chip_act_data_num += AL2_need[inner] # 用于生成仿真指令
     if al2_cp == "top":
-        chip_neu_num_rd_act += AL2_need[data_flow[al2_cp_id]] * 1
+        if fuse_tag == "tail":
+            chip_neu_num_rd_act += 0
+        else:
+            chip_neu_num_rd_act += AL2_need[inner] * 1
     else:
-        chip_neu_num_rd_act += AL2_need[data_flow[al2_cp_id]] * repeat_num[data_flow[al2_cp_id+1]]
+        chip_neu_num_rd_act += AL2_need[inner] * repeat_num[cur]
 
     cur = data_flow[wl2_cp_id]; inner = data_flow[wl2_cp_id-1]  
     #print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
@@ -431,7 +449,14 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         energy_wr_opt_dram = chip_neu_num_wr_opt * DRAM_energy_ratio * act_wgt_width 
     energy_rd_opt_dram = chip_neu_num_rd_opt * DRAM_energy_ratio * psum_width
     energy_rd_wgt_dram = chip_neu_num_rd_wgt * DRAM_energy_ratio * act_wgt_width
-    energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * act_wgt_width
+
+	# -- update in 22.7.20 : 当片上放得下所有的activation的时候，默认activation来自于其他chiplet的L2
+    if i_act_SRAM_enough == 1:
+        energy_rd_act_L2 += chip_neu_num_rd_act * energy_l2 * act_wgt_width
+        energy_rd_act_dram = 0
+    else:
+        energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * act_wgt_width
+    #energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * act_wgt_width
 
     F_cur=F.copy()
 

@@ -1,0 +1,16 @@
+chiplet_num	1	no_fuse_result	319233.700244717	fuse_result	319233.700244717
+chiplet_num	2	no_fuse_result	157828.46629234034	fuse_result	157828.46629234034
+chiplet_num	3	no_fuse_result	142491.05227086804	fuse_result	142491.05227086804
+chiplet_num	4	no_fuse_result	81889.79869782618	fuse_result	81889.79869782618
+chiplet_num	5	no_fuse_result	74489.15323594604	fuse_result	74489.15323594604
+chiplet_num	6	no_fuse_result	93941.1775992922	fuse_result	93941.1775992922
+chiplet_num	7	no_fuse_result	89649.90749956014	fuse_result	89649.90749956014
+chiplet_num	8	no_fuse_result	45929.92006393365	fuse_result	45929.92006393365
+chiplet_num	9	no_fuse_result	48671.70486084443	fuse_result	48671.70486084443
+chiplet_num	10	no_fuse_result	41976.083918911245	fuse_result	41976.083918911245
+chiplet_num	11	no_fuse_result	43241.014949205055	fuse_result	43241.014949205055
+chiplet_num	12	no_fuse_result	43127.92514260664	fuse_result	43127.92514260664
+chiplet_num	13	no_fuse_result	69858.4929433622	fuse_result	69858.4929433622
+chiplet_num	14	no_fuse_result	35465.82012153223	fuse_result	35465.82012153223
+chiplet_num	15	no_fuse_result	38517.35586128592	fuse_result	38517.35586128592
+chiplet_num	16	no_fuse_result	37249.35100622438	fuse_result	37249.35100622438
