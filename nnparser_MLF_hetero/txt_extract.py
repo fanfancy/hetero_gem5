@@ -12,6 +12,8 @@ chiplet_parallel_list = ["P_stable", "PK_stable", "K_stable"]
 
 def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_type="index", dataflow="ours", PE_parallel="All", debug_open=0, save_all_records=0):
 	# Variable
+	# --- result_indir: 单网络逐层性能结果文件地址
+	# --- result_outdir: 多层融合后整个网络性能结果文件地址
 	abs_path = os.path.dirname(os.path.abspath(__file__))
 	result_abs_path = os.path.join(abs_path, "../nnparser_SE_hetero_iodie")
 	app_result_file = os.path.join(abs_path, "SE_result")
@@ -172,22 +174,38 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 		f_tail = open(result_file_tail)
 
 		lines_init = f_init.readlines()
-		line_init_fitness = lines_init[0]
+		line_init_edp = lines_init[0]
+		line_init_energy = lines_init[1]
+		line_init_latency = lines_init[2]
 		line_init_par = lines_init[3]
+
 		lines_head = f_head.readlines()
-		line_head_fitness = lines_head[0]
+		line_head_edp = lines_head[0]
+		line_head_energy = lines_head[1]
+		line_head_latency = lines_head[2]
 		line_head_par = lines_head[3]
+
 		lines_tail = f_tail.readlines()
-		line_tail_fitness = lines_tail[0]
+		line_tail_edp = lines_tail[0]
+		line_tail_energy = lines_tail[1]
+		line_tail_latency = lines_tail[2]
 		line_tail_par = lines_tail[3]
 
 		scale_init = getScaleRatio(line_init_par, layer_param_list)
 		scale_head = getScaleRatio(line_head_par, layer_param_list)
 		scale_tail = getScaleRatio(line_tail_par, layer_param_list)
 
-		result_init = lineParse(line_init_fitness, ratio_list=scale_init)
-		result_head = lineParse(line_head_fitness, ratio_list=scale_head)
-		result_tail = lineParse(line_tail_fitness, ratio_list=scale_tail)
+		result_init_edp = lineParse(line_init_edp)#, ratio_list=scale_init)
+		result_head_edp = lineParse(line_head_edp)#, ratio_list=scale_head)
+		result_tail_edp = lineParse(line_tail_edp)#, ratio_list=scale_tail)
+
+		result_init_energy = lineParse(line_init_energy)#, ratio_list=scale_init)
+		result_head_energy = lineParse(line_head_energy)#, ratio_list=scale_head)
+		result_tail_energy = lineParse(line_tail_energy)#, ratio_list=scale_tail)
+
+		result_init_latency = lineParse(line_init_latency)#, ratio_list=scale_init)
+		result_head_latency = lineParse(line_head_latency)#, ratio_list=scale_head)
+		result_tail_latency = lineParse(line_tail_latency)#, ratio_list=scale_tail)
 
 
 		fitness_dict = {}
@@ -195,27 +213,71 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 		fitness_tail_dict = {}
 		fitness_init_dict = {}
 
-		for layer_id in result_init:
-			result_i = result_init[layer_id]
-			fitness_init_dict[layer_id] = result_i
-			if layer_id in result_head:
-				result_h = 16*result_head[layer_id]
-				result_h_sub = result_h - result_i
-				fitness_head_dict[layer_id] = result_h
-			else:
-				result_h = None
-				result_h_sub = None
-			
-			if layer_id in result_tail:
-				result_t = 16*result_tail[layer_id]
-				result_t_sub = result_t - result_i
-				fitness_tail_dict[layer_id] = result_t
-			else:
-				result_t = None
-				result_t_sub = None
+		edp_dict = {}
+		edp_head_dict = {}
+		edp_tail_dict = {}
+		edp_init_dict = {}
 
-			result_i = result_init[layer_id]
-			fitness_dict[layer_id] = "\t" + str(result_i) + "\t" + str(result_h) + "\t" +  str(result_t) + "\t" + str(result_h_sub) + "\t" + str(result_t_sub)
+		energy_dict = {}
+		energy_head_dict = {}
+		energy_tail_dict = {}
+		energy_init_dict = {}
+
+		latency_dict = {}
+		latency_head_dict = {}
+		latency_tail_dict = {}
+		latency_init_dict = {}
+
+		for layer_id in result_init_edp:
+			edp_i = result_init_edp[layer_id]
+			energy_i = result_init_energy[layer_id]
+			latency_i = result_init_latency[layer_id]
+
+			edp_init_dict[layer_id] = edp_i
+			energy_init_dict[layer_id] = energy_i
+			latency_init_dict[layer_id] = latency_i
+
+			if layer_id in result_head_edp:
+				edp_h = 16 * result_head_edp[layer_id]
+				edp_h_sub = edp_h - edp_i
+				energy_h = 4 * result_head_energy[layer_id]
+				energy_h_sub = energy_h - energy_i
+				latency_h = 4 * result_head_latency[layer_id]
+				latency_h_sub = latency_h - latency_i
+
+				edp_head_dict[layer_id] = edp_h
+				energy_head_dict[layer_id] = energy_h
+				latency_head_dict[layer_id] = latency_h
+			else:
+				edp_h = None
+				edp_h_sub = None
+				energy_h = None
+				energy_h_sub = None
+				latency_h = None
+				latency_h_sub = None
+
+			if layer_id in result_tail_edp:
+				edp_t = 16 * result_tail_edp[layer_id]
+				edp_t_sub = edp_t - edp_i
+				energy_t = 4 * result_tail_energy[layer_id]
+				energy_t_sub = energy_t - energy_i
+				latency_t = 4 * result_tail_latency[layer_id]
+				latency_t_sub = latency_t - latency_i
+
+				edp_tail_dict[layer_id] = edp_t
+				energy_tail_dict[layer_id] = energy_t
+				latency_tail_dict[layer_id] = latency_t
+			else:
+				edp_t = None
+				edp_t_sub = None
+				energy_t = None
+				energy_t_sub = None
+				latency_t = None
+				latency_t_sub = None
+			
+			edp_dict[layer_id] = "\t" + str(edp_i) + "\t" + str(edp_h) + "\t" +  str(edp_t) + "\t" + str(edp_h_sub) + "\t" + str(edp_t_sub)
+			energy_dict[layer_id] = "\t" + str(energy_i) + "\t" + str(energy_h) + "\t" +  str(energy_t) + "\t" + str(energy_h_sub) + "\t" + str(energy_t_sub)
+			latency_dict[layer_id] = "\t" + str(latency_i) + "\t" + str(latency_h) + "\t" +  str(latency_t) + "\t" + str(latency_h_sub) + "\t" + str(latency_t_sub)
 
 		result_file_out = open(result_outFile, 'w')
 
@@ -223,28 +285,54 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 		print(line1, file = result_file_out)
 
 		layer_num = 1
-		fitness_head_list = []
-		fitness_tail_list = []
-		fitness_init_list = []
 		for index in layer_list[app_name]:
 			layer_id = "layer" + str(index)
 			layer_cur = "layer" + str(layer_num)
 			
-			line_fitness = layer_cur + fitness_dict[layer_id]
+			line_fitness = layer_cur + edp_dict[layer_id]
 			print(line_fitness, file=result_file_out)
 
-			fitness_init_list.append(fitness_init_dict[layer_id])
+			layer_num += 1
+		
+		layer_num = 1
+		edp_head_list = []
+		edp_tail_list = []
+		edp_init_list = []
+
+		energy_head_list = []
+		energy_tail_list = []
+		energy_init_list = []
+
+		latency_head_list = []
+		latency_tail_list = []
+		latency_init_list = []
+
+		for index in layer_list[app_name]:
+			layer_id = "layer" + str(index)
+			layer_cur = "layer" + str(layer_num)
 			
-			if layer_id in fitness_head_dict:
-				fitness_head_list.append(fitness_head_dict[layer_id])
+			line_edp = layer_cur + edp_dict[layer_id]
+			print(line_edp, file=result_file_out)
+
+			edp_init_list.append(edp_init_dict[layer_id])
+			energy_init_list.append(energy_init_dict[layer_id])
+			latency_init_list.append(latency_init_dict[layer_id])
 			
-			if layer_id in fitness_tail_dict:
-				fitness_tail_list.append(fitness_tail_dict[layer_id])
+			if layer_id in edp_head_dict:
+				edp_head_list.append(edp_head_dict[layer_id])
+				energy_head_list.append(energy_head_dict[layer_id])
+				latency_head_list.append(latency_head_dict[layer_id])
+			
+			if layer_id in edp_tail_dict:
+				edp_tail_list.append(edp_tail_dict[layer_id])
+				energy_tail_list.append(energy_tail_dict[layer_id])
+				latency_tail_list.append(latency_tail_dict[layer_id])
 
 			layer_num += 1
+
 		result_file_out.close()
 		
-		return fitness_init_list, fitness_head_list, fitness_tail_list#, latency_init_list, latency_head_list, latency_tail_list
+		return edp_init_list, edp_head_list, edp_tail_list, energy_init_list, energy_head_list, energy_tail_list, latency_init_list, latency_head_list, latency_tail_list
 
 	def getMinFrom3(a1, a2, a3, dim_list):
 		def getMinFrom2(a1, a2):
@@ -265,29 +353,76 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 
 	# Fitness per chiplet_parallel extract and file out
 	# 获取每层在三种片间并行度方案下的适应度数值
-	fitness_init_list_p, fitness_head_list_p, fitness_tail_list_p = extractFitness(result_indir_p, result_outFile_p)
-	fitness_init_list_pk, fitness_head_list_pk, fitness_tail_list_pk = extractFitness(result_indir_pk, result_outFile_pk)
-	fitness_init_list_k, fitness_head_list_k, fitness_tail_list_k = extractFitness(result_indir_k, result_outFile_k)
+	result_init_dict_p = {}
+	result_init_dict_pk = {}
+	result_init_dict_k = {}
+
+	result_head_dict_p = {}
+	result_head_dict_pk = {}
+	result_head_dict_k = {}
+
+	result_tail_dict_p = {}
+	result_tail_dict_pk = {}
+	result_tail_dict_k = {}
+
+	result_init_dict_p["edp"], result_head_dict_p["edp"], result_tail_dict_p["edp"], \
+	result_init_dict_p["energy"], result_head_dict_p["energy"], result_tail_dict_p["energy"], \
+	result_init_dict_p["latency"], result_head_dict_p["latency"], result_tail_dict_p["latency"] = extractFitness(result_indir_p, result_outFile_p)
+
+	result_init_dict_pk["edp"], result_head_dict_pk["edp"], result_tail_dict_pk["edp"], \
+	result_init_dict_pk["energy"], result_head_dict_pk["energy"], result_tail_dict_pk["energy"], \
+	result_init_dict_pk["latency"], result_head_dict_pk["latency"], result_tail_dict_pk["latency"] = extractFitness(result_indir_pk, result_outFile_pk)
+
+	result_init_dict_k["edp"], result_head_dict_k["edp"], result_tail_dict_k["edp"], \
+	result_init_dict_k["energy"], result_head_dict_k["energy"], result_tail_dict_k["energy"], \
+	result_init_dict_k["latency"], result_head_dict_k["latency"], result_tail_dict_k["latency"] = extractFitness(result_indir_k, result_outFile_k)
 
 	# Fitness per Layer extract and file out
 	# 获得每层的最优的适应度数值
+	compare_tag = "edp"
 	result_file_out_initial = open(result_fitness_outFile, 'w')
 	fitness_all_initial = 0
+	edp_all_initial = 0
+	latency_all_initial = 0
+	energy_all_initial = 0
 	title = "layerID" + "min_result" + "\t" + "min_index"
 	print(title, file = result_file_out_initial)
-	assert(len(fitness_init_list_pk)==len(fitness_init_list_k))
-	assert(len(fitness_init_list_pk)==len(fitness_init_list_p))
+	assert(len(result_init_dict_p["edp"])==len(result_init_dict_k["edp"]))
+	assert(len(result_init_dict_k["edp"])==len(result_init_dict_pk["edp"]))
 	result_layer_list = []
-	for id in range(len(fitness_init_list_p)):
+	edp_layer_list = []
+	energy_layer_list = []
+	latency_layer_list = []
+	for id in range(len(result_init_dict_p["edp"])):
 		layer_index = "Layer" + str(id+1)
-		result_p = fitness_init_list_p[id]
-		result_pk = fitness_init_list_pk[id]
-		result_k = fitness_init_list_k[id]
+		result_p = result_init_dict_p[compare_tag][id]
+		result_pk = result_init_dict_pk[compare_tag][id]
+		result_k = result_init_dict_k[compare_tag][id]
 
 		min, min_index = getMinFrom3(result_p, result_pk, result_k, ["P", "PK", "K"])
 
+		if min_index == "P":
+			edp_min = result_init_dict_p["edp"][id]
+			energy_min = result_init_dict_p["energy"][id]
+			latency_min = result_init_dict_p["latency"][id]
+		elif min_index == "PK":
+			edp_min = result_init_dict_pk["edp"][id]
+			energy_min = result_init_dict_pk["energy"][id]
+			latency_min = result_init_dict_pk["latency"][id]
+		elif min_index == "K":
+			edp_min = result_init_dict_k["edp"][id]
+			energy_min = result_init_dict_k["energy"][id]
+			latency_min = result_init_dict_k["latency"][id]
+		
 		result_layer_list.append(min)
+		edp_layer_list.append(edp_min)
+		energy_layer_list.append(energy_min)
+		latency_layer_list.append(latency_min)
+
 		fitness_all_initial += min
+		edp_all_initial += edp_min
+		energy_all_initial += energy_min
+		latency_all_initial += latency_min
 
 		context_line = layer_index + "\t" + str(min) + "\t" + str(min_index)
 		print(context_line, file = result_file_out_initial)
@@ -297,33 +432,65 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 	result_file_out_fuse = open(result_fuse_outFile, 'w')
 	title = "LayerID" + "\t" + "initial_min" + "\t" + "min_result" + "\t" + "min_index" + "\t" + "fuseNeed"
 	print(title, file = result_file_out_fuse)
-	assert(len(fitness_head_list_p)==len(fitness_tail_list_p))
-	assert(len(fitness_head_list_k)==len(fitness_tail_list_k))
-	assert(len(fitness_head_list_pk)==len(fitness_tail_list_pk))
-	assert(len(fitness_head_list_pk)==len(fitness_head_list_k))
-	assert(len(fitness_head_list_pk)==len(fitness_head_list_p))
-	result_fuse_list = []
+	assert(len(result_head_dict_p["edp"])==len(result_tail_dict_p["edp"]))
+	assert(len(result_head_dict_k["edp"])==len(result_tail_dict_k["edp"]))
+	assert(len(result_head_dict_pk["edp"])==len(result_tail_dict_pk["edp"]))
+	assert(len(result_head_dict_pk["edp"])==len(result_head_dict_p["edp"]))
+	assert(len(result_head_dict_pk["edp"])==len(result_head_dict_k["edp"]))
+	edp_fuse_list = []
+	energy_fuse_list = []
+	latency_fuse_list = []
 	fuse_tag_list = []
-	for id in range(len(fitness_head_list_p)):
-		result_initial_min = result_layer_list[id] + result_layer_list[id+1]
+	for id in range(len(result_head_dict_p["edp"])):
+
+		edp_initial_min = (latency_layer_list[id] + latency_layer_list[id+1]) * (energy_layer_list[id] + energy_layer_list[id+1]) / (1 * 1000 * 1000 * 1000 ) 
+		#edp_initial_min = result_layer_list[id] + result_layer_list[id+1]
 
 		layer_index = "Layer({}-{})".format(id+1, id+2)
+		
+		fitness_head_p = result_head_dict_p[compare_tag][id]
+		fitness_head_pk = result_head_dict_pk[compare_tag][id]
+		fitness_head_k = result_head_dict_k[compare_tag][id]
 
-		#result_p = fitness_head_list_p[id] + fitness_tail_list_p[id]
-		#result_pk = fitness_head_list_pk[id] + fitness_tail_list_pk[id]
-		#result_k = fitness_head_list_k[id] + fitness_tail_list_k[id]
-		#min, min_index = getMinFrom3(result_p, result_pk, result_k, ["P", "PK", "K"])
-		fitness_head_min, id_1 =  getMinFrom3(fitness_head_list_p[id], fitness_head_list_pk[id], fitness_head_list_k[id], ["P", "PK", "K"])
-		fitness_tail_min, id_1 =  getMinFrom3(fitness_tail_list_p[id], fitness_tail_list_pk[id], fitness_tail_list_k[id], ["P", "PK", "K"])
-		min = fitness_head_min + fitness_tail_min
-		result_fuse_list.append(min)
+		fitness_tail_p = result_tail_dict_p[compare_tag][id]
+		fitness_tail_pk = result_tail_dict_pk[compare_tag][id]
+		fitness_tail_k = result_tail_dict_k[compare_tag][id]
 
-		if min <= result_initial_min:
+		fitness_head_min, id_h =  getMinFrom3(fitness_head_p, fitness_head_pk, fitness_head_k, ["P", "PK", "K"])
+		fitness_tail_min, id_t =  getMinFrom3(fitness_tail_p, fitness_tail_pk, fitness_tail_k, ["P", "PK", "K"])
+		#fuse_min = fitness_head_min + fitness_tail_min
+		if id_h == "P":
+			latency_h = result_head_dict_p["latency"][id]
+			energy_h =  result_head_dict_p["energy"][id]
+		elif id_h == "PK":
+			latency_h = result_head_dict_pk["latency"][id]
+			energy_h =  result_head_dict_pk["energy"][id]
+		elif id_h == "K":
+			latency_h = result_head_dict_k["latency"][id]
+			energy_h =  result_head_dict_k["energy"][id]
+		
+		if id_t == "P":
+			latency_t = result_tail_dict_p["latency"][id]
+			energy_t =  result_tail_dict_p["energy"][id]
+		elif id_t == "PK":
+			latency_t = result_tail_dict_pk["latency"][id]
+			energy_t =  result_tail_dict_pk["energy"][id]
+		elif id_t == "K":
+			latency_t = result_tail_dict_k["latency"][id]
+			energy_t =  result_tail_dict_k["energy"][id]
+
+		edp_fuse_min = (latency_h + latency_t) * (energy_h + energy_t) / (1 * 1000 * 1000 * 1000) 
+		edp_fuse_list.append(edp_fuse_min)
+		latency_fuse_list.append(latency_h + latency_t)
+		energy_fuse_list.append(energy_h + energy_t)
+
+		if edp_fuse_min <= edp_initial_min:
 			fuse_tag = 1
 		else:
 			fuse_tag = 0
 		fuse_tag_list.append(fuse_tag)
-		context_line = layer_index + "\t" + str(result_initial_min) + "\t" + str(min) + "\t" + str(min_index) + "\t" +str(fuse_tag)
+		min_index = id_h + "_" + id_t
+		context_line = layer_index + "\t" + str(edp_initial_min) + "\t" + str(edp_fuse_min) + "\t" + str(min_index) + "\t" +str(fuse_tag)
 		print(context_line, file = result_file_out_fuse)
 	result_file_out_fuse.close()
 
@@ -346,8 +513,8 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 				fuse_code[id-1] = 1
 			one_num = 0
 
-	def getFuseFitness(fuse_fitness_list, layer_fitness_list, code, final_tag = 0):
-		layer_num = len(layer_fitness_list)
+	def getFuseFitness(fuse_fitness_dict, layer_fitness_dict, code, final_tag = 0):
+		layer_num = len(fuse_fitness_dict["latency"])
 		layer_code = [0 for _ in range(layer_num)]
 		if final_tag == 1:
 			print("final_code: ", code)
@@ -364,17 +531,22 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 		if final_tag == 1:
 			print("final_layer_code: ", layer_code)
 		
-		fitness_all = 0
+		latency_all = 0
+		energy_all = 0
 		for id in range(len(code)):
-			fitness_all += code[id] * fuse_fitness_list[id]
+			latency_all += code[id] * fuse_fitness_dict["latency"][id]
+			energy_all += code[id] * fuse_fitness_dict["energy"][id]
 
 		for id in range(layer_num):
-			fitness_all += (1-layer_code[id]) * layer_fitness_list[id]
+			latency_all += (1-layer_code[id]) * layer_fitness_dict["latency"][id]
+			energy_all += (1-layer_code[id]) * layer_fitness_dict["energy"][id]
+		
+		edp_all = latency_all*energy_all / (1 * 1000 * 1000 * 1000) 
 			
-		return fitness_all
+		return edp_all, latency_all, energy_all
 
-	def exploreFuse(fuse_fitness_list, layer_fitness_list, num):
-		assert(num == len(fuse_fitness_list))
+	def exploreFuse(fuse_fitness_dict, layer_fitness_dict, num):
+		assert(num == len(fuse_fitness_dict["latency"]))
 
 		def generateCode(code_lenth):
 			max_1_num = math.ceil(code_lenth/2)
@@ -415,7 +587,7 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 		fitness_best = None
 		code_best = None
 		for code in code_list:
-			fitness = getFuseFitness(fuse_fitness_list, layer_fitness_list, code)
+			fitness, latency_all, energy_all = getFuseFitness(fuse_fitness_dict, layer_fitness_dict, code)
 			fitness_record_list.append(fitness)
 			if fitness_best == None or fitness <= fitness_best:
 				fitness_best = fitness
@@ -423,27 +595,41 @@ def txt_extract(app_name, chiplet_num, architecture="ours", alg="GA", encode_typ
 		
 		return fitness_best, code_best
 
-
 	for [start_id, end_id] in fuse_select_list:
 		num = end_id - start_id + 1
+		fuse_fitness_dict = {}
+		#fuse_fitness_dict["edp"] = edp_fuse_list[start_id : end_id + 1]
+		fuse_fitness_dict["latency"] = latency_fuse_list[start_id : end_id + 1]
+		fuse_fitness_dict["energy"] = energy_fuse_list[start_id : end_id + 1]
+		layer_fitness_dict = {}
+		#layer_fitness_dict["edp"] = edp_layer_list[start_id : end_id + 2]
+		layer_fitness_dict["latency"] = latency_layer_list[start_id : end_id + 2]
+		layer_fitness_dict["energy"] = energy_layer_list[start_id : end_id + 2]
 
-		fuse_fitness_list = result_fuse_list[start_id : end_id + 1]
-		layer_fitness_list = result_layer_list[start_id : end_id + 2]
-
-		fitness, code = exploreFuse(fuse_fitness_list, layer_fitness_list, num)
+		fitness, code = exploreFuse(fuse_fitness_dict, layer_fitness_dict, num)
 
 		fuse_code[start_id: end_id+1] = code[:]
 
-	fitness_all = getFuseFitness(result_fuse_list, result_layer_list, fuse_code, final_tag = 1)
-	print("result_fitness: ", fitness_all)
+	fuse_fitness_dict = {}
+	#fuse_fitness_dict["edp"] = edp_fuse_list[start_id : end_id + 1]
+	fuse_fitness_dict["latency"] = latency_fuse_list[:]
+	fuse_fitness_dict["energy"] = energy_fuse_list[:]
+
+	layer_fitness_dict = {}
+	#layer_fitness_dict["edp"] = edp_layer_list[start_id : end_id + 2]
+	layer_fitness_dict["latency"] = latency_layer_list[:]
+	layer_fitness_dict["energy"] = energy_layer_list[:]
+
+	edp_all, latency_all, energy_all = getFuseFitness(fuse_fitness_dict, layer_fitness_dict, fuse_code, final_tag = 1)
+	print("result_fitness: ", edp_all)
 	print("code: ", fuse_code)
 	print("result_fitness_initial: ", fitness_all_initial)
 
 	f = open(app_result_file, 'a')
-	line = "chiplet_num\t{}\tfitness_all\t{}".format(chiplet_num, fitness_all)
+	line = "chiplet_num\t{}\tedp_all\t{}\tlatency_all\t{}\tenergy_all\t{}".format(chiplet_num, edp_all, latency_all, energy_all)
 	print(line, file=f)
 	f.close()
-	return fitness_all, fitness_all_initial
+	return edp_all, fitness_all_initial
 
 def fitness_plot(fitness, fitness_init, app_name):
 	x_f = []

@@ -409,7 +409,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     #chip_pkt_num_rd_act +=  int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
     chip_act_data_num += AL2_need[inner] # 用于生成仿真指令
     if al2_cp == "top":
-        if fuse_tag == "tail":
+        if fuse_tag == "tailLayer":
             chip_neu_num_rd_act += 0
         else:
             chip_neu_num_rd_act += AL2_need[inner] * 1

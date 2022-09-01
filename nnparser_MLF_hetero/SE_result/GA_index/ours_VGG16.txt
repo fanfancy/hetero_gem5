@@ -1,16 +1,16 @@
-chiplet_num	1	fitness_all	15196204.123456165
-chiplet_num	2	fitness_all	7592625.076389983
-chiplet_num	3	fitness_all	6309348.484923905
-chiplet_num	4	fitness_all	3708220.1928581805
-chiplet_num	5	fitness_all	3944486.492341141
-chiplet_num	6	fitness_all	3425808.804473459
-chiplet_num	7	fitness_all	2789969.380181475
-chiplet_num	8	fitness_all	1919673.4918011127
-chiplet_num	9	fitness_all	2069579.5794936458
-chiplet_num	10	fitness_all	1936344.1939129652
-chiplet_num	11	fitness_all	1846160.7374445794
-chiplet_num	12	fitness_all	1779782.82081552
-chiplet_num	13	fitness_all	1745641.516258828
-chiplet_num	14	fitness_all	1119059.7145924217
-chiplet_num	15	fitness_all	1463927.6270251335
-chiplet_num	16	fitness_all	933658.4069361172
+chiplet_num	1	edp_all	144928255.8203227	latency_all	6750508.133333333	energy_all	21469236531.199997
+chiplet_num	2	edp_all	74334449.09911995	latency_all	3673129.2	energy_all	20237363036.16
+chiplet_num	3	edp_all	62539715.24742822	latency_all	3367457.7333333334	energy_all	18571789224.96
+chiplet_num	4	edp_all	36702277.190412685	latency_all	2213526.6666666665	energy_all	16580905820.159998
+chiplet_num	5	edp_all	38733529.39614253	latency_all	2093881.7333333334	energy_all	18498432256.0
+chiplet_num	6	edp_all	33451199.705409884	latency_all	1801970.7999999998	energy_all	18563674675.2
+chiplet_num	7	edp_all	27084453.853733853	latency_all	1434472.6666666665	energy_all	18881122298.879997
+chiplet_num	8	edp_all	18649991.88761149	latency_all	1244160.0	energy_all	14990026915.839996
+chiplet_num	9	edp_all	20663638.868249837	latency_all	1266257.3333333333	energy_all	16318672614.4
+chiplet_num	10	edp_all	19415567.94273623	latency_all	1082388.8	energy_all	17937702184.96
+chiplet_num	11	edp_all	18819264.98291786	latency_all	1039921.2	energy_all	18096818280.96
+chiplet_num	12	edp_all	17626320.660597857	latency_all	881766.2666666666	energy_all	19989787914.24
+chiplet_num	13	edp_all	19850383.28358617	latency_all	906849.2	energy_all	21889398241.28
+chiplet_num	14	edp_all	11594018.056893153	latency_all	769795.4666666666	energy_all	15061166970.88
+chiplet_num	15	edp_all	14866243.591319414	latency_all	862847.6	energy_all	17229280803.84
+chiplet_num	16	edp_all	9274523.067656603	latency_all	624990.0	energy_all	14839474339.84

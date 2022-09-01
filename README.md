@@ -31,25 +31,38 @@ This repo is developed based on gem5 v20.1.0.
 ```
 
 ## File structure
-nnparser_ME_hetero：用于支持noc+nop的多引擎架构仿真。
+**nnparser_ME_hetero：用于支持noc+nop的多引擎架构仿真。**
 - run_configs.py 用于指定workload拆分及mapping策略&拓扑。
 - mesh_hetero.py 带有noc+nop router拓扑的实现。
 - mesh.py 普通mesh实现。
 - GAGA_gennew_waitall_fensan_2gene.py 多引擎workload拆分、mapping、性能预测、task file生成代码。
 
-nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。
+**nnparser_SE_hetero：用于支持noc+nop的单引擎架构仿真。**
 - mesh_hetero.py 带有noc+nop router拓扑的实现。
 - randomTest_intralayer.py 层内性能预测。
 - config.py 通用的不常修改的参数。
 - single_engine_predict_noc_nop.py 适用于baseline架构下的性能预测。
 
-粒度探索部分
+**nnparser_MLF_hetero：用于支持多网络探索+多层融合的探索框架。**
+- txt_extract.py 
+  -- 对单网络逐层单引擎探索的结果进行处理，得到整个单网络部署的性能，该代码处实现多层融合
+  -- extract.sh 通过运行该文件来执行txt_extract.py，并进行基本参数的设置
+- multi_network_DSE.py
+  -- 进行多网络部署，目前整体框架比较简单
+  -- 支持时间与空间，但仍有较强约束
+  -- run.sh 通过运行该文件来执行multi_network_DSE.py
+- multi_nn_result
+  -- 存放多网络部署结果
+- SE_result
+  -- 存放txt_extract.py后的结果
+
+**粒度探索部分**
 - run_granularity_model.py 多进程run所有模型的所有层
 - process_model_results.py 处理run_granularity_model.py得到的结果 (!不一定准确，需要check)
 - randomTest_noc_nop_granularity_model.py 包括探索空间定义和单层探索程序
 - single_engine_predict_granularity.py 具体的层内能量和延迟计算（专用于粒度探索）
 
-多DRAM架构
+**多DRAM架构**
 - single_engine_predict_intralayer.py 新架构下的性能预测。
 
 ## Run 多引擎
