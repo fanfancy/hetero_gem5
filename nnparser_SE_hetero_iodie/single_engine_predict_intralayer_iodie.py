@@ -37,7 +37,7 @@ def calPSumAllReduce(output_num, chiplet_num, PC3 ):
     return delay, energy_list
 
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, i_act_SRAM_enough=0, fuse_tag = "initial", flag = "ours", io_die_tag = 0):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, i_act_SRAM_enough=0, fuse_tag = "initial", flag = "ours", io_die_tag = 1):
     route_table = NoC_param["route_table"]
     bw_scales = NoC_param["bw_scales"]
     F = NoC_param["F"]
@@ -77,32 +77,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     PK0 = HW_param["intra_PE"]["K"]
     PC0 = HW_param["intra_PE"]["C"]
 
-    # io die : ddr bandwidth
-    ddr_bandwidth_io_die_weight = ddr_bandwidth
-    ddr_bandwidth_io_die_input = ddr_bandwidth
-    ddr_bandwidth_io_die_output = ddr_bandwidth
-    if io_die_tag == 1:
-        if ChipNum == 16:
-            #if PP3 == ChipNum:
-            #    ddr_bandwidth_io_die_input /= 4
-            #if PK3 == ChipNum or PK3 == 4:
-            #    ddr_bandwidth_io_die_weight /= 4
-            #simba
-            if PC3 == 4 or PC3 == 16:
-                ddr_bandwidth_io_die_input /= 4
-                ddr_bandwidth_io_die_weight /= 4
-            elif PK3 == ChipNum:
-                ddr_bandwidth_io_die_weight /= 4
-        elif ChipNum == 4:
-            if PP3 == 4:
-                ddr_bandwidth_io_die_input /= 4
-            elif PP3 == 2:
-                ddr_bandwidth_io_die_input /= 2
-                ddr_bandwidth_io_die_weight /= 2
-            elif PP3 == 1:
-                ddr_bandwidth_io_die_weight /= 4
-        ddr_bandwidth_io_die_output = ddr_bandwidth / 4
-
     # network parameter
     P = network_param["P"]
     Q = network_param["Q"]
@@ -137,6 +111,55 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     compuation_cycles = compuation_num/runtimeCoreNum/runtimeChipNum/PC0/PK0
     #print ("compuation_num=",compuation_num)
     #print ("compuation_cycles=",compuation_cycles)
+
+	# io die : ddr bandwidth
+    ddr_bandwidth_unit = ddr_bandwidth / 4
+    minChipNumIODie = runtimeChipNum % 4
+    if minChipNumIODie == 0:
+        minChipNumIODie = 4
+    ddr_bandwidth_dict_no_reuse = {"input":ddr_bandwidth_unit, "weight":ddr_bandwidth_unit, "output":ddr_bandwidth_unit}
+    ddr_bandwidth_io_die_method_dict = {}
+    if io_die_tag == 1:
+        PX3_list = [PP3*PQ3,PK3,PC3]
+        PX3_reuse_dim = ["weight","input","output"]
+        for id in range(len(PX3_list)):
+            if PX3_list[id] >= minChipNumIODie:
+                reuse_tag = PX3_reuse_dim[id]
+                ddr_bandwidth_dict = copy.deepcopy(ddr_bandwidth_dict_no_reuse)
+                ddr_bandwidth_dict[reuse_tag] *= minChipNumIODie
+                ddr_bandwidth_io_die_method_dict[reuse_tag] = copy.deepcopy(ddr_bandwidth_dict)
+            else:
+                pass
+        if len(ddr_bandwidth_io_die_method_dict) == 0 and minChipNumIODie == runtimeChipNum:
+            ddr_bandwidth_dict = copy.deepcopy(ddr_bandwidth_dict_no_reuse)
+            ddr_bandwidth_dict["input"] *= PX3_list[1]
+            ddr_bandwidth_dict["weight"] *= PX3_list[0]
+            ddr_bandwidth_dict["output"] *= PX3_list[2]
+            ddr_bandwidth_io_die_method_dict["unique"] = copy.deepcopy(ddr_bandwidth_dict)
+    if len(ddr_bandwidth_io_die_method_dict) == 0:
+        ddr_bandwidth_io_die_method_dict["unique"] = copy.deepcopy(ddr_bandwidth_dict_no_reuse)
+			
+    #if io_die_tag == 1:
+    #    if ChipNum == 16:
+            #if PP3 == ChipNum:
+            #    ddr_bandwidth_io_die_input /= 4
+            #if PK3 == ChipNum or PK3 == 4:
+            #    ddr_bandwidth_io_die_weight /= 4
+            #simba
+    #        if PC3 == 4 or PC3 == 16:
+    #            ddr_bandwidth_io_die_input /= 4
+    #            ddr_bandwidth_io_die_weight /= 4
+    #        elif PK3 == ChipNum:
+    #            ddr_bandwidth_io_die_weight /= 4
+    #    elif ChipNum == 4:
+    #        if PP3 == 4:
+    #            ddr_bandwidth_io_die_input /= 4
+    #        elif PP3 == 2:
+    #            ddr_bandwidth_io_die_input /= 2
+    #            ddr_bandwidth_io_die_weight /= 2
+    #        elif PP3 == 1:
+    #            ddr_bandwidth_io_die_weight /= 4
+    #    ddr_bandwidth_io_die_output = ddr_bandwidth / 4
 
     # storage size
     AL1_mem = AL1*8*1024/act_wgt_width/2 # /2是因为ping-pong
@@ -519,15 +542,31 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     # 对chip构建通信需求
     dram_to_L2_F_cur = L2_to_DRAM_F_cur = 0
+    bw_needed_io_die = {}
     # 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
     bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
-    dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_input/noc_bandwidth)
+    bw_needed_io_die["input"] = bw_needed
+    #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_input/noc_bandwidth)
     
     bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
-    dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_weight/noc_bandwidth)
+    bw_needed_io_die["weight"] = bw_needed
+    #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_weight/noc_bandwidth)
 
     bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
-    dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
+    bw_needed_io_die["output"] = bw_needed
+    #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
+
+    bw_needed_io_die_order = sorted(bw_needed_io_die.items(), key = lambda x: x[1])
+    data_type_order = [bw_needed_io_die_order[2][0], bw_needed_io_die_order[1][0], bw_needed_io_die_order[0][0], "unique"]
+    for data_type in data_type_order:
+        if data_type in ddr_bandwidth_io_die_method_dict:
+            ddr_bandwidth_io_die_input = ddr_bandwidth_io_die_method_dict[data_type]["input"]
+            ddr_bandwidth_io_die_weight = ddr_bandwidth_io_die_method_dict[data_type]["weight"]
+            ddr_bandwidth_io_die_output = ddr_bandwidth_io_die_method_dict[data_type]["output"]
+
+    dram_to_L2_F_cur += bw_needed_io_die["input"] / (ddr_bandwidth_io_die_input/noc_bandwidth)
+    dram_to_L2_F_cur += bw_needed_io_die["weight"] / (ddr_bandwidth_io_die_weight/noc_bandwidth)
+    dram_to_L2_F_cur += bw_needed_io_die["output"] / (ddr_bandwidth_io_die_output/noc_bandwidth)
 
     bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
     L2_to_DRAM_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
@@ -536,6 +575,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     F_cur[(ol2_node + 1000, ol2_node)] = 0
     F_cur[(al2_node + 1000, al2_node)] = 0
     F_cur[(wl2_node + 1000, wl2_node)] = 0
+    degrade_ratio_dict = {"NoC":max(F_cur.values()), "L2_to_DRAM":L2_to_DRAM_F_cur, "DRAM_to_L2":dram_to_L2_F_cur}
     degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur)
     if (degrade_ratio < 1):
             degrade_ratio = 1
@@ -579,7 +619,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         if L2_to_DRAM_F_cur == degrade_ratio:
             worstlinks.append("L2toDRAM")
 
-    return(degrade_ratio*compuation_cycles, degrade_ratio, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
+    return(degrade_ratio*compuation_cycles, degrade_ratio, degrade_ratio_dict,  compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
         energy_dram_list, energy_L2_list,energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks)
 
 # end 性能测评

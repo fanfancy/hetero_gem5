@@ -15,7 +15,7 @@ from basicParam_noc_nop import *
 from GaEncode import *
 from gaTest_noc_nop import *
 
-def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num , if_multicast, excel_filename, i_act_enough, flag = "ours"):
+def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num , if_multicast, excel_filename, i_act_enough, flag = "ours", io_die_tag = 1):
 
 	degrade_ratio_list = []
 	excel_datas = []
@@ -41,8 +41,8 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 			GaCode = GAGen.getGaCode()
 			for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = GAGen.GaGetChild(GaCode)
 			#---计算适应度---
-			delay, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GAGen.network_param, GAGen.HW_param, memory_param, NoC_param, if_multicast, i_act_enough, flag = flag)
+			delay, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
+				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GAGen.network_param, GAGen.HW_param, memory_param, NoC_param, if_multicast, i_act_enough, flag = flag, io_die_tag = io_die_tag)
 			
 			#---比较适应度，并记录相关变量---
 			e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
@@ -60,10 +60,11 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 				partition_list_min = copy.deepcopy(partition_list)
 				compuation_cycles_min = compuation_cycles
 				degrade_ratio_min = degrade_ratio
+				degrade_ratio_dict_min = degrade_ratio_dict
 				code_min = code
 			fitness_list.append(fitness)
 			fitness_min_ran_list.append(fitness_min_ran)
-			degrade_ratio_list.append (degrade_ratio)
+			degrade_ratio_list.append (degrade_ratio_dict)
 
 			excel_datas.append([str(spatial_parallel), i, fitness, degrade_ratio, str(for_list[0]), \
 				parallel_dim_list[0][0],parallel_dim_list[0][1],parallel_dim_list[0][2],parallel_dim_list[0][3], \
@@ -81,7 +82,7 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 				energy_L1_list[0], energy_L1_list[1], energy_psum_list[0], energy_psum_list[1], \
 				sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, energy_psum_list[2], e_mem, e_sum , delay, edp_res, str(worstlinks), str(code) ])
 			
-			print("fitness_min = {}, compuation_cycles = {}, degrade_ratio = {}".format(fitness_min_ran, compuation_cycles_min, degrade_ratio_min))
+			print("fitness_min = {}, compuation_cycles = {}, degrade_ratio = {}".format(fitness_min_ran, compuation_cycles_min, str(degrade_ratio_dict_min)))
 			if edp_res_min == 0 or edp_res < edp_res_min:
 				edp_res_min = edp_res
 				energy_min = e_sum
@@ -116,7 +117,7 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 				sheet.cell(row+2, col+1, column_data)
 
 		workbook.save(excel_filename)
-	return edp_res_min, energy_min, delay_min, code_min, degrade_ratio_min, compuation_cycles_min, latency_list_d, energy_list_d
+	return edp_res_min, energy_min, delay_min, code_min, degrade_ratio_min, degrade_ratio_dict_min, compuation_cycles_min, latency_list_d, energy_list_d
 
 def getLayerParam(app_name):
 	layer_dict = {}
@@ -348,13 +349,17 @@ def randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, outDir):
 	plt.tight_layout(pad=1.1)
 	plt.savefig(outDir + "/" + layer_name + "_scatter_plot.png", bbox_inches = 'tight')
 
-def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag="initial", if_multicast=1):
+def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
 	edp_res_min_dict = {}
 	energy_min_dict = {}
 	delay_min_dict = {}
 	code_min_dict = {}
 	degrade_ratio_min_dict = {}
+	NoC_DR_dict = {}
+	L2_to_DRAM_DR_dict = {}
+	DRAM_to_L2_DR_dict = {}
+	degrade_ratio_dict_min_dict = {}
 	compuation_cycles_min_dict = {}
 	edp_total = 0
 
@@ -379,12 +384,16 @@ def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaTy
 			i_act_enough = 0
 		GAGen = GaEncode(GaType, network_param, HW_param, debug=0)
 
-		edp_res_min, energy_min, delay_min, code_min, degrade_ratio_1, compuation_cycles_1,  latency_list_d, energy_list_d = randomTest(GAGen, iterTime, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num, if_multicast, record_filename, i_act_enough)
+		edp_res_min, energy_min, delay_min, code_min, degrade_ratio_1, degrade_ratio_dict_1, compuation_cycles_1,  latency_list_d, energy_list_d = randomTest(GAGen, iterTime, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num, if_multicast, record_filename, i_act_enough, io_die_tag = io_die_tag)
 		edp_res_min_dict[layer_name] = edp_res_min
 		energy_min_dict[layer_name] = energy_min
 		delay_min_dict[layer_name] = delay_min
 		code_min_dict[layer_name] = code_min
 		degrade_ratio_min_dict[layer_name] = degrade_ratio_1
+		NoC_DR_dict[layer_name] = degrade_ratio_dict_1["NoC"]
+		L2_to_DRAM_DR_dict[layer_name] = degrade_ratio_dict_1["L2_to_DRAM"]
+		DRAM_to_L2_DR_dict[layer_name] = degrade_ratio_dict_1["DRAM_to_L2"]
+		degrade_ratio_dict_min_dict[layer_name] = degrade_ratio_dict_1
 		compuation_cycles_min_dict[layer_name] = compuation_cycles_1
 		edp_total += edp_res_min
 		latency_list_dict[layer_name] = latency_list_d
@@ -397,18 +406,26 @@ def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaTy
 	print(delay_min_dict, file=f)
 	print(code_min_dict, file = f)
 	print(degrade_ratio_min_dict, file = f)
+	print(NoC_DR_dict, file = f)
+	print(L2_to_DRAM_DR_dict, file = f)
+	print(DRAM_to_L2_DR_dict, file = f)
+	print(degrade_ratio_dict_min_dict, file = f)
 	print(compuation_cycles_min_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
 	f.close()
 	randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, result_dir)
 
-def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag="initial", if_multicast=1):
+def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
 	edp_res_min_dict = {}
 	energy_min_dict = {}
 	delay_min_dict = {}
 	code_min_dict = {}
 	degrade_ratio_min_dict = {}
+	NoC_DR_dict = {}
+	L2_to_DRAM_DR_dict = {}
+	DRAM_to_L2_DR_dict = {}
+	degrade_ratio_dict_min_dict = {}
 	compuation_cycles_min_dict = {}
 	iter_num_dict = {}
 	edp_total = 0
@@ -437,7 +454,7 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 			i_act_enough = 0
 		i_act_enough_dict[layer_name] = i_act_enough
 		GAGen = GaEncode(GaType, network_param, HW_param, debug=0)
-		GA_Solver = GASolver(num_gen, num_iter, memory_param, NoC_param, if_multicast, record_filename, i_act_enough, multi_layer_tag)
+		GA_Solver = GASolver(num_gen, num_iter, memory_param, NoC_param, if_multicast, record_filename, i_act_enough, multi_layer_tag, io_die_tag = io_die_tag)
 		GA_Solver.setGAGen(GAGen)
 
 		# --- Initial: 初始进行硬件并行度方案的择优
@@ -515,10 +532,14 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 		delay_min_dict[layer_name] = GA_Solver.best_out["delay"]
 		code_min_dict[layer_name] = GA_Solver.best_out["code"]
 		degrade_ratio_min_dict[layer_name] = GA_Solver.best_out["degrade_ratio"]
+		NoC_DR_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["NoC"]
+		L2_to_DRAM_DR_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["L2_to_DRAM"]
+		DRAM_to_L2_DR_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["DRAM_to_L2"]
+		degrade_ratio_dict_min_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]
 		compuation_cycles_min_dict[layer_name] = GA_Solver.best_out["compuation_cycles"]
 		iter_num_dict[layer_name] = iter_num_total
 		edp_total += GA_Solver.best_out["fitness"]
-		layer_data_record = [layer_name, edp_res_min_dict[layer_name], energy_min_dict[layer_name], delay_min_dict[layer_name], str(code_min_dict[layer_name]), degrade_ratio_min_dict[layer_name], compuation_cycles_min_dict[layer_name], iter_num_dict[layer_name]]
+		layer_data_record = [layer_name, edp_res_min_dict[layer_name], energy_min_dict[layer_name], delay_min_dict[layer_name], str(code_min_dict[layer_name]), degrade_ratio_min_dict[layer_name], NoC_DR_dict[layer_name], L2_to_DRAM_DR_dict[layer_name], DRAM_to_L2_DR_dict[layer_name], str(degrade_ratio_dict_min_dict[layer_name]), compuation_cycles_min_dict[layer_name], iter_num_dict[layer_name]]
 		excel_data.append(layer_data_record)
 	
 	# --- 结果输出
@@ -529,6 +550,9 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 	print(delay_min_dict, file=f)
 	print(code_min_dict, file = f)
 	print(degrade_ratio_min_dict, file = f)
+	print(NoC_DR_dict, file = f)
+	print(L2_to_DRAM_DR_dict, file = f)
+	print(DRAM_to_L2_DR_dict, file = f)
 	print(compuation_cycles_min_dict, file = f)
 	print(iter_num_dict, file = f)
 	print(i_act_enough_dict, file = f)
@@ -539,7 +563,7 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 	workbook = openpyxl.Workbook()
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
-	column_tite = ["layer_name","fitness","energy", "delay", "code", "degrade_ratio", "computation_cycles", "iter_num"]
+	column_tite = ["layer_name","fitness","energy", "delay", "code", "degrade_ratio(DR)", "NoC_DR", "L2_to_DRAM_DR", "DRAM_to_L2_DR", "DR_dict", "computation_cycles", "iter_num"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	

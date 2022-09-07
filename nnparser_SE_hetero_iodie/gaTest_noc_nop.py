@@ -22,7 +22,7 @@ num_children_r = int(50)
 num_iter = 10
 
 class GASolver():
-	def __init__(self, num_children, num_iter, memory_param, NoC_param, if_multicast, record_filename, input_act_enough=0, fuse_tag = "initial", debug = 0):
+	def __init__(self, num_children, num_iter, memory_param, NoC_param, if_multicast, record_filename, input_act_enough=0, fuse_tag = "initial", debug = 0, io_die_tag = 1):
 		self.GAGen = None
 		self.memory_param = memory_param
 		self.NoC_param = NoC_param
@@ -30,6 +30,7 @@ class GASolver():
 		self.input_act_enough = input_act_enough
 		self.fuse_tag = fuse_tag
 		self.debug = debug
+		self.io_die_tag = io_die_tag
 
 		self.num_children = num_children
 		self.num_iter = num_iter
@@ -77,14 +78,14 @@ class GASolver():
 	def calFitnessAll(self, Ga_code, flag = "ours"):
 		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = self.GAGen.GaGetChild(Ga_code)
 		#---计算适应度---
-		delay, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GAGen.HW_param, self.memory_param, self.NoC_param, self.if_multicast, self.input_act_enough, self.fuse_tag, flag = flag)
+		delay, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
+			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GAGen.HW_param, self.memory_param, self.NoC_param, self.if_multicast, self.input_act_enough, self.fuse_tag, flag = flag, io_die_tag = self.io_die_tag)
 		#---比较适应度，并记录相关变量---
 		e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
 		e_sum = e_mem + energy_die2die+energy_MAC + energy_psum_list[2]
 		edp_res = (delay + delay_psum) * e_sum  /(PE_freq * freq_1G) # pJ*s
 		fitness = edp_res
-		return fitness, e_sum, delay, code, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks
+		return fitness, e_sum, delay, code, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks
 
 	def getFirstGeneration(self):
 		self.generation = []
@@ -96,7 +97,7 @@ class GASolver():
 			elif self.GAGen.GaType == "num":
 				child_gen = self.GAGen.getGaCode_num()
 			self.generation.append(child_gen)
-			fitness_i, e_sum, delay, code, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = self.calFitnessAll(self.generation[i])
+			fitness_i, e_sum, delay, code, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = self.calFitnessAll(self.generation[i])
 			self.fitness[i] = fitness_i
 			output_record = {	"delay":delay, "degrade_ratio":degrade_ratio, "compuation_cycles":compuation_cycles, "runtime_list":runtime_list, "cp_list":cp_list, "utilization_ratio_list":utilization_ratio_list, \
 								"energy_dram_list":energy_dram_list, "energy_L2_list":energy_L2_list, "energy_L1_list":energy_L1_list, "energy_die2die":energy_die2die, "energy_MAC":energy_MAC, \
@@ -109,6 +110,7 @@ class GASolver():
 				self.best_out["delay"] = delay
 				self.best_out["code"] = code
 				self.best_out["degrade_ratio"] = degrade_ratio
+				self.best_out["degrade_ratio_dict"] = degrade_ratio_dict
 				self.best_out["compuation_cycles"] = compuation_cycles
 
 	def mutate_index(self, code):
@@ -291,7 +293,7 @@ class GASolver():
 			self.generation_record = {}
 			for j in range(len(self.generation)):
 				code = self.generation[j]
-				fitness_i, e_sum, delay, code, degrade_ratio, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, \
+				fitness_i, e_sum, delay, code, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, \
 				energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = self.calFitnessAll(code)
 				output_record = {"spatial parallel":self.GAGen.spatial_parallel, "delay":delay, "degrade_ratio":degrade_ratio, "compuation_cycles":compuation_cycles, "runtime_list":runtime_list, "cp_list":cp_list, "utilization_ratio_list":utilization_ratio_list, \
 									"energy_dram_list":energy_dram_list, "energy_L2_list":energy_L2_list, "energy_L1_list":energy_L1_list, "energy_die2die":energy_die2die, "energy_MAC":energy_MAC, \
@@ -306,6 +308,7 @@ class GASolver():
 					self.best_out["delay"] = delay
 					self.best_out["code"] = code
 					self.best_out["degrade_ratio"] = degrade_ratio
+					self.best_out["degrade_ratio_dict"] = degrade_ratio_dict
 					self.best_out["compuation_cycles"] = compuation_cycles
 
 			print("--- times = ",str(i+1))

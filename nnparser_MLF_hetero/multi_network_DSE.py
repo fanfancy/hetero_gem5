@@ -3,8 +3,11 @@ import math
 import os
 import copy
 import random
+import sched
 from matplotlib import pyplot as plt
 import argparse
+
+PE_Frequency = 1000 * 1000 * 1000
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
 SE_evaluation_dir = os.path.join(cur_dir, "../nnparser_SE_hetero_iodie/")
@@ -26,8 +29,8 @@ def getNNParam(nn_name):
 
 	layer_computation_num_dict = {}
 	layer_param_num_dict = {}
-	nn_evaluation = 0
 	lines = nn_f.readlines()
+	nnParam_dict = {}
 	for line in lines:
 		if line.startswith("#") or line.startswith("*"):
 			pass
@@ -35,6 +38,7 @@ def getNNParam(nn_name):
 			line = line.replace("\n","")
 			line_item = line.split(" ")
 			layer_name = line_item[0]
+			layer_id = int(layer_name.replace("layer",""))
 			H = int(line_item[1])
 			M = int(line_item[2])
 			P = int(line_item[8])
@@ -45,12 +49,11 @@ def getNNParam(nn_name):
 			S = int(line_item[4])
 			layer_computation_num = P * Q * K * R * S * C
 			layer_param_num = H*M*C + P*Q*K + R*S*C*K
-			nn_evaluation += layer_computation_num * layer_param_num * layer_param_num / 10000000000000000
 			layer_computation_num_dict[layer_name] = layer_computation_num
 			layer_param_num_dict[layer_name] = layer_param_num
-			print("{}: computation num = {}; param num = {}; evaluation = {}".format(layer_name, layer_computation_num, layer_param_num, layer_computation_num * layer_param_num * layer_param_num / 10000000))
+			nnParam_dict[layer_id] = layer_computation_num * layer_param_num * layer_param_num / 10000000000000000
 	nn_f.close()
-	return nn_evaluation
+	return nnParam_dict
 
 def getChipletPartition(chiplet_num, nn_ratio):
 	# 获得chiplet数目的可能拆分
@@ -113,86 +116,216 @@ def getTemporalCode(nn_num, TH = 20):
 			break
 	return temporal_code_list
 
+def getChipletPartionDict(chiplet_num, max_tp_num):
+	# 获得chiplet数目的可能拆分
+	par_per_tp_TH = 10
+	par_num = 0
+	unchange_TH = 50
+	unchange_times = 0
+
+	chiplet_partition_dict = {}
+	for i in range(max_tp_num):
+		tp_num = i + 1
+		par_num = 0
+		unchange_times = 0
+		chiplet_partition_dict[tp_num] = []
+		while(1):
+			chiplet_partition = []
+			Nchip_rest = chiplet_num - tp_num
+			for i in range(tp_num-1):
+				Nchip = random.randint(0, Nchip_rest)
+				chiplet_partition.append(Nchip+1)
+				Nchip_rest -= Nchip
+			chiplet_partition.append(Nchip_rest+1)
+			chiplet_partition.sort()
+			if chiplet_partition not in chiplet_partition_dict[tp_num]:
+				chiplet_partition_dict[tp_num].append(chiplet_partition)
+				unchange_times = 0
+				par_num += 1
+			else:
+				unchange_times += 1
+				
+			if unchange_times == unchange_TH or par_num == par_per_tp_TH:
+				break
+	return chiplet_partition_dict
+
+def getChipletPartition_sp_tp(chiplet_partition_dict, sp_tp_idealParam):
+	partition_TH = 200
+	unchange_TH = 40
+
+	# 根据TP内NN的理论的统计idealParam比较，分配chiplet数目
+	tp_Nchip_dict = {}
+	sp_tp_max_num = 1
+	for sp_id, tp_idealParam in sp_tp_idealParam.items():
+		tp_num = len(tp_idealParam)
+		tp_idealParam_order = sorted(tp_idealParam.items(), key = lambda x: x[1])
+		tp_Nchip_dict[sp_id] = []
+		for chip_num_list in chiplet_partition_dict[tp_num]:
+			tp_Nchip = {}
+			for i in range(tp_num):
+				chip_num = chip_num_list[i]
+				tp_id = tp_idealParam_order[i][0]
+				tp_Nchip[tp_id] = chip_num
+			tp_Nchip_dict[sp_id].append(tp_Nchip)
+		sp_tp_max_num *= len(tp_Nchip_dict[sp_id])
+
+	partition_num = 0
+	unchange_num = 0
+	partition_list = []
+	while (1):
+		partition = []
+		for sp_id in tp_Nchip_dict:
+			tp_num_max = len(tp_Nchip_dict[sp_id])
+			id = random.randint(0,tp_num_max-1)
+			partition.append(id)
+		if partition not in partition_list:
+			partition_list.append(partition)
+			partition_num += 1
+			unchange_num = 0
+		else:
+			unchange_num += 1
+		
+		if unchange_num >= unchange_TH or partition_num >= partition_TH or partition_num >= sp_tp_max_num:
+			break
+	
+	sp_tp_Nchip_list = []
+	for partition in partition_list:
+		sp_tp_Nchip = {}
+		for sp_id in tp_Nchip_dict:
+			id = partition[sp_id]
+			sp_tp_Nchip[sp_id] = tp_Nchip_dict[sp_id][id]
+		sp_tp_Nchip_list.append(sp_tp_Nchip)
+	
+	return sp_tp_Nchip_list
+
 class multi_network_DSE:
-	def __init__(self, chiplet_num, nn_list,  Optimization_Objective, debug_tag = 0):
+	def __init__(self, chiplet_num, workload_dict, Optimization_Objective, debug_tag = 0):
 		self.chiplet_num = chiplet_num
-		self.nn_list = nn_list
+		self.workload_dict = workload_dict
+		self.workload_list = []
 		self.debug_tag = debug_tag
 		self.Optimization_Objective = Optimization_Objective
-		self.TP_list = None
 
 		self.ideal_param_dict = None
-		self.ideal_param_dict_TP = None
+		self.ideal_param_dict_workload = None
 
-		self.nn_chiplet_num_dict = None
-		self.ideal_fitness_dict = None
-		self.best_fitness = None
+		self.workload_fitness_dict = {}
+		self.workload_BWNeeded_dict = {}
 
+		self.fitness_best = None
 		self.fitness_record = []
-		self.sample_record = []
-		self.distance_record = []
-
-		self.sim_fitness_dict = None
-		self.sim_ideal_ratio = None
-		self.nn_chiplet_fitness_dict = {}	# [nn_name][n_chiplet] = fitness
-		self.nn_chiplet_fitness_dict_TP = None
+		self.schedule_best = None
+		self.schedule_record = []
+		self.Nchip_partition_best = None
+		self.Nchip_par_record = []
+		self.sp_tp_space_best = None
+		self.sp_tp_space_record = []
 	
+	# 获得理论的各任务的参数量信息
 	def getIdealParam(self):
 		self.ideal_param_dict = {}
-		for nn_name in self.nn_list:
-			nn_ideal_fitness = getNNParam(nn_name)
-			self.ideal_param_dict[nn_name] = nn_ideal_fitness
+		self.ideal_param_dict_workload = {}
+		for nn_name, workload in self.workload_dict.items():
+			self.ideal_param_dict[nn_name] = copy.deepcopy(getNNParam(nn_name))
+			for w_name, [start_id, end_id] in workload.items():
+				workload_name = nn_name + w_name
+				self.workload_list.append(workload_name)
+				param = 0
+				for layer_id in range(start_id, end_id+1):
+					param += self.ideal_param_dict[nn_name][layer_id]
+				self.ideal_param_dict_workload[workload_name] = param
 
-	def getIdealFitness(self):
-		self.ideal_fitness_dict = {}
-		for tp_name in self.TP_list:
-			self.ideal_fitness_dict[tp_name] = self.ideal_param_dict_TP[tp_name] / self.nn_chiplet_num_dict[tp_name]
+	def calTP(self, fitness_dict, id):
+		if id == None:
+			tp_name = "("
+		else:
+			tp_name = "tp" + str(id) + "("
+		latency_tp = 0
+		energy_tp = 0
+		for name, fitness in fitness_dict.items():
+			tp_name += name + "_"
+			latency_tp += fitness[1]
+			energy_tp += fitness[2]
+		tp_name += ")"
 
-	def getInitialMethod(self):
-		evaluation_total = sum(self.ideal_param_dict.values())
-		evaluation_ordered_dict = sorted(self.ideal_param_dict.items(), key = lambda x: x[1])
-		self.nn_chiplet_num_dict = {}
-		left_chiplet_num = self.chiplet_num
-		last_nn_name = None
-		for (nn_name, nn_evaluation) in evaluation_ordered_dict:
-			c_num = int(self.chiplet_num * nn_evaluation / evaluation_total)
-			if c_num > left_chiplet_num:
-				c_num = left_chiplet_num
-			elif c_num == 0:
-				c_num = 1
-			left_chiplet_num -= c_num
-			self.nn_chiplet_num_dict[nn_name] = c_num
-			last_nn_name = nn_name
-		assert(left_chiplet_num >= 0)
-		self.nn_chiplet_num_dict[last_nn_name] += left_chiplet_num
+		edp_tp = latency_tp * energy_tp / PE_Frequency
+		fitness_list = [edp_tp, latency_tp, energy_tp]
+		return tp_name, fitness_list
+	
+	def BW_Reallocate(self, tp_workload_fitness, tp_Nchip):
+		tp_workload_fitness_bw = {}
+		bw_reallocate_result = {}
+		for tp_id, workload_fitness in tp_workload_fitness.items():
+			tp_workload_fitness_bw[tp_id] = {}
+			Nchip = tp_Nchip[tp_id]
+			for workload, fitness in workload_fitness.items():
+				tp_workload_fitness_bw[tp_id][workload] = fitness
+				workload_BW_list = self.workload_BWNeeded_dict[workload][Nchip]
+				for layer_id, BW_list in workload_BW_list.items():
+					latency = BW_list[0]
+					NoC_NR = BW_list[1]
+					L2_to_DRAM_NR = BW_list[2]
+					DRAM_to_L2_NR = BW_list[3]
 
-		self.getIdealFitness()
+		return tp_workload_fitness_bw, bw_reallocate_result
+
+	def calSP(self, fitness_dict, id):
+		sp_name = "sp" + str(id) + "("
+		latency_sp = 0
+		energy_sp = 0
+		for name, fitness in fitness_dict.items():
+			sp_name += name + "_"
+			if fitness[1] > latency_sp:
+				latency_sp = fitness[1]
+			energy_sp += fitness[2]
+		sp_name += ")"
+
+		edp_sp = latency_sp * energy_sp / PE_Frequency
+		fitness_list = [edp_sp, latency_sp, energy_sp]
+		return sp_name, fitness_list
+
+	# 评估函数
+	def evaluation_sp_tp(self, sp_tp_space, sp_tp_Nchip):
+		sp_tp_workload_fitness = {}
+
+		for sp_id in sp_tp_space:
+			sp_tp_workload_fitness[sp_id] = {}
+			for tp_id in sp_tp_space[sp_id]:
+				sp_tp_workload_fitness[sp_id][tp_id] = {}
+				Nchip = sp_tp_Nchip[sp_id][tp_id]
+				for workload in sp_tp_space[sp_id][tp_id]:
+					fitness = self.workload_fitness_dict[workload][Nchip]
+					sp_tp_workload_fitness[sp_id][tp_id][workload] = fitness
 		
-		if self.debug_tag == 1:
-			print("Debug in getInitialMethod()---------")
-			print("---total_chiplet_num : ", self.chiplet_num)
-			print("---evaluation_per_nn : ", self.ideal_param_dict)
-			print("---nn_chiplet_num : ", self.nn_chiplet_num_dict)
+		sp_tp_fitness = {}
+		bw_reallocate_result = {}
+		for sp_id in sp_tp_workload_fitness:
+			sp_tp_fitness[sp_id] = {}
 
-	def getSimIdealRatio(self):
-		self.sim_ideal_ratio = {}
-		for nn_name in self.nn_list:
-			self.sim_ideal_ratio[nn_name] = self.sim_fitness_dict[nn_name] / self.ideal_fitness_dict[nn_name]
-	
-	def evaluation(self, eva_nn_chiplet_num_dict):
-		# evaluation nn latency
-		fitness_dict = {}
-		for TP_name, n_chiplet in eva_nn_chiplet_num_dict.items():
-			fitness = self.nn_chiplet_fitness_dict_TP[TP_name][n_chiplet]
-			fitness_dict[TP_name] = fitness
-		return fitness_dict
-	
-	def setTotalNNFitness(self):
-		for nn_name in self.nn_list:
-			file = cur_dir + "/SE_result/GA_index/ours_" + nn_name + ".txt"
+			tp_workload_fitness = sp_tp_workload_fitness[sp_id]
+			tp_Nchip = sp_tp_Nchip[sp_id]
+			tp_workload_fitness_bw , bw_reallocate_result[sp_id] = self.BW_Reallocate(tp_workload_fitness, tp_Nchip)
+
+			for tp_id, workload_fitness in tp_workload_fitness_bw.items():
+				tp_name, fitness = self.calTP(workload_fitness, tp_id)
+				sp_tp_fitness[sp_id][tp_name] = fitness
+		
+		sp_fitness = {}
+		for sp_id, tp_fitness in sp_tp_fitness.items():
+			sp_name, fitness = self.calSP(tp_fitness, sp_id)
+			sp_fitness[sp_name] = fitness
+		
+		schedule_name, fitness = self.calTP(sp_fitness, None)
+
+		return schedule_name, fitness
+		
+	# 获得每个Workload的性能参数
+	def setTotalWorkloadFitness(self):
+		for workload in self.workload_list:
+			file = cur_dir + "/SE_result/GA_index/ours_" + workload + ".txt"
 			f = open(file)
 			lines = f.readlines()
-			self.nn_chiplet_fitness_dict[nn_name] = {}
+			self.workload_fitness_dict[workload] = {}
 			for line in lines:
 				if line.startswith("chiplet"):
 					line_item = line.replace("\n","").split("\t")
@@ -200,211 +333,136 @@ class multi_network_DSE:
 					edp = float(line_item[3])
 					latency = float(line_item[5])
 					energy = float(line_item[7])
-					self.nn_chiplet_fitness_dict[nn_name][chiplet_num] = [edp, latency, energy]
-	
+					self.workload_fitness_dict[workload][chiplet_num] = [edp, latency, energy]
+			
+			self.workload_BWNeeded_dict[workload] = {}
+			BW_dir = cur_dir + "/SE_result/GA_index/BW_result/" + workload + "/"
+			for i in range(self.chiplet_num):
+				chiplet_num = i + 1
+				self.workload_BWNeeded_dict[workload][chiplet_num] = {}
+				BW_file = BW_dir + "chiplet_num_" + str(chiplet_num) + ".txt"
+				BW_f = open(BW_file)
+				lines = BW_f.readlines()
+				for line in lines:
+					if line.startswith("layer_id") or line == "":
+						pass
+					else:
+						line_item = line.replace("\n","").split("\t")
+						layer_id = int(line_item[0])
+						latency = float(line_item[1])
+						NoC_NR = float(line_item[2])
+						L2_to_DRAM_NR = float(line_item[3])
+						DRAM_to_L2_NR = float(line_item[4])
+						BW_list = [latency, NoC_NR, L2_to_DRAM_NR, DRAM_to_L2_NR]
+						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id] = BW_list
+
+	# 初始化操作
 	def initialize(self):
-		self.setTotalNNFitness()
 		self.getIdealParam()
+		self.setTotalWorkloadFitness()
 		self.best_fitness = None
 		self.fitness_record = []
 		self.sample_record = []
 		self.distance_record = []
 
-	def getFitness(self, fitness_dict):
-		latency_max = None
-		energy_total = 0
-		for nn_name, fitness in fitness_dict.items():
-			latency = fitness[1]
-			if latency_max == None or latency > latency_max:
-				latency_max = latency
-			energy_total += fitness[2]
-
-		if self.Optimization_Objective == "latency":
-			fitness_total = latency_max
-		elif self.Optimization_Objective == "energy":
-			fitness_total = energy_total
-		elif self.Optimization_Objective == "edp":
-			fitness_total = latency_max * energy_total / 1000000000
-		else:
-			print("ERROR FITNESS TAG : ", self.Optimization_Objective)
-			exit()
-		
-		nn_name_list = list(fitness_dict.keys())
-		nn_name_first = nn_name_list[0]
-		nn_name_last = nn_name_list[-1]
-		index_dict = {"edp":0, "latency":1, "energy":2}
-		index = index_dict[self.Optimization_Objective]
-		distance = fitness_dict[nn_name_last][index] - fitness_dict[nn_name_first][index]
-		
-		return fitness_total, distance
-
-	def plot(self):
-		x = list(range(len(self.fitness_record)))
-
-		plt.figure("Fitness")
-		plt.plot(x,self.fitness_record)
-		for i in range(len(x)):
-			plt.scatter(x[i],self.fitness_record[i],s=10)
-			#xy = (x[i], round(self.fitness_record[i]))
-			#plt.annotate("(%s,%s)" % xy, xy=xy, xytext=(-70, 10), textcoords='offset points')
-		plt.title("Fitness change line")
-		plt.savefig(result_plot+"/Fitness_iter_plot.png", bbox_inches = 'tight')
-
-		plt.figure("distance")
-		plt.plot(x,self.distance_record)
-		for i in range(len(x)):
-			plt.scatter(x[i],self.distance_record[i],s=10)
-			#xy = (x[i], round(self.distance_record[i]))
-			#plt.annotate("(%s,%s)" % xy, xy=xy, xytext=(-70, 10), textcoords='offset points')
-		plt.title("distance change line")
-		plt.savefig(result_plot+"/distance_plot.png", bbox_inches = 'tight')
-
-		plt.figure("result Fitness")
-		x = []
-		y = []
-		for (nn_name, sim_fitness) in self.sim_fitness_dict.items():
-			x.append(nn_name)
-			y.append(sim_fitness[1])
-		plt.xlabel("nn_name")
-		plt.ylabel("EDP")
-		plt.bar(x, y, width=0.5)
-		for i in range(len(x)):
-			xy = (x[i], round(y[i]))
-			plt.annotate("%s" % round(y[i]), xy=xy, xytext=(-20, 2), textcoords='offset points')
-		plt.title("Fitness per NN")
-		plt.savefig(result_plot+"/Fitness_per_NN.png", bbox_inches = 'tight')
-
-	def evoluation_someMethod(self, TH=10):
-		# --- 初始化
-		self.setTotalNNFitness()
-		self.getIdealParam()
-		self.getInitialMethod()
-		self.sim_fitness_dict = self.evaluation(self.nn_chiplet_num_dict)
-		fitness_total, distance = self.getFitness(self.sim_fitness_dict)
-		self.getSimIdealRatio()
-		self.fitness_record.append(fitness_total)
-		self.distance_record.append(distance)
-
-		# --- 迭代进化
-		for i in range(TH):
-			print("start iter {} ---------------".format(i))
-			sim_ideal_ratio_order_dict = sorted(self.sim_ideal_ratio.items(), key = lambda x: x[1])
-			nn_fast = sim_ideal_ratio_order_dict[0][0]
-			nn_slow = sim_ideal_ratio_order_dict[-1][0]
-			chiplet_num_fast = self.nn_chiplet_num_dict[nn_fast] - 1
-			chiplet_num_slow = self.nn_chiplet_num_dict[nn_slow] + 1
-			fast_index = 0
-			stop_signal = 0
-			print("sim_ideal_ratio_order_dict=",sim_ideal_ratio_order_dict)
-			print("nn_fast={} , nn_slow={}".format(nn_fast, nn_slow))
-			while chiplet_num_fast == 0:
-				fast_index += 1
-				if fast_index == len(self.nn_chiplet_fitness_dict) - 1:
-					stop_signal = 1
-					break
-				else:
-					nn_fast = sim_ideal_ratio_order_dict[fast_index][0]
-					chiplet_num_fast = self.nn_chiplet_num_dict[nn_fast] - 1
-			if stop_signal == 1:
+	# 获得workload的sp_tp_id映射
+	# workload_dict = {resnet18:{“w1”:[1,7],“w2”:[8,16]}, vgg16:{“w1”:[1,16]}}
+	def getMultiNNDSECode(self, sp_TH=10, tp_TH=10, TH=1000):
+		workload_code_list = []
+		iter_num = 0
+		max_iter = 1000
+		sp_TH=10
+		tp_TH=10
+		tp_num_max = 0
+		while iter_num < max_iter:
+			iter_num += 1
+			workload_code = {}
+			tp_max_list = [0]
+			tp_min = 0
+			sp_max = 0
+			sp_min = 0
+			for nn_name, workload in self.workload_dict.items():
+				sp_pre = sp_min
+				for w_name in workload:
+					workload_name = nn_name + w_name
+					sp_id = random.randint(sp_pre, sp_max)
+					tp_max = tp_max_list[sp_id]
+					tp_id = random.randint(tp_min, tp_max)
+					if tp_id == tp_max and tp_max < tp_TH:
+						tp_max_list[sp_id] += 1
+					if sp_id == sp_max and sp_max < sp_TH:
+						sp_max += 1
+						tp_max_list.append(0)
+					sp_pre = sp_id
+					workload_code[workload_name] = [sp_id, tp_id]
+			if workload_code not in workload_code_list:
+				iter_num = 0 
+				workload_code_list.append(workload_code)
+			if len(workload_code_list) > TH:
 				break
-			change_nn_chiplet_num_dict = {nn_fast: chiplet_num_fast , nn_slow: chiplet_num_slow}
-			change_nn_fitness_dict = self.evaluation(change_nn_chiplet_num_dict)
-			change_fitness = change_nn_fitness_dict[nn_fast] + change_nn_fitness_dict[nn_slow] - self.sim_fitness_dict[nn_fast] - self.sim_fitness_dict[nn_slow]
-			change_fitness_slow = change_nn_fitness_dict[nn_slow] - self.sim_fitness_dict[nn_slow]
-			if change_fitness < 0:
-				self.nn_chiplet_num_dict[nn_fast] = change_nn_chiplet_num_dict[nn_fast]
-				self.nn_chiplet_num_dict[nn_slow] = change_nn_chiplet_num_dict[nn_slow]
-				self.sim_fitness_dict[nn_fast] = change_nn_fitness_dict[nn_fast]
-				self.sim_fitness_dict[nn_slow] = change_nn_fitness_dict[nn_slow]
-				self.sim_ideal_ratio[nn_fast] = self.sim_fitness_dict[nn_fast] / self.ideal_fitness_dict[nn_fast]
-				self.sim_ideal_ratio[nn_slow] = self.sim_fitness_dict[nn_fast] / self.ideal_fitness_dict[nn_slow]
-			elif change_fitness_slow < 0:
-				self.sim_ideal_ratio[nn_fast] *= 2
-			else:
-				self.sim_ideal_ratio[nn_slow] /= 2
-			print("nn_chiplet_num: ", self.nn_chiplet_num_dict)
-			print("fitness_record: ", self.fitness_record)
-			print("fitness change = {}".format(change_fitness))
+			tp_max_list.sort()
+			tp_num_max_1 = tp_max_list[-1]
+			if tp_num_max_1 > tp_num_max:
+				tp_num_max = tp_num_max_1
+		return workload_code_list, tp_num_max
 
-	def evoluation_random(self):
-		# --- Chiplet拆分
-		nn_chiplet_num_list = getChipletPartition(self.chiplet_num, self.ideal_param_dict_TP)
-		iter = 0
-		for nn_chiplet_num in nn_chiplet_num_list:
-			iter += 1
-			print("start iter {} ---------------".format(iter))
-			
-			fitness_dict = self.evaluation(nn_chiplet_num)
-			fitness_total, distance = self.getFitness(fitness_dict)
-			if self.best_fitness == None or fitness_total < self.best_fitness:
-				self.best_fitness = fitness_total
-				self.nn_chiplet_num_dict = nn_chiplet_num
-				self.sim_fitness_dict = copy.deepcopy(fitness_dict)
-			self.fitness_record.append(fitness_total)
-			self.sample_record.append(nn_chiplet_num)
-			self.distance_record.append(distance)
+	# workload_code进行解码，解码成每个[sp_id, tp_id]内包含哪些workload的形式
+	def decodeCode(self, code):
+		sp_tp_space = {}
+		for w_name, tp_sp_id in code.items():
+			tp_id = tp_sp_id[1]
+			sp_id = tp_sp_id[0]
+			if sp_id not in sp_tp_space:
+				sp_tp_space[sp_id] = {}
+			if tp_id not in sp_tp_space[sp_id]:
+				sp_tp_space[sp_id][tp_id] = []
+			sp_tp_space[sp_id][tp_id].append(w_name)
+		return sp_tp_space
 
-			print("nn_chiplet_num: ", nn_chiplet_num)
-			print("fitness = {}".format(fitness_total))
-			print("fitness best = {}".format(self.best_fitness))
-
-	def decodeTP(self, t_code):
-		def getExchange(list):
-			id = 0
-			v_k_exchange = {}
-			for i in list:
-				if i not in v_k_exchange:
-					v_k_exchange[i] = []
-				v_k_exchange[i].append(id)
-				id += 1
-			return v_k_exchange
-		
-		t_code_e = getExchange(t_code)
-		self.ideal_param_dict_TP = {}
-		self.TP_list = []
-		for time, id_list in t_code_e.items():
-			TP_name = "TP" + str(time)
-			ideal_param_TP  = 0
-			for id in id_list:
-				nn_name = self.nn_list[id]
-				TP_name += "_" + nn_name
-				ideal_param_TP  += self.ideal_param_dict[nn_name]
-			
-			self.TP_list.append(TP_name)
-			self.ideal_param_dict_TP[TP_name] = ideal_param_TP
-		
-		self.nn_chiplet_fitness_dict_TP = {}
-		tp_id = 0
-		for time, id_list in t_code_e.items():
-			edp_TP_dict = {}
-			latency_TP_dict = {}
-			energy_TP_dict = {}
-			TP_name = self.TP_list[tp_id]
-			tp_id += 1
-			self.nn_chiplet_fitness_dict_TP[TP_name] = {}
-			for id in id_list:
-				for chiplet_num, fitness_list in self.nn_chiplet_fitness_dict[self.nn_list[id]].items():
-					if chiplet_num not in edp_TP_dict:
-						edp_TP_dict[chiplet_num] = 0
-						latency_TP_dict[chiplet_num] = 0
-						energy_TP_dict[chiplet_num] = 0
-					edp_TP_dict[chiplet_num] += fitness_list[0]
-					latency_TP_dict[chiplet_num] += fitness_list[1]
-					energy_TP_dict[chiplet_num] += fitness_list[2]
-			
-			for chiplet_num in edp_TP_dict:
-				edp = edp_TP_dict[chiplet_num]
-				latency = latency_TP_dict[chiplet_num]
-				energy = energy_TP_dict[chiplet_num]
-				self.nn_chiplet_fitness_dict_TP[TP_name][chiplet_num] = [edp, latency, energy]
+	# 计算每个[sp_id, tp_id]内任务的理论参数量
+	def calIdealParam(self, sp_tp_space):
+		sp_tp_idealParam = {}
+		for sp_id, tp_space  in sp_tp_space.items():
+			sp_tp_idealParam[sp_id] = {}
+			for tp_id, workload_list in tp_space.items():
+				sp_tp_idealParam[sp_id][tp_id] = 0
+				for workload in workload_list:
+					sp_tp_idealParam[sp_id][tp_id] += self.ideal_param_dict_workload[workload]
+		return sp_tp_idealParam
 
 	def evoluation_temporal_spatial(self):
 		self.initialize()
-		temporal_list = getTemporalCode(len(self.nn_list))
+		workload_code_list, max_tp_num = self.getMultiNNDSECode(self.workload_dict)
+		chiplet_partition_dict = getChipletPartionDict(self.chiplet_num, max_tp_num)
 
-		for t_code in temporal_list:
-			self.decodeTP(t_code)
-			self.evoluation_random()
+		print("Start----------------------")
+		for workload_code in workload_code_list:
+			print("Start a new workload mapping----------")
+			print("workload_code = ", workload_code)
+
+			sp_tp_space = self.decodeCode(workload_code)
+
+			sp_tp_idealParam = self.calIdealParam(sp_tp_space)
+			sp_tp_Nchip_list = getChipletPartition_sp_tp(chiplet_partition_dict, sp_tp_idealParam)
+
+			for sp_tp_Nchip in sp_tp_Nchip_list:
+				print("Start a new chiplet partition----------")
+				print("sp_tp_Nchip = ", sp_tp_Nchip)
+				schedule_name, fitness = self.evaluation_sp_tp(sp_tp_space, sp_tp_Nchip)
+				if self.fitness_best == None or fitness < self.fitness_best:
+					self.fitness_best = fitness
+					self.schedule_best = schedule_name
+					self.Nchip_partition_best = sp_tp_Nchip
+					self.sp_tp_space_best = sp_tp_space
+				
+				print("best_fitess: ", self.fitness_best)
+				print("best_schedule_name: ", self.schedule_best)
+				
+				self.fitness_record.append(fitness)
+				self.schedule_record.append(schedule_name)
+				self.Nchip_par_record.append(sp_tp_Nchip)
+				self.sp_tp_space_record.append(sp_tp_space)
+
 
 def plot(nn_name_list):
 	id = 1
@@ -450,34 +508,49 @@ if __name__ == '__main__':
 	nn_list = opt.nn_list
 	nn_list.replace("\n", "")
 	nn_name_list = nn_list.split("+")
-	#plot(nn_name_list)
-	#exit()
-	print("nn_name_list: ", nn_name_list)
-	MNN_Engine = multi_network_DSE(chiplet_num, nn_name_list, Optimization_Objective)
+
+	workload_dict = {"resnet18":{"":[1,17]}, "resnet18same":{"":[1,17]}, "resnet50":{"":[1,50]}, "resnet50same":{"":[1,50]}}
+	MNN_Engine = multi_network_DSE(chiplet_num, workload_dict, Optimization_Objective)
 	MNN_Engine.evoluation_temporal_spatial()
+
+	# 控制台输出
 	print("Sim END---------------")
-	print("nn_chiplet_num: ", MNN_Engine.nn_chiplet_num_dict)
-	print("fitness_record: ", MNN_Engine.fitness_record)
+	print("best schedule name : ", MNN_Engine.schedule_best)
+	print("best Nchip Partition : ", MNN_Engine.Nchip_partition_best)
+	print("best fitness : ", MNN_Engine.fitness_best)
 	print("")
 
+	# 文本输出
 	result_out_file = open(cur_dir + "/multi_nn_result/explore_result.txt", 'w')
-	
-	print("------SETTING-------", file = result_out_file)
+	print("{:-^120}".format(" SETTING "), file = result_out_file)
 	print("nn_list = {}".format(nn_name_list), file = result_out_file)
 	print("chiplet_num = {}".format(chiplet_num), file = result_out_file)
 	print("Optimization_Objective = {}".format(Optimization_Objective), file = result_out_file)
-	print("")
 	print("", file = result_out_file)
-	print("------RESULT---------", file = result_out_file)
-	print("explore_result = {}".format(MNN_Engine.nn_chiplet_num_dict), file = result_out_file)
-	print("fitness_result = {}".format(MNN_Engine.best_fitness), file = result_out_file)
-	print("", file = result_out_file)
-	print("---SAMPLE RECORD-----", file = result_out_file)
-	id = 0
-	for sample in MNN_Engine.sample_record:
-		fitness = int(MNN_Engine.fitness_record[id])
-		distance = int(MNN_Engine.distance_record[id])
-		id += 1
-		print("sample=\t{:60}\t---fitness:\t{:15}---distance:\t{:15}\t".format(str(sample), str(fitness), str(distance)), file = result_out_file)
 
-	MNN_Engine.plot()
+	print("{:-^120}".format(" RESULT "), file = result_out_file)
+	print("schedule name = {}".format(MNN_Engine.schedule_best), file = result_out_file)
+	print("{:-<100}".format("schedule space result "), file = result_out_file)
+	for sp_id, tp_space in MNN_Engine.sp_tp_space_best.items():
+		line = "\tsp_id({})\t".format(sp_id)
+		for tp_id in tp_space:
+			tp_item = "tp_id({}): ".format(tp_id)
+			for workload_name in tp_space[tp_id]:
+				tp_item += workload_name + "+"
+			tp_item = tp_item[:-1]
+			tp_item += "; " + str(MNN_Engine.Nchip_partition_best[sp_id][tp_id])
+			line += "{:30}\t\t".format(tp_item)
+		print(line, file = result_out_file)
+	print("{:-<100}".format(""), file = result_out_file)
+	print("fitness_result: edp({}), latency({}), energy({})".format(MNN_Engine.fitness_best[0], MNN_Engine.fitness_best[1], MNN_Engine.fitness_best[2]), file = result_out_file)
+	print("", file = result_out_file)
+
+	print("{:-^120}".format(" SAMPLE RECORD "), file = result_out_file)
+	id = 0
+	for sample in MNN_Engine.schedule_record:
+		fitness = str(MNN_Engine.fitness_record[id])
+		Nchip = str(MNN_Engine.Nchip_par_record[id])
+		id += 1
+		print("sample={:100}\t, ---Nchip_par:{:60}\t, ---fitness:\t{:15}\t".format(str(sample), Nchip, str(fitness)), file = result_out_file)
+
+	#MNN_Engine.plot()
