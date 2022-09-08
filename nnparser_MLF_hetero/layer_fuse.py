@@ -12,7 +12,7 @@ ratio = {}
 chiplet_parallel_list = ["P_stable", "PK_stable", "K_stable"]
 PE_Frequency = 1000 * 1000 * 1000
 
-def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name):
+def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name, fuse_flag):
 	
 	def getLayerParam(app_name):
 		layer_num = 0
@@ -125,7 +125,36 @@ def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name):
 			item_num += 1
 		return result_dict
 
-	def extractFitness(result_indir, tile_ratio = 4):
+	def extractFitness_initial(result_indir):
+		# --- read files ---
+		result_file_init = os.path.join(result_indir, "final_result_record_initial.txt")
+		f_init = open(result_file_init)
+
+		lines_init = f_init.readlines()
+		line_init_edp = lines_init[0]
+		line_init_energy = lines_init[1]
+		line_init_latency = lines_init[2]
+		line_init_noc_NR = lines_init[5]
+		line_init_L2_to_DRAM_NR = lines_init[6]
+		line_init_DRAM_to_L2_NR = lines_init[7]
+
+		# --- extract from lines ---
+		result_init_edp = lineParse(line_init_edp)
+		result_init_energy = lineParse(line_init_energy)
+		result_init_latency = lineParse(line_init_latency)
+		result_init_NoC_NR = lineParse(line_init_noc_NR)
+		result_init_L2_to_DRAM_NR = lineParse(line_init_L2_to_DRAM_NR)
+		result_init_DRAM_to_L2_NR = lineParse(line_init_DRAM_to_L2_NR)
+		
+		fitness_init_dict = {}
+
+		for layer_id in result_init_edp:
+			fitness_init_dict[layer_id] = [result_init_edp[layer_id], result_init_energy[layer_id], result_init_latency[layer_id], \
+				result_init_NoC_NR[layer_id], result_init_L2_to_DRAM_NR[layer_id], result_init_DRAM_to_L2_NR[layer_id]]
+
+		return fitness_init_dict
+
+	def extractFitness_head_tail(result_indir,  tile_ratio = 4):
 		# --- read files ---
 		result_file_init = os.path.join(result_indir, "final_result_record_initial.txt")
 		result_file_head = os.path.join(result_indir, "final_result_record_headLayer.txt")
@@ -137,11 +166,6 @@ def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name):
 
 		lines_init = f_init.readlines()
 		line_init_edp = lines_init[0]
-		line_init_energy = lines_init[1]
-		line_init_latency = lines_init[2]
-		line_init_noc_NR = lines_init[5]
-		line_init_L2_to_DRAM_NR = lines_init[6]
-		line_init_DRAM_to_L2_NR = lines_init[7]
 
 		lines_head = f_head.readlines()
 		line_head_edp = lines_head[0]
@@ -161,41 +185,29 @@ def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name):
 
 		# --- extract from lines ---
 		result_init_edp = lineParse(line_init_edp)
+
 		result_head_edp = lineParse(line_head_edp)
 		result_tail_edp = lineParse(line_tail_edp)
 
-		result_init_energy = lineParse(line_init_energy)
 		result_head_energy = lineParse(line_head_energy)
 		result_tail_energy = lineParse(line_tail_energy)
 
-		result_init_latency = lineParse(line_init_latency)
 		result_head_latency = lineParse(line_head_latency)
 		result_tail_latency = lineParse(line_tail_latency)
 
-		result_init_NoC_NR = lineParse(line_init_noc_NR)
 		result_head_NoC_NR = lineParse(line_head_noc_NR)
 		result_tail_NoC_NR = lineParse(line_tail_noc_NR)
 
-		result_init_L2_to_DRAM_NR = lineParse(line_init_L2_to_DRAM_NR)
 		result_head_L2_to_DRAM_NR = lineParse(line_head_L2_to_DRAM_NR)
 		result_tail_L2_to_DRAM_NR = lineParse(line_tail_L2_to_DRAM_NR)
 
-		result_init_DRAM_to_L2_NR = lineParse(line_init_DRAM_to_L2_NR)
 		result_head_DRAM_to_L2_NR = lineParse(line_head_DRAM_to_L2_NR)
 		result_tail_DRAM_to_L2_NR = lineParse(line_tail_DRAM_to_L2_NR)
 
 		fitness_head_dict = {}
 		fitness_tail_dict = {}
-		fitness_init_dict = {}
 		
 		for layer_id in result_init_edp:
-			edp_i = result_init_edp[layer_id]
-			energy_i = result_init_energy[layer_id]
-			latency_i = result_init_latency[layer_id]
-			NoC_NR_i = result_init_NoC_NR[layer_id]
-			L2_to_DRAM_NR_i = result_init_L2_to_DRAM_NR[layer_id]
-			DRAM_to_L2_NR_i = result_init_DRAM_to_L2_NR[layer_id]
-
 			if layer_id in result_head_edp:
 				result_head_edp[layer_id] *= tile_ratio * tile_ratio
 				result_head_energy[layer_id] *= tile_ratio
@@ -226,20 +238,22 @@ def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name):
 				result_tail_L2_to_DRAM_NR[layer_id] = None
 				result_tail_DRAM_to_L2_NR[layer_id] = None
 			
-			fitness_init_dict[layer_id] = [result_init_edp[layer_id], result_init_energy[layer_id], result_init_latency[layer_id], \
-				result_init_NoC_NR[layer_id], result_init_L2_to_DRAM_NR[layer_id], result_init_DRAM_to_L2_NR[layer_id]]
 			fitness_head_dict[layer_id] = [result_head_edp[layer_id], result_head_energy[layer_id], result_head_latency[layer_id], \
 				result_head_NoC_NR[layer_id], result_head_L2_to_DRAM_NR[layer_id], result_head_DRAM_to_L2_NR[layer_id]]
 			fitness_tail_dict[layer_id] = [result_tail_edp[layer_id], result_tail_energy[layer_id], result_tail_latency[layer_id], \
 				result_tail_NoC_NR[layer_id], result_tail_L2_to_DRAM_NR[layer_id], result_tail_DRAM_to_L2_NR[layer_id]]
 		
-		return fitness_init_dict, fitness_head_dict, fitness_tail_dict
+		return fitness_head_dict, fitness_tail_dict
 
 	# Fitness per chiplet_parallel extract and file out
 	# 获取每层在三种片间并行度方案下的适应度数值
-	fitness_init_dict_p, fitness_head_dict_p, fitness_tail_dict_p = extractFitness(result_indir_p)
-	fitness_init_dict_pk, fitness_head_dict_pk, fitness_tail_dict_pk = extractFitness(result_indir_pk)
-	fitness_init_dict_k, fitness_head_dict_k, fitness_tail_dict_k = extractFitness(result_indir_k)
+	fitness_init_dict_p = extractFitness_initial(result_indir_p)
+	fitness_init_dict_pk = extractFitness_initial(result_indir_pk)
+	fitness_init_dict_k = extractFitness_initial(result_indir_k)
+	if fuse_flag == 1:
+		fitness_head_dict_p, fitness_tail_dict_p = extractFitness_head_tail(result_indir_p)
+		fitness_head_dict_pk, fitness_tail_dict_pk = extractFitness_head_tail(result_indir_pk)
+		fitness_head_dict_k, fitness_tail_dict_k = extractFitness_head_tail(result_indir_k)
 
 	def getMinFrom3(a1, a2, a3, dim_list):
 		if a1 == a2 == a3 == None:
@@ -323,8 +337,12 @@ def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name):
 		return fitness_dict
 
 	fitness_init_dict = getFitnessMinDict(fitness_init_dict_p, fitness_init_dict_k, fitness_init_dict_pk, app_name)
-	fitness_head_dict = getFitnessMinDict(fitness_head_dict_p, fitness_head_dict_k, fitness_head_dict_pk, app_name)
-	fitness_tail_dict = getFitnessMinDict(fitness_tail_dict_p, fitness_tail_dict_k, fitness_tail_dict_pk, app_name)
+	if fuse_flag == 1:
+		fitness_head_dict = getFitnessMinDict(fitness_head_dict_p, fitness_head_dict_k, fitness_head_dict_pk, app_name)
+		fitness_tail_dict = getFitnessMinDict(fitness_tail_dict_p, fitness_tail_dict_k, fitness_tail_dict_pk, app_name)
+	else:
+		fitness_head_dict = {"edp":None, "energy":None, "latency":None}
+		fitness_tail_dict = {"edp":None, "energy":None, "latency":None}
 
 	return fitness_init_dict, fitness_head_dict, fitness_tail_dict
 
@@ -524,7 +542,39 @@ def layer_fuse(fitness_init_dict, fitness_head_dict, fitness_tail_dict):
 
 	return edp_all, latency_all, energy_all, layer_fuse_fitness_dict
 
-def main(app_name, architecture="ours", alg="GA", encode_type="index", dataflow="ours", PE_parallel="All", debug_open=0, save_all_records=0):
+def layer_no_fuse(fitness_init_dict):
+	edp_all = 0
+	latency_all = 0
+	energy_all = 0
+	edp_i_list = fitness_init_dict["edp"]
+	energy_i_list = fitness_init_dict["energy"]
+	latency_i_list = fitness_init_dict["latency"]
+
+	for layer_id in range(len(edp_i_list)):
+		energy_all += energy_i_list[layer_id]
+		latency_all += latency_i_list[layer_id]
+	
+	edp_all = energy_all * latency_all / PE_Frequency
+
+	print("new --------------------------")
+	print("edp_all: ", edp_all)
+	print("energy_all: ", energy_all)
+	print("latency_all: ", latency_all)
+	
+	layer_fuse_fitness_dict = {"latency":[], "NoC_NR":[], "L2_to_DRAM_NR":[], "DRAM_to_L2_NR":[]}
+	for i in range(len(edp_i_list)):
+		latency = fitness_init_dict["latency"][i]
+		NoC_NR = fitness_init_dict["NoC_NR"][i]
+		L2_to_DRAM_NR = fitness_init_dict["L2_to_DRAM_NR"][i]
+		DRAM_to_L2_NR = fitness_init_dict["DRAM_to_L2_NR"][i]
+		layer_fuse_fitness_dict["latency"].append(latency)
+		layer_fuse_fitness_dict["NoC_NR"].append(NoC_NR)
+		layer_fuse_fitness_dict["L2_to_DRAM_NR"].append(L2_to_DRAM_NR)
+		layer_fuse_fitness_dict["DRAM_to_L2_NR"].append(DRAM_to_L2_NR)
+
+	return edp_all, latency_all, energy_all, layer_fuse_fitness_dict
+
+def main(app_name, fuse_flag, architecture="ours", alg="GA", encode_type="index", dataflow="ours", PE_parallel="All", debug_open=0, save_all_records=0):
 	# Variable
 	# --- result_indir: 单网络逐层性能结果文件地址
 	# --- result_outdir: 多层融合后整个网络性能结果文件地址
@@ -559,8 +609,11 @@ def main(app_name, architecture="ours", alg="GA", encode_type="index", dataflow=
 		result_indir_pk = os.path.join(result_indir, chiplet_parallel_list[1] + "_and_" + PE_parallel)
 		result_indir_k = os.path.join(result_indir, chiplet_parallel_list[2] + "_and_" + PE_parallel)
 
-		fitness_init_dict, fitness_head_dict, fitness_tail_dict = txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name)
-		edp_all, latency_all, energy_all, layer_fuse_fitness_dict = layer_fuse(fitness_init_dict, fitness_head_dict, fitness_tail_dict)
+		fitness_init_dict, fitness_head_dict, fitness_tail_dict = txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name, fuse_flag)
+		if fuse_flag == 1:
+			edp_all, latency_all, energy_all, layer_fuse_fitness_dict = layer_fuse(fitness_init_dict, fitness_head_dict, fitness_tail_dict)
+		else:
+			edp_all, latency_all, energy_all, layer_fuse_fitness_dict = layer_no_fuse(fitness_init_dict)
 		
 		edp_dict[chiplet_num] = edp_all
 		latency_dict[chiplet_num] = latency_all
@@ -609,15 +662,17 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--app_name_line', type=str, default="resnet50", help='app_name_line,using+as split signal')	# simba , nnbaton
 	parser.add_argument('--chiplet_num_max_TH', type=int, default=16, help='max chiplet_num')
+	parser.add_argument('--fuse_flag', type=int, default=1, help='use layer fuse or not')
 	opt = parser.parse_args()
 	app_name_line = opt.app_name_line
 	chiplet_num_max_TH = opt.chiplet_num_max_TH
+	fuse_flag = opt.fuse_flag
 	app_name_line.replace('\n',"")
 	app_name_list = app_name_line.split("+")
 
 	
 	for app_name in app_name_list:
-		edp_dict, latency_dict, energy_dict, latency_BW_dict = main(app_name)
+		edp_dict, latency_dict, energy_dict, latency_BW_dict = main(app_name, fuse_flag)
 
 
 

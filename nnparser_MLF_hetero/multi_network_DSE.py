@@ -3,7 +3,6 @@ import math
 import os
 import copy
 import random
-import sched
 from matplotlib import pyplot as plt
 import argparse
 
