@@ -10,7 +10,6 @@ from mesh_hetero import *
 from matplotlib import pyplot as plt
 from config import *
 import openpyxl
-from randomTest import *
 
 # Parameter
 # 

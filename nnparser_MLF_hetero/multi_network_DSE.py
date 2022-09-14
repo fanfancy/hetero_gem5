@@ -1,11 +1,10 @@
 from linecache import lazycache
-import math
 import os
 import copy
 import random
 from matplotlib import pyplot as plt
 import argparse
-
+import numpy as np
 PE_Frequency = 1000 * 1000 * 1000
 
 cur_dir = os.path.dirname(os.path.abspath(__file__))
@@ -254,18 +253,154 @@ class multi_network_DSE:
 	def BW_Reallocate(self, tp_workload_fitness, tp_Nchip):
 		tp_workload_fitness_bw = {}
 		bw_reallocate_result = {}
-		for tp_id, workload_fitness in tp_workload_fitness.items():
-			tp_workload_fitness_bw[tp_id] = {}
-			Nchip = tp_Nchip[tp_id]
-			for workload, fitness in workload_fitness.items():
-				tp_workload_fitness_bw[tp_id][workload] = fitness
-				workload_BW_list = self.workload_BWNeeded_dict[workload][Nchip]
-				for layer_id, BW_list in workload_BW_list.items():
-					latency = BW_list[0]
-					NoC_NR = BW_list[1]
-					L2_to_DRAM_NR = BW_list[2]
-					DRAM_to_L2_NR = BW_list[3]
+		debug = False
+		if len(tp_workload_fitness.keys()) == 1:
+			for tp_id, workload_fitness in tp_workload_fitness.items():
+				tp_workload_fitness_bw[tp_id] = {}
+				bw_reallocate_result[tp_id] = {}
+				for workload, fitness in workload_fitness.items():
+					tp_workload_fitness_bw[tp_id][workload] = fitness
+		else:
+			"""
+			tp_workload_fitness =  
+			{
+				0: {
+					'resnet18': [1793044.2722481424, 514782.6666666666, 3483109258.2400002], 
+					'resnet50': [9630241.645624578, 1326631.466666666, 7259168719.872001]
+				}, 
+				1: {'resnet50same': [15876227.827040443, 1926204.2666666668, 8242234793.984004]}
+			}
+			tp_Nchip =  {1: 6, 0: 10}
+			"""
+			#########################################################
+			# init
+			#########################################################
+			delay_min_dict = {}
+			degrad_ratio_dict = {}
+			dram_to_L2_min_dict = {}
+			L2_to_DRAM_min_dict = {}
+			total_cycle_dict = {}
+			total_cycle_list = []
+			eva_nn_chiplet_num_dict = {}
 
+			for tp_id, workload_fitness in tp_workload_fitness.items():
+				tp_workload_fitness_bw[tp_id] = {}
+				bw_reallocate_result[tp_id] = {}
+				Nchip = tp_Nchip[tp_id]
+				if debug:
+					print('workload_fitness.keys() = ', workload_fitness.keys())
+					print('Nchip = ', Nchip)
+				delay_min_dict[tp_id] = {}
+				degrad_ratio_dict[tp_id] = {}
+				L2_to_DRAM_min_dict[tp_id] = {}
+				dram_to_L2_min_dict[tp_id] = {}
+				eva_nn_chiplet_num_dict[tp_id] = Nchip
+
+				for workload, fitness in workload_fitness.items():
+					tp_workload_fitness_bw[tp_id][workload] = fitness
+					workload_BW_list = self.workload_BWNeeded_dict[workload][Nchip]
+					if debug:
+						print('workload_BW_list = ', workload_BW_list)
+					
+					for layer_id, BW_list in workload_BW_list.items():
+						# latency = BW_list[0]
+						# NoC_NR = BW_list[1]
+						# L2_to_DRAM_NR = BW_list[2]
+						# DRAM_to_L2_NR = BW_list[3]
+						delay_min_dict[tp_id][workload + '_' + str(layer_id)] = BW_list[0]
+						degrad_ratio_dict[tp_id][workload + '_' + str(layer_id)] = max(BW_list[1], BW_list[2], BW_list[3])
+						L2_to_DRAM_min_dict[tp_id][workload + '_' + str(layer_id)] = BW_list[2]
+						dram_to_L2_min_dict[tp_id][workload + '_' + str(layer_id)] = BW_list[3]
+
+			if debug:
+				print('delay_min_dict = ', delay_min_dict)
+				print('degrad_ratio_dict = ', degrad_ratio_dict)
+				print('dram_to_L2_min_dict = ', dram_to_L2_min_dict)
+				print('L2_to_DRAM_min_dict = ', L2_to_DRAM_min_dict)
+			
+			for nn_name in tp_workload_fitness.keys():
+				total_cycle_dict[nn_name] = {}
+				cycle = 0
+				for layer, item in delay_min_dict[nn_name].items():
+					cycle += item
+					total_cycle_dict[nn_name][layer] = int(cycle)
+					total_cycle_list.append(int(cycle))
+			# total_cycle = max(total_cycle_dict.values())
+			total_cycle_list.sort()
+			if debug:
+				print('total_cycle_dict = ', total_cycle_dict)
+				print('total_cycle_list = ', total_cycle_list)
+			######################## event ########################
+			event_dict = {}
+			old_tick = 0
+			index = 0
+			while index < len(total_cycle_list):
+				nn_name_list = list(total_cycle_dict.keys())
+				tick = total_cycle_list[index]
+				state = {}
+				for nn_name in total_cycle_dict.keys():
+					layer_list = list(total_cycle_dict[nn_name].keys())
+					now_layer = layer_list[0]
+					for i, layer in enumerate(layer_list):
+						if total_cycle_dict[nn_name][layer] == tick:
+							now_layer = layer
+						elif total_cycle_dict[nn_name][layer] < tick and i < len(layer_list) - 1:
+							now_layer = layer_list[i + 1]
+						else:
+							break
+					state[nn_name] = now_layer
+				event_dict[tick] = state
+				if debug:
+					print(tick, state)
+				degrad_ratio_list = []
+				for nn_name in state.keys():
+					degrad_ratio_list.append(degrad_ratio_dict[nn_name][state[nn_name]])
+
+				print(degrad_ratio_list, sum(np.array(degrad_ratio_list) == 1))
+
+				######################## update ########################
+				if sum(np.array(degrad_ratio_list) <= 1) >= 1 and sum(np.array(degrad_ratio_list) <= 1) < len(degrad_ratio_list):
+					nn_name = nn_name_list[np.argmin(degrad_ratio_list)]
+					improve_ratio = (1 - max(dram_to_L2_min_dict[nn_name][state[nn_name]], L2_to_DRAM_min_dict[nn_name][state[nn_name]])) / (len(degrad_ratio_list) - 1) * (eva_nn_chiplet_num_dict[nn_name] % 4)
+					nn_name_list.remove(nn_name)
+
+					print('improve_ratio = ', improve_ratio)
+					print('tick - old_tick = ', tick - old_tick)
+					for nn in nn_name_list:
+						if debug:
+							print('int(((tick - old_tick) * improve_ratio) / eva_nn_chiplet_num_dict[nn]) = ', int(((tick - old_tick) * improve_ratio) / eva_nn_chiplet_num_dict[nn]))
+						for layer in total_cycle_dict[nn].keys():
+							if total_cycle_dict[nn][layer] >= tick:
+								total_cycle_dict[nn][layer] -= int(((tick - old_tick) * improve_ratio) / eva_nn_chiplet_num_dict[nn])
+					
+					total_cycle_list = []
+					for nn in eva_nn_chiplet_num_dict.keys():
+						cycle = 0
+						for layer in total_cycle_dict[nn].keys():
+							total_cycle_list.append(total_cycle_dict[nn][layer])
+					total_cycle_list.sort()
+
+					tick = total_cycle_list[index]
+					if debug:
+						print('--------------')
+						print('index = ', index)
+						print('tick = ', tick)
+						print('new_total_cycle_dict = ', total_cycle_dict)
+						print('total_cycle_list = ', total_cycle_list)
+				old_tick = tick
+				index += 1
+
+			#########################################################
+			# output
+			#########################################################
+			for tp_id, workload_fitness in tp_workload_fitness.items():
+				for workload, fitness in workload_fitness.items():
+					workload_BW_list = self.workload_BWNeeded_dict[workload][Nchip]
+					layer_id = list(workload_BW_list.keys())[-1]
+					latency_tp = total_cycle_dict[tp_id][workload + '_' + str(layer_id)]
+					energy_tp = tp_workload_fitness_bw[tp_id][workload][2]
+					edp_tp = latency_tp * energy_tp / PE_Frequency
+					tp_workload_fitness_bw[tp_id][workload] = [edp_tp, latency_tp, energy_tp]
 		return tp_workload_fitness_bw, bw_reallocate_result
 
 	def calSP(self, fitness_dict, id):
@@ -296,6 +431,7 @@ class multi_network_DSE:
 					fitness = self.workload_fitness_dict[workload][Nchip]
 					sp_tp_workload_fitness[sp_id][tp_id][workload] = fitness
 		
+		print('sp_tp_workload_fitness = ', sp_tp_workload_fitness)
 		sp_tp_fitness = {}
 		bw_reallocate_result = {}
 		for sp_id in sp_tp_workload_fitness:
@@ -303,8 +439,11 @@ class multi_network_DSE:
 
 			tp_workload_fitness = sp_tp_workload_fitness[sp_id]
 			tp_Nchip = sp_tp_Nchip[sp_id]
+			print('tp_workload_fitness = ', tp_workload_fitness)
+			print('tp_Nchip = ', tp_Nchip)
 			tp_workload_fitness_bw , bw_reallocate_result[sp_id] = self.BW_Reallocate(tp_workload_fitness, tp_Nchip)
-
+			print('tp_workload_fitness_bw = ', tp_workload_fitness_bw)
+			print('bw_reallocate_result = ', bw_reallocate_result)
 			for tp_id, workload_fitness in tp_workload_fitness_bw.items():
 				tp_name, fitness = self.calTP(workload_fitness, tp_id)
 				sp_tp_fitness[sp_id][tp_name] = fitness
@@ -315,7 +454,8 @@ class multi_network_DSE:
 			sp_fitness[sp_name] = fitness
 		
 		schedule_name, fitness = self.calTP(sp_fitness, None)
-
+		print('schedule_name = ', schedule_name)
+		print('fitness = ', fitness)
 		return schedule_name, fitness
 		
 	# 获得每个Workload的性能参数
@@ -446,6 +586,7 @@ class multi_network_DSE:
 
 			for sp_tp_Nchip in sp_tp_Nchip_list:
 				print("Start a new chiplet partition----------")
+				print("sp_tp_space = ", sp_tp_space)
 				print("sp_tp_Nchip = ", sp_tp_Nchip)
 				schedule_name, fitness = self.evaluation_sp_tp(sp_tp_space, sp_tp_Nchip)
 				if self.fitness_best == None or fitness < self.fitness_best:
