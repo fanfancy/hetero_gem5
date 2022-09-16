@@ -1,4 +1,4 @@
-ddr_bandwidth	= 150  				# Gbs
+ddr_bandwidth	= 225  				# Gbs (2400MHz 150 --> 3600MHz 225)
 nop_bandwidth 	= 100				# Gb/s  # (simba 100Gb/s 1.8Ghz)
 noc_bandwidth 	= 68				# Gb/s 	# (simba 68Gb/s  2Ghz)
 act_wgt_width  	= 8 				# bit   # same with NNbaton

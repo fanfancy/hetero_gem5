@@ -574,7 +574,7 @@ def layer_no_fuse(fitness_init_dict):
 
 	return edp_all, latency_all, energy_all, layer_fuse_fitness_dict
 
-def main(app_name, fuse_flag, architecture="ours", alg="GA", encode_type="index", dataflow="ours", PE_parallel="All", debug_open=0, save_all_records=0):
+def main(app_name, fuse_flag, architecture="simba", alg="GA", encode_type="index", dataflow="ours", PE_parallel="All", debug_open=0, save_all_records=0):
 	# Variable
 	# --- result_indir: 单网络逐层性能结果文件地址
 	# --- result_outdir: 多层融合后整个网络性能结果文件地址
@@ -640,23 +640,54 @@ def main(app_name, fuse_flag, architecture="ours", alg="GA", encode_type="index"
 	
 	return edp_dict, latency_dict, energy_dict, latency_BW_dict
 
-def fitness_plot(fitness, fitness_init, app_name):
-	x_f = []
-	x_f_i = []
-	for i in range(len(fitness)):
-		chiplet_num = i+1
-		x_f.append(chiplet_num-0.2)
-		x_f_i.append(chiplet_num+0.2)
+def fitness_plot(edp_dict, latency_dict, energy_dict, app_name):
+	y_edp = []
+	y_edp_2 = []
+	y_energy = []
+	y_latency = []
+	x = []
+	for chiplet_num in edp_dict:
+		edp = edp_dict[chiplet_num]
+		energy = energy_dict[chiplet_num]
+		latency = latency_dict[chiplet_num]
+
+		y_edp.append(edp)
+		y_energy.append(energy)
+		y_latency.append(latency)
+		y_edp_2.append(edp_dict[16] * 16 / chiplet_num)
+
+		x.append(chiplet_num)
 	
-	plt.figure("chiplet num fuse result")
-	plt.title(app_name, fontsize=12)
-	plt.xlabel("Chiplet Num", fontsize=10)
-	plt.ylabel("Fitness", fontsize=10)
-	plt.bar(x_f, fitness, width=0.4, color="royalblue", label="fitness_with_fuse")
-	plt.bar(x_f_i, fitness_init, width=0.4, color="lavender", label="fitness_without_fuse")
+	plt.figure("Fitness Result " + app_name)
+	plt.title(app_name + " Fitness Result", fontsize=12)
+
+	plt.subplot(3, 1, 1)
+	plt.ylabel("EDP", fontsize=10)
+	plt.bar(x, y_edp, width=0.5,color='rosybrown')
+	plt.plot(x,y_edp,color='brown')
+	plt.plot(x,y_edp_2,color='blue')
 	plt.tick_params(labelsize=8)
-	plt.legend()
-	plt.savefig("./multi_nn_result/plot/" + app_name + ".png", bbox_inches = 'tight')
+	for i in range(len(x)):
+		plt.scatter(x[i],y_edp[i],s=8,color='brown')
+	
+	plt.subplot(3, 1, 2)
+	plt.ylabel("energy", fontsize=10)
+	plt.bar(x, y_energy, width=0.5,color='rosybrown')
+	plt.plot(x,y_energy,color='brown')
+	plt.tick_params(labelsize=8)
+	for i in range(len(x)):
+		plt.scatter(x[i],y_energy[i],s=8,color='brown')
+
+	plt.subplot(3, 1, 3)
+	plt.ylabel("latency", fontsize=10)
+	plt.bar(x, y_latency, width=0.5,color='rosybrown')
+	plt.plot(x,y_latency,color='brown')
+	plt.tick_params(labelsize=8)
+	for i in range(len(x)):
+		plt.scatter(x[i],y_latency[i],s=8,color='brown')
+	
+	plt.tight_layout(pad=1.1)
+	plt.savefig("./SE_result/GA_index/plot/" + app_name + "_Fitness.png", bbox_inches = 'tight')
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -673,6 +704,7 @@ if __name__ == '__main__':
 	
 	for app_name in app_name_list:
 		edp_dict, latency_dict, energy_dict, latency_BW_dict = main(app_name, fuse_flag)
+		fitness_plot(edp_dict, latency_dict, energy_dict, app_name)
 
 
 

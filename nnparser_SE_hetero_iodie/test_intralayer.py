@@ -415,7 +415,7 @@ def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaTy
 	f.close()
 	randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, result_dir)
 
-def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
+def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, optimization_objective, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
 	edp_res_min_dict = {}
 	energy_min_dict = {}
@@ -454,7 +454,7 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 			i_act_enough = 0
 		i_act_enough_dict[layer_name] = i_act_enough
 		GAGen = GaEncode(GaType, network_param, HW_param, debug=0)
-		GA_Solver = GASolver(num_gen, num_iter, memory_param, NoC_param, if_multicast, record_filename, i_act_enough, multi_layer_tag, io_die_tag = io_die_tag)
+		GA_Solver = GASolver(num_gen, num_iter, memory_param, NoC_param, if_multicast, record_filename, optimization_objective, i_act_enough, multi_layer_tag, io_die_tag = io_die_tag)
 		GA_Solver.setGAGen(GAGen)
 
 		# --- Initial: 初始进行硬件并行度方案的择优
@@ -527,7 +527,7 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 			GA_Solver.evaluationRecord()
 		
 		# --- 各层结果记录
-		edp_res_min_dict[layer_name] = GA_Solver.best_out["fitness"]
+		edp_res_min_dict[layer_name] = GA_Solver.best_out["edp"]
 		energy_min_dict[layer_name] = GA_Solver.best_out["e_sum"]
 		delay_min_dict[layer_name] = GA_Solver.best_out["delay"]
 		code_min_dict[layer_name] = GA_Solver.best_out["code"]
@@ -538,7 +538,7 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 		degrade_ratio_dict_min_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]
 		compuation_cycles_min_dict[layer_name] = GA_Solver.best_out["compuation_cycles"]
 		iter_num_dict[layer_name] = iter_num_total
-		edp_total += GA_Solver.best_out["fitness"]
+		edp_total += GA_Solver.best_out["edp"]
 		layer_data_record = [layer_name, edp_res_min_dict[layer_name], energy_min_dict[layer_name], delay_min_dict[layer_name], str(code_min_dict[layer_name]), degrade_ratio_min_dict[layer_name], NoC_DR_dict[layer_name], L2_to_DRAM_DR_dict[layer_name], DRAM_to_L2_DR_dict[layer_name], str(degrade_ratio_dict_min_dict[layer_name]), compuation_cycles_min_dict[layer_name], iter_num_dict[layer_name]]
 		excel_data.append(layer_data_record)
 	
@@ -675,6 +675,7 @@ if __name__ == '__main__':
 	parser.add_argument('--debug_open', type=int, default=0, help='debug mode (will print info)')
 	parser.add_argument('--save_all_records', type=int, default=0, help='save all record')
 	parser.add_argument('--layer_fuse_tag', type=int, default=1, help='layer_fuse_tag')
+	parser.add_argument('--optimization_objective', type=str, default="edp", help='optimization_objective')
 	opt = parser.parse_args()
 
 	abs_path = os.path.dirname(os.path.abspath(__file__))
@@ -690,6 +691,7 @@ if __name__ == '__main__':
 	debug_open = opt.debug_open
 	save_all_records = opt.save_all_records
 	layer_fuse_tag = opt.layer_fuse_tag
+	optimization_objective = opt.optimization_objective
 
 	record_outdir = os.path.join(abs_path, "output_record")
 	os.makedirs(record_outdir, exist_ok=True)
@@ -721,13 +723,28 @@ if __name__ == '__main__':
 		memory_param_nnbaton = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	# from nnbaton
 		#memory_param_ours = {"OL1":8 ,"OL2":128,"AL1":16,"AL2":256,"WL1":64,"WL2":1024}		# from granularity exploration
 		memory_param_ours = {"OL1":3 ,"OL2":48,"AL1":8,"AL2":48,"WL1":32,"WL2":32*16}		# from simba
+		HW_param_simba = {"Chiplet":[6,6],"PE":[4,4],"intra_PE":{"C":8,"K":8}}       	# from granularity exploration
+		memory_param_simba = {"OL1":3 ,"OL2":48,"AL1":8,"AL2":48,"WL1":32,"WL2":32}		# simba mem
+		noc_topo_ours = 'Ring'
+		noc_topo_nnbaton = 'Bus'
+		noc_topo_simba = 'Mesh'
+
 
 		if architecture == "ours":
 			HW_param = HW_param_ours
 			memory_param = memory_param_ours
+			noc_topo = noc_topo_ours
+			io_die_tag = 1
 		elif architecture == "nnbaton":
 			HW_param = HW_param_nnabton
 			memory_param = memory_param_nnbaton
+			noc_topo = noc_topo_nnbaton
+			io_die_tag = 0
+		elif architecture == "simba":
+			HW_param = HW_param_simba
+			memory_param = memory_param_simba
+			noc_topo = noc_topo_simba
+			io_die_tag = 0
 		else:
 			print("Error architecture(), not supported".format(architecture))
 			exit()
@@ -742,7 +759,7 @@ if __name__ == '__main__':
 		TOPO_param = {"NoC_w":NoC_w, "NOC_NODE_NUM": NOC_NODE_NUM, "NoP_w": NoP_w, "NOP_SIZE": NOP_SIZE,"nop_scale_ratio": nop_bandwidth/noc_bandwidth}
 		
 		# --- 生成noc-nop结构图
-		NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = 'Ring')
+		NoC_param, all_sim_node_num = construct_noc_nop_topo(TOPO_param["NOC_NODE_NUM"],TOPO_param["NoC_w"], TOPO_param["NOP_SIZE"],TOPO_param["NoP_w"], TOPO_param["nop_scale_ratio"], topology = noc_topo)
 		if_multicast = 1
 
 		# --- 神经网络参数
@@ -763,10 +780,10 @@ if __name__ == '__main__':
 		iterTime = num_gen * num_iter
 
 		if alg == "GA":
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
+			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, optimization_objective, io_die_tag=io_die_tag)
 			if layer_fuse_tag == 1:
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headLayer")
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailLayer")
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, optimization_objective, multi_layer_tag = "headLayer", io_die_tag=io_die_tag)
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, optimization_objective, multi_layer_tag = "tailLayer", io_die_tag=io_die_tag)
 		elif alg == "random":
 			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
 			if layer_fuse_tag == 1:

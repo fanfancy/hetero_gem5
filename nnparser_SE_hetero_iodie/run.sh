@@ -1,5 +1,5 @@
 python3 test_intralayer.py \
-	--architecture ours \
+	--architecture simba \
 	--app_name VGG16 \
 	--alg GA \
 	--encode_type index \
@@ -9,4 +9,5 @@ python3 test_intralayer.py \
 	--chiplet_parallel K_stable \
 	--PE_parallel All \
 	--save_all_records 0 \
-	--layer_fuse_tag 1
+	--layer_fuse_tag 0 \
+	--optimization_objective edp

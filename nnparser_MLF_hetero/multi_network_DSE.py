@@ -245,6 +245,7 @@ class multi_network_DSE:
 			tp_name += name + "_"
 			latency_tp += fitness[1]
 			energy_tp += fitness[2]
+		tp_name = tp_name.strip("_")
 		tp_name += ")"
 
 		edp_tp = latency_tp * energy_tp / PE_Frequency
@@ -277,6 +278,7 @@ class multi_network_DSE:
 			if fitness[1] > latency_sp:
 				latency_sp = fitness[1]
 			energy_sp += fitness[2]
+		sp_name = sp_name.strip("_")
 		sp_name += ")"
 
 		edp_sp = latency_sp * energy_sp / PE_Frequency

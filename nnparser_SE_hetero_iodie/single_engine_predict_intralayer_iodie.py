@@ -136,6 +136,8 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
             ddr_bandwidth_dict["weight"] *= PX3_list[0]
             ddr_bandwidth_dict["output"] *= PX3_list[2]
             ddr_bandwidth_io_die_method_dict["unique"] = copy.deepcopy(ddr_bandwidth_dict)
+    else:
+        ddr_bandwidth_dict_no_reuse = {"input":ddr_bandwidth, "weight":ddr_bandwidth, "output":ddr_bandwidth}
     if len(ddr_bandwidth_io_die_method_dict) == 0:
         ddr_bandwidth_io_die_method_dict["unique"] = copy.deepcopy(ddr_bandwidth_dict_no_reuse)
 			
@@ -556,6 +558,11 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     bw_needed_io_die["output"] = bw_needed
     #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
 
+    bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
+    bw_needed_io_die["output"] += bw_needed
+    #L2_to_DRAM_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
+    L2_to_DRAM_F_cur = 0
+
     bw_needed_io_die_order = sorted(bw_needed_io_die.items(), key = lambda x: x[1])
     data_type_order = [bw_needed_io_die_order[2][0], bw_needed_io_die_order[1][0], bw_needed_io_die_order[0][0], "unique"]
     for data_type in data_type_order:
@@ -567,9 +574,6 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     dram_to_L2_F_cur += bw_needed_io_die["input"] / (ddr_bandwidth_io_die_input/noc_bandwidth)
     dram_to_L2_F_cur += bw_needed_io_die["weight"] / (ddr_bandwidth_io_die_weight/noc_bandwidth)
     dram_to_L2_F_cur += bw_needed_io_die["output"] / (ddr_bandwidth_io_die_output/noc_bandwidth)
-
-    bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
-    L2_to_DRAM_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
 
     F_cur[(ol2_node, ol2_node + 1000)] = 0
     F_cur[(ol2_node + 1000, ol2_node)] = 0

@@ -21,8 +21,9 @@ num_children = int(50)
 num_children_r = int(50)
 num_iter = 10
 
+# now: add optimization_objective
 class GASolver():
-	def __init__(self, num_children, num_iter, memory_param, NoC_param, if_multicast, record_filename, input_act_enough=0, fuse_tag = "initial", debug = 0, io_die_tag = 1):
+	def __init__(self, num_children, num_iter, memory_param, NoC_param, if_multicast, record_filename, optimization_objective="edp", input_act_enough=0, fuse_tag = "initial", debug = 0, io_die_tag = 1):
 		self.GAGen = None
 		self.memory_param = memory_param
 		self.NoC_param = NoC_param
@@ -31,6 +32,7 @@ class GASolver():
 		self.fuse_tag = fuse_tag
 		self.debug = debug
 		self.io_die_tag = io_die_tag
+		self.optimization_objective = optimization_objective
 
 		self.num_children = num_children
 		self.num_iter = num_iter
@@ -97,8 +99,23 @@ class GASolver():
 			elif self.GAGen.GaType == "num":
 				child_gen = self.GAGen.getGaCode_num()
 			self.generation.append(child_gen)
-			fitness_i, e_sum, delay, code, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = self.calFitnessAll(self.generation[i])
-			self.fitness[i] = fitness_i
+			edp, e_sum, delay, code, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = self.calFitnessAll(self.generation[i])
+			if self.optimization_objective == "edp":
+				fitness_i = edp
+			elif self.optimization_objective == "energy":
+				fitness_i = e_sum
+			elif self.optimization_objective == "latency":
+				fitness_i = delay
+			elif self.optimization_objective == "degrade_ratio":
+				fitness_i = degrade_ratio
+			elif self.optimization_objective == "degrade_ratio_DRAM":
+				fitness_i = degrade_ratio_dict["L2_to_DRAM_NR"] + degrade_ratio_dict["DRAM_to_L2_NR"]
+			elif self.optimization_objective == "degrade_ratio_NoC":
+				fitness_i = degrade_ratio_dict["NoC_NR"]
+			else:
+				print("ERROR: GA optimization_objective Error")
+				exit()
+			self.fitness[i] = fitness_i		
 			output_record = {	"delay":delay, "degrade_ratio":degrade_ratio, "compuation_cycles":compuation_cycles, "runtime_list":runtime_list, "cp_list":cp_list, "utilization_ratio_list":utilization_ratio_list, \
 								"energy_dram_list":energy_dram_list, "energy_L2_list":energy_L2_list, "energy_L1_list":energy_L1_list, "energy_die2die":energy_die2die, "energy_MAC":energy_MAC, \
 								"energy_psum_list":energy_psum_list, "delay_psum":delay_psum, "worstlinks":worstlinks}
@@ -106,6 +123,7 @@ class GASolver():
 			self.generation_record[i] = output_record 
 			if self.best_out["fitness"] == None or self.best_out["fitness"] > fitness_i:
 				self.best_out["fitness"] = fitness_i
+				self.best_out["edp"] = edp
 				self.best_out["e_sum"] = e_sum
 				self.best_out["delay"] = delay
 				self.best_out["code"] = code
@@ -293,17 +311,34 @@ class GASolver():
 			self.generation_record = {}
 			for j in range(len(self.generation)):
 				code = self.generation[j]
-				fitness_i, e_sum, delay, code, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, \
+				edp, e_sum, delay, code, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, \
 				energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = self.calFitnessAll(code)
 				output_record = {"spatial parallel":self.GAGen.spatial_parallel, "delay":delay, "degrade_ratio":degrade_ratio, "compuation_cycles":compuation_cycles, "runtime_list":runtime_list, "cp_list":cp_list, "utilization_ratio_list":utilization_ratio_list, \
 									"energy_dram_list":energy_dram_list, "energy_L2_list":energy_L2_list, "energy_L1_list":energy_L1_list, "energy_die2die":energy_die2die, "energy_MAC":energy_MAC, \
 									"energy_psum_list":energy_psum_list, "delay_psum":delay_psum, "worstlinks":worstlinks}
-				self.fitness.append(fitness_i)
 				self.record.append(output_record)
 				self.generation_record[j] = output_record
+				
+				if self.optimization_objective == "edp":
+					fitness_i = edp
+				elif self.optimization_objective == "energy":
+					fitness_i = e_sum
+				elif self.optimization_objective == "latency":
+					fitness_i = delay
+				elif self.optimization_objective == "degrade_ratio":
+					fitness_i = degrade_ratio
+				elif self.optimization_objective == "degrade_ratio_DRAM":
+					fitness_i = degrade_ratio_dict["L2_to_DRAM_NR"] + degrade_ratio_dict["DRAM_to_L2_NR"]
+				elif self.optimization_objective == "degrade_ratio_NoC":
+					fitness_i = degrade_ratio_dict["NoC_NR"]
+				else:
+					print("ERROR: GA optimization_objective Error")
+					exit()
+				self.fitness.append(fitness_i)
 
 				if self.best_out["fitness"] == None or self.best_out["fitness"] > fitness_i:
 					self.best_out["fitness"] = fitness_i
+					self.best_out["edp"] = edp
 					self.best_out["e_sum"] = e_sum
 					self.best_out["delay"] = delay
 					self.best_out["code"] = code
