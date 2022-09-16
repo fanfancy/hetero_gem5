@@ -7,7 +7,14 @@ import argparse
 from matplotlib import pyplot as plt
 
 # Parameter
-layer_list = {"resnet18":[1,2,2,2,2,6,7,7,7,10,11,11,11,14,15,15,15],"resnet50":[1,2,3,4,5,3,4,5,3,4,11,12,13,14,15,13,14,15,13,14,15,13,23,24,25,26,27,25,26,27,25,26,27,25,26,27,25,26,27,25,41,42,43,44,45,43,44,45,43,50],"VGG16":[1,2,3,4,5,6,6,8,9,9,11,11,13],"alexnet":[1,2,3,4,5,6,7,8],"lenet":[1,2,3,4,5]}
+layer_list = {
+	"resnet18":[1,2,2,2,2,6,7,7,7,10,11,11,11,14,15,15,15],
+	"resnet50":[1,2,3,4,5,3,4,5,3,4,11,12,13,14,15,13,14,15,13,14,15,13,23,24,25,26,27,25,26,27,25,26,27,25,26,27,25,26,27,25,41,42,43,44,45,43,44,45,43,50],
+	"VGG16":[1,2,3,4,5,6,6,8,9,9,11,11,13],
+	"alexnet":[1,2,3,4,5,6,7,8],
+	"lenet":[1,2,3,4,5],
+	"vit": [1, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9, 2, 2, 2, 5, 6, 2, 8, 9]
+	}
 ratio = {}
 chiplet_parallel_list = ["P_stable", "PK_stable", "K_stable"]
 PE_Frequency = 1000 * 1000 * 1000
@@ -320,7 +327,7 @@ def txt_extract(result_indir_p, result_indir_pk, result_indir_k, app_name, fuse_
 			L2_to_DRAM_NR_dict[layer_id] = L2_to_DRAM_NR
 			DRAM_to_L2_NR_dict[layer_id] = DRAM_to_L2_NR
 			select_dim_dict[layer_id] = dim
-		
+		print('edp_dict =', edp_dict)
 		for i in range(len(layer_list[app_name])):
 			layer_id = "layer" + str(i)
 			layer_index = layer_list[app_name][i]
@@ -598,7 +605,7 @@ def main(app_name, fuse_flag, architecture="simba", alg="GA", encode_type="index
 	energy_dict = {}
 	latency_BW_dict = {}
 
-	for i in range(16):
+	for i in range(chiplet_num_max_TH):
 		chiplet_num = i + 1
 		result_indir = os.path.join(SE_abs_path, "result")
 		result_indir = os.path.join(result_indir, "intraLayer")
@@ -694,6 +701,8 @@ if __name__ == '__main__':
 	parser.add_argument('--app_name_line', type=str, default="resnet50", help='app_name_line,using+as split signal')	# simba , nnbaton
 	parser.add_argument('--chiplet_num_max_TH', type=int, default=16, help='max chiplet_num')
 	parser.add_argument('--fuse_flag', type=int, default=1, help='use layer fuse or not')
+	parser.add_argument('--alg', type=str, default='GA', help='use layer fuse or not')
+
 	opt = parser.parse_args()
 	app_name_line = opt.app_name_line
 	chiplet_num_max_TH = opt.chiplet_num_max_TH
@@ -703,9 +712,8 @@ if __name__ == '__main__':
 
 	
 	for app_name in app_name_list:
-		edp_dict, latency_dict, energy_dict, latency_BW_dict = main(app_name, fuse_flag)
+		edp_dict, latency_dict, energy_dict, latency_BW_dict = main(app_name, fuse_flag, alg = opt.alg)
 		fitness_plot(edp_dict, latency_dict, energy_dict, app_name)
-
 
 
 
