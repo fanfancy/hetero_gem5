@@ -141,9 +141,7 @@ class GaEncode:
 	def getTemporalParam(self):
 		self.temporal_param = {}
 		for dim in self.network_param:
-			if dim == "stride" or dim == "partition":
-				pass
-			else:
+			if dim == "P" or dim == "Q" or dim == "C" or dim == "K" or dim == "R"or dim == "S":
 				self.temporal_param[dim] = self.network_param[dim]
 				for level in range(self.architecture_level):
 					level_name = architecture[level]
@@ -314,6 +312,11 @@ class GaEncode:
 						parallel_dict[level-1].append(num)
 						parallel_dim_dict[level-1].append(dim_id)
 				if len(parallel_dict[level-1]) == 1:
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
+				elif len(parallel_dict[level-1]) == 0:
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
 					parallel_dict[level-1].append(1)
 					parallel_dim_dict[level-1].append(0)
 		

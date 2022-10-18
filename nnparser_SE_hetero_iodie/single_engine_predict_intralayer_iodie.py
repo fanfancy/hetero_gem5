@@ -37,7 +37,7 @@ def calPSumAllReduce(output_num, chiplet_num, PC3 ):
     return delay, energy_list
 
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, i_act_SRAM_enough=0, fuse_tag = "initial", flag = "ours", io_die_tag = 1):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, i_act_SRAM_enough=0, weight_SRAM_enough=0, fuse_par_num=1, fuse_tag = "initial", flag = "ours", io_die_tag = 1):
     route_table = NoC_param["route_table"]
     bw_scales = NoC_param["bw_scales"]
     F = NoC_param["F"]
@@ -50,6 +50,10 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     PE_lenth = HW_param["PE"][1]
     PE_height = HW_param["PE"][0]
     ChipNum = HW_param["Chiplet"][0] * HW_param["Chiplet"][1]
+    Chip_lenth = HW_param["maxChiplet"][1]
+    Chip_height = HW_param["maxChiplet"][0]
+    maxChipNum = Chip_lenth * Chip_lenth
+    port_average = (4 + (Chip_lenth-2+Chip_height-2)*2*2 + (Chip_height-2)*(Chip_lenth-2)*4) / maxChipNum
     OL1 = memory_param["OL1"]
     OL2 = memory_param["OL2"]
     AL1 = memory_param["AL1"]
@@ -424,64 +428,104 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     cur = data_flow[al2_cp_id]; inner = data_flow[al2_cp_id-1]  
     #print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
     assert(fuse_tag == "tailLayer" or fuse_tag == "initial" or fuse_tag == "headLayer")
+    chip_pkt_num_rd_act = {"DRAM":0, "chiplet":0}
     if al2_cp == "top":
-        if fuse_tag == "tailLayer":
-            chip_pkt_num_rd_act += 0
+        if i_act_SRAM_enough:
+            chip_pkt_num_rd_act["chiplet"] = int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
         else:
-            chip_pkt_num_rd_act += int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
+            chip_pkt_num_rd_act["DRAM"] = int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
+        #if fuse_tag == "tailLayer":
+        #    chip_pkt_num_rd_act += 0
+        #else:
+        #    chip_pkt_num_rd_act += int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
     else:
-        chip_pkt_num_rd_act += int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * repeat_num[cur]
+        if i_act_SRAM_enough:
+            chip_pkt_num_rd_act["chiplet"] = int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * repeat_num[cur] * 1
+        else:
+            chip_pkt_num_rd_act["DRAM"] = int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * repeat_num[cur] * 1
+        #chip_pkt_num_rd_act += int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * repeat_num[cur]
+    
     #chip_pkt_num_rd_act +=  int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt))*repeat_num[cur]
     chip_act_data_num += AL2_need[inner] # 用于生成仿真指令
+    chip_neu_num_rd_act = {"DRAM":0, "chiplet":0}
     if al2_cp == "top":
-        if fuse_tag == "tailLayer":
-            chip_neu_num_rd_act += 0
+        if i_act_SRAM_enough:
+            chip_neu_num_rd_act["chiplet"] = AL2_need[inner] * 1
         else:
-            chip_neu_num_rd_act += AL2_need[inner] * 1
+            chip_neu_num_rd_act["DRAM"] = AL2_need[inner] * 1
+        #if fuse_tag == "tailLayer":
+        #    chip_neu_num_rd_act += 0
+        #else:
+        #    chip_neu_num_rd_act += AL2_need[inner] * 1
     else:
-        chip_neu_num_rd_act += AL2_need[inner] * repeat_num[cur]
+        if i_act_SRAM_enough:
+            chip_neu_num_rd_act["chiplet"] = AL2_need[inner] * repeat_num[cur]
+        else:
+            chip_neu_num_rd_act["DRAM"] = AL2_need[inner] * repeat_num[cur]      
+        #chip_neu_num_rd_act += AL2_need[inner] * repeat_num[cur]
 
     cur = data_flow[wl2_cp_id]; inner = data_flow[wl2_cp_id-1]  
     #print("Chip: read wgt mem ",WL2_need[inner],"repeat ",repeat_num[cur]) 
+    chip_pkt_num_rd_wgt = {"DRAM":0, "chiplet":0}
     if flag == "nnbaton":
-        chip_pkt_num_rd_wgt = 0
+        pass
     else:
-        chip_pkt_num_rd_wgt += int(math.ceil(WL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
+        if weight_SRAM_enough:
+            chip_pkt_num_rd_wgt["DRAM"] = math.ceil(WL2_need["top"]/flit_per_pkt/neu_per_flit_act_wgt)
+            chip_pkt_num_rd_wgt["chiplet"] = int(math.ceil(WL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur] - chip_pkt_num_rd_wgt["DRAM"]
+            chip_pkt_num_rd_wgt["DRAM"] = math.ceil(chip_pkt_num_rd_wgt["DRAM"] / fuse_par_num)
+        else:
+            chip_pkt_num_rd_wgt["DRAM"] = int(math.ceil(WL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
     chip_wgt_data_num += WL2_need[inner] # 用于生成仿真指令
-    chip_neu_num_rd_wgt += WL2_need[inner] * repeat_num[cur]
+    chip_neu_num_rd_wgt = {"DRAM":0, "chiplet":0}
+    if flag == "nnbaton":
+        pass
+    else:
+        if weight_SRAM_enough:
+            chip_neu_num_rd_wgt["DRAM"] = WL2_need["top"]
+            chip_neu_num_rd_wgt["chiplet"] = WL2_need[inner] *repeat_num[cur] - chip_pkt_num_rd_wgt["DRAM"]
+            chip_neu_num_rd_wgt["DRAM"] = math.ceil(chip_neu_num_rd_wgt["DRAM"] / fuse_par_num)
+        else:
+            chip_neu_num_rd_wgt["DRAM"] = WL2_need[inner] *repeat_num[cur]
+    #chip_neu_num_rd_wgt += WL2_need[inner] * repeat_num[cur]
 
     # 考虑上并行度带来的数据复用机会
     if if_multicast == 1:
         chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
         chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
         if flag == "nnbaton":
-            chip_neu_num_rd_wgt = 0
+            chip_neu_num_rd_wgt = {"DRAM":0, "chiplet":0}
         else:
-            chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum /PP3 / PQ3
-        chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum /PK3 
+            chip_neu_num_rd_wgt["DRAM"] = chip_neu_num_rd_wgt["DRAM"] * ChipNum /PP3 / PQ3
+            chip_neu_num_rd_wgt["chiplet"] = chip_neu_num_rd_wgt["chiplet"] * ChipNum /PP3 / PQ3
+        chip_neu_num_rd_act["DRAM"] = chip_neu_num_rd_act["DRAM"] * ChipNum /PK3
+        chip_neu_num_rd_act["chiplet"] = chip_neu_num_rd_act["chiplet"] * ChipNum /PK3  
     elif if_multicast == 0:
         chip_neu_num_wr_opt = chip_neu_num_wr_opt * ChipNum  # 没有机会复用
         chip_neu_num_rd_opt = chip_neu_num_rd_opt * ChipNum 
         if flag == "nnbaton":
-            chip_neu_num_rd_wgt = 0
+            chip_neu_num_rd_wgt = {"DRAM":0, "chiplet":0}
         else:
-            chip_neu_num_rd_wgt = chip_neu_num_rd_wgt * ChipNum  
-        chip_neu_num_rd_act = chip_neu_num_rd_act * ChipNum 
-    
+            chip_neu_num_rd_wgt["DRAM"] = chip_neu_num_rd_wgt["DRAM"] * ChipNum
+            chip_neu_num_rd_wgt["chiplet"] = chip_neu_num_rd_wgt["chiplet"] * ChipNum
+        chip_neu_num_rd_act["DRAM"] = chip_neu_num_rd_act["DRAM"] * ChipNum 
+        chip_neu_num_rd_act["chiplet"] = chip_neu_num_rd_act["chiplet"]
+
     if (if_out_final[cur]!=1): 
         energy_wr_opt_dram = chip_neu_num_wr_opt * DRAM_energy_ratio * psum_width 
     else:
         energy_wr_opt_dram = chip_neu_num_wr_opt * DRAM_energy_ratio * act_wgt_width 
     energy_rd_opt_dram = chip_neu_num_rd_opt * DRAM_energy_ratio * psum_width
-    energy_rd_wgt_dram = chip_neu_num_rd_wgt * DRAM_energy_ratio * act_wgt_width
-
+    energy_rd_wgt_dram = chip_neu_num_rd_wgt["DRAM"] * DRAM_energy_ratio * act_wgt_width
+    energy_rd_wgt_L2 += chip_neu_num_rd_wgt["chiplet"] * energy_l2 * act_wgt_width
+    energy_rd_act_L2 += chip_neu_num_rd_act["chiplet"] * energy_l2 * act_wgt_width
+    energy_rd_act_dram = chip_neu_num_rd_act["DRAM"] * DRAM_energy_ratio * act_wgt_width
 	# -- update in 22.7.20 : 当片上放得下所有的activation的时候，默认activation来自于其他chiplet的L2
-    if i_act_SRAM_enough == 1:
-        energy_rd_act_L2 += chip_neu_num_rd_act * energy_l2 * act_wgt_width
-        energy_rd_act_dram = 0
-    else:
-        energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * act_wgt_width
-    #energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * act_wgt_width
+    #if i_act_SRAM_enough == 1:
+    #    energy_rd_act_L2 += chip_neu_num_rd_act * energy_l2 * act_wgt_width
+    #    energy_rd_act_dram = 0
+    #else:
+    #    energy_rd_act_dram = chip_neu_num_rd_act * DRAM_energy_ratio * act_wgt_width
 
     F_cur=F.copy()
 
@@ -545,13 +589,16 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     # 对chip构建通信需求
     dram_to_L2_F_cur = L2_to_DRAM_F_cur = 0
     bw_needed_io_die = {}
+    bw_needed_rd_nop = 0
     # 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
-    bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
+    bw_needed = (chip_pkt_num_rd_act["DRAM"]) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
     bw_needed_io_die["input"] = bw_needed
+    bw_needed_rd_nop += (chip_pkt_num_rd_act["chiplet"]) * flit_per_pkt  / compuation_cycles
     #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_input/noc_bandwidth)
     
-    bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
+    bw_needed = (chip_pkt_num_rd_wgt["DRAM"]) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
     bw_needed_io_die["weight"] = bw_needed
+    bw_needed_rd_nop += (chip_pkt_num_rd_wgt["chiplet"]) * flit_per_pkt  / compuation_cycles
     #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_weight/noc_bandwidth)
 
     bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
@@ -575,12 +622,13 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     dram_to_L2_F_cur += bw_needed_io_die["weight"] / (ddr_bandwidth_io_die_weight/noc_bandwidth)
     dram_to_L2_F_cur += bw_needed_io_die["output"] / (ddr_bandwidth_io_die_output/noc_bandwidth)
 
+    nop_F_cur = bw_needed_rd_nop / (port_average * nop_bandwidth / noc_bandwidth)
     F_cur[(ol2_node, ol2_node + 1000)] = 0
     F_cur[(ol2_node + 1000, ol2_node)] = 0
     F_cur[(al2_node + 1000, al2_node)] = 0
     F_cur[(wl2_node + 1000, wl2_node)] = 0
-    degrade_ratio_dict = {"NoC":max(F_cur.values()), "L2_to_DRAM":L2_to_DRAM_F_cur, "DRAM_to_L2":dram_to_L2_F_cur}
-    degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur)
+    degrade_ratio_dict = {"NoC":max(F_cur.values()), "L2_to_DRAM":L2_to_DRAM_F_cur, "DRAM_to_L2":dram_to_L2_F_cur, "NoP":nop_F_cur}
+    degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur, nop_F_cur)
     if (degrade_ratio < 1):
             degrade_ratio = 1
     # print ("F_cur",F_cur)
@@ -622,6 +670,8 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
             worstlinks.append("dram2L2")
         if L2_to_DRAM_F_cur == degrade_ratio:
             worstlinks.append("L2toDRAM")
+        if nop_F_cur == degrade_ratio:
+            worstlinks.append("NoP")
 
     return(degrade_ratio*compuation_cycles, degrade_ratio, degrade_ratio_dict,  compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
         energy_dram_list, energy_L2_list,energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks)

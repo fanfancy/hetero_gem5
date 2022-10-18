@@ -119,7 +119,105 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 		workbook.save(excel_filename)
 	return edp_res_min, energy_min, delay_min, code_min, degrade_ratio_min, degrade_ratio_dict_min, compuation_cycles_min, latency_list_d, energy_list_d
 
+# Modified in 22/9/17:
+# --- head, tail的判断以及作为头层增加的列数自动化生成  
+# --- layer_dict_unique[layer_name] = {}  
+# --- layer_name_dict[layer_name] = layer_name_same  
 def getLayerParam(app_name):
+	abs_path = abs_path = os.path.dirname(os.path.abspath(__file__))
+	f = open(abs_path + "/nn_input_noc_nop/" + app_name + ".txt")
+
+	print("network model ----- " + app_name + " -------------")
+
+	lines = f.readlines()
+	layer_dict = {}
+	layer_name_list = []
+	layer_num = 0
+	for line in lines:
+		if line.startswith("#") or line.startswith("*"):
+			pass
+		else:
+			line = line.replace("\n","")
+			line_item = line.split(" ")
+			layer_name = line_item[0] + "-" + str(layer_num)
+			H = int(line_item[1])
+			M = int(line_item[2])
+			P = int(line_item[8])
+			Q = int(line_item[9])
+			C = int(line_item[3])
+			K = int(line_item[7])
+			R = int(line_item[4])
+			S = int(line_item[4])
+			stride = int(line_item[5])
+			padding = int(line_item[6])
+			layer = {"P":P,"Q":Q,"C":C,"K":K,"R":R,"S":S, "stride":stride, "padding":padding, "iact_num":H*M*C, "oact_num":P*Q*K, "w_num":K*C*R*S}
+			layer_dict[layer_num] = layer
+			layer_name_list.append(layer_name)
+			layer_num += 1
+	
+	layer_list = []
+	layer_dict_unique = {}
+	layer_name_dict = {}
+	layer_num -= 1
+	for i, layer in layer_dict.items():
+		if i == 0:
+			partition_tag = 0
+			weight_behind = layer_dict[i+1]["w_num"]
+			weight_above = 0
+		elif i == layer_num:
+			partition_tag = 2
+			weight_behind = 0
+			weight_above = layer_dict[i-1]["w_num"]
+		else:
+			partition_tag = 1
+			weight_behind = layer_dict[i+1]["w_num"]
+			weight_above = layer_dict[i-1]["w_num"]
+		
+		if i == layer_num:
+			partition_add = 0
+		else:
+			stride_behind = layer_dict[i+1]["stride"]
+			padding_behind = layer_dict[i+1]["padding"]
+			R_behind = layer_dict[i+1]["R"]
+			partition_add = R_behind - stride_behind - padding_behind
+		
+		layer["partition"] = [partition_tag, partition_add]
+		layer["w_num_behind"] = weight_behind
+		layer["w_num_above"] = weight_above
+		layer_name = layer_name_list[i]
+
+		print(str(layer_name) + " : " + str(layer))
+
+		if layer not in layer_list:
+			layer_dict_unique[layer_name] = layer
+			layer_list.append(layer)
+			layer_name_dict[layer_name] = layer_name
+		else:
+			for layer_name_1, layer_1 in layer_dict_unique.items():
+				if layer == layer_1:
+					layer_name_same = layer_name_1
+					break
+			layer_name_dict[layer_name] = layer_name_same
+	
+	for i in range(len(layer_name_list)):
+		layer_name = layer_name_list[i]
+		if layer_name in layer_dict_unique:
+			if i < len(layer_name_list)-1:
+				i_t = i + 1
+				layer_name_tail = layer_name
+				while layer_name_tail in layer_name_list[0:i+1]:
+					layer_name_behind = layer_name_list[i_t]
+					layer_name_tail = layer_name_dict[layer_name_behind]
+					i_t += 1
+				layer_dict_unique[layer_name]["layer_name_tail"] = layer_name_tail
+			else:
+				layer_dict_unique[layer_name]["layer_name_tail"] = None
+
+	f.close()
+	
+	return layer_dict_unique, layer_name_dict
+
+def getLayerParam_pre(app_name):
 	layer_dict = {}
 	input_activation_num = {}
 	layer_name_list = []
@@ -160,7 +258,71 @@ def getLayerParam(app_name):
 	f.close()
 	return layer_dict, input_activation_num
 
-def getLayerParamForMulti(layer_dict, input_activation_num, partiton_size_list):
+def getLayerParamForMulti(layer_dict, mem_size_dict):
+	O_mem = mem_size_dict["O"]
+	W_mem = mem_size_dict["W"]
+
+	tail_layer_dict = {}
+	head_layer_dict = {}
+	for layer_name, layer_i in layer_dict.items():
+		layer = copy.deepcopy(layer_i)
+		partition_tag, partition_add = layer["partition"]
+		iact_num = layer["iact_num"]
+		oact_num = layer["oact_num"]
+		w_num = layer["w_num"]
+		w_num_behind = layer["w_num_behind"]
+		layer_name_tail = layer["layer_name_tail"]
+		if layer_name_tail == None:
+			layer_tail = None
+		else:
+			layer_tail = copy.deepcopy(layer_dict[layer_name_tail])
+
+		if iact_num > O_mem or partition_tag == 0:
+			layer_dict[layer_name]["i_act_enough"] = 0
+		else:
+			layer_dict[layer_name]["i_act_enough"] = 1
+		# --- head layer
+		par_useful = 1
+		if partition_tag <= 1 and oact_num > O_mem:
+			weight_enough = ( (w_num + w_num_behind) <= W_mem )
+			P_par = 1
+			Q_par = 1
+			P = layer["P"]
+			Q = layer["Q"]
+			K = layer["K"]
+			P_tile = P
+			Q_tile = Q
+			while P_tile * Q_tile * K > O_mem:
+				if P_tile == 1 and Q_tile == 1:
+					par_useful = 0
+					break
+					
+				if 2 * P_tile > Q_tile or Q_tile == 1:
+					P_par *= 2
+				else:
+					Q_par *= 2
+				P_tile = min(P, (math.ceil(P/P_par) + partition_add))
+				Q_tile = min(Q, (math.ceil(Q/Q_par) + partition_add))
+				
+			if par_useful == 1:
+				layer["P"] = P_tile
+				layer["Q"] = Q_tile
+				layer["P_par"] = P_par
+				layer["Q_par"] = Q_par
+				layer["weight_enough"] = weight_enough
+				layer["i_act_enough"] = layer_dict[layer_name]["i_act_enough"]
+				head_layer_dict[layer_name] = layer
+
+				P_t, Q_t = layer_tail["P"], layer_tail["Q"]
+				layer_tail["P"], layer_tail["Q"] = math.ceil(P_t / P_par), math.ceil(Q_t / Q_par)
+				layer_tail["P_par"], layer_tail["Q_par"] = P_par, Q_par
+				layer_tail["weight_enough"] = weight_enough
+				layer_tail["i_act_enough"] = 1
+				tail_layer_dict[layer_name_tail] = layer_tail
+
+	return layer_dict, head_layer_dict, tail_layer_dict
+
+def getLayerParamForMulti_pre(layer_dict, input_activation_num, partiton_size_list):
 	tail_layer_dict = {}
 	head_layer_dict = {}
 	tail_iact_num_dict = {}
@@ -415,22 +577,25 @@ def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaTy
 	f.close()
 	randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, result_dir)
 
-def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, optimization_objective, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
+def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
-	edp_res_min_dict = {}
-	energy_min_dict = {}
-	delay_min_dict = {}
-	code_min_dict = {}
-	degrade_ratio_min_dict = {}
-	NoC_DR_dict = {}
-	L2_to_DRAM_DR_dict = {}
-	DRAM_to_L2_DR_dict = {}
-	degrade_ratio_dict_min_dict = {}
-	compuation_cycles_min_dict = {}
-	iter_num_dict = {}
+	edp_res_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	energy_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	delay_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	code_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	degrade_ratio_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	NoC_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	L2_to_DRAM_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	DRAM_to_L2_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	NoP_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	degrade_ratio_dict_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	compuation_cycles_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	iter_num_dict = {"iact_L2":{}, "iact_DRAM":{}}
 	edp_total = 0
 	excel_data = []
 	i_act_enough_dict = {}
+	par_num_detail_dict = {}
+	par_num_dict = {}
 
 	layer_id = 0
 
@@ -445,16 +610,20 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 		
 		# --- 初始化参数
 		network_param = layer_dict[layer_name]
-		i_act_num = input_act_num_dict[layer_name]
-		chiplet_num = HW_param["Chiplet"][0] * HW_param["Chiplet"][1]
-		OL2_mem = memory_param["OL2"]*8*1024/act_wgt_width * chiplet_num
-		if i_act_num <= OL2_mem and layer_id > 1:
-			i_act_enough = 1
-		else:
-			i_act_enough = 0
+		i_act_enough = layer_dict[layer_name]['i_act_enough']
 		i_act_enough_dict[layer_name] = i_act_enough
+		if "weight_enough" in layer_dict[layer_name]:
+			weight_enough = layer_dict[layer_name]['weight_enough']
+			par_num = layer_dict[layer_name]['P_par'] * layer_dict[layer_name]['Q_par']
+			par_num_detail_dict[layer_name] = [layer_dict[layer_name]['P_par'], layer_dict[layer_name]['Q_par']]
+		else:
+			weight_enough = 0
+			par_num = 1
+			par_num_detail_dict[layer_name] = [1,1]
+		par_num_dict[layer_name] = par_num
+
 		GAGen = GaEncode(GaType, network_param, HW_param, debug=0)
-		GA_Solver = GASolver(num_gen, num_iter, memory_param, NoC_param, if_multicast, record_filename, optimization_objective, i_act_enough, multi_layer_tag, io_die_tag = io_die_tag)
+		GA_Solver = GASolver(num_gen, num_iter, memory_param, NoC_param, if_multicast, record_filename, optimization_objective, i_act_enough,weight_enough, par_num, multi_layer_tag, io_die_tag = io_die_tag)
 		GA_Solver.setGAGen(GAGen)
 
 		# --- Initial: 初始进行硬件并行度方案的择优
@@ -527,36 +696,83 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 			GA_Solver.evaluationRecord()
 		
 		# --- 各层结果记录
-		edp_res_min_dict[layer_name] = GA_Solver.best_out["edp"]
-		energy_min_dict[layer_name] = GA_Solver.best_out["e_sum"]
-		delay_min_dict[layer_name] = GA_Solver.best_out["delay"]
-		code_min_dict[layer_name] = GA_Solver.best_out["code"]
-		degrade_ratio_min_dict[layer_name] = GA_Solver.best_out["degrade_ratio"]
-		NoC_DR_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["NoC"]
-		L2_to_DRAM_DR_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["L2_to_DRAM"]
-		DRAM_to_L2_DR_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["DRAM_to_L2"]
-		degrade_ratio_dict_min_dict[layer_name] = GA_Solver.best_out["degrade_ratio_dict"]
-		compuation_cycles_min_dict[layer_name] = GA_Solver.best_out["compuation_cycles"]
-		iter_num_dict[layer_name] = iter_num_total
-		edp_total += GA_Solver.best_out["edp"]
-		layer_data_record = [layer_name, edp_res_min_dict[layer_name], energy_min_dict[layer_name], delay_min_dict[layer_name], str(code_min_dict[layer_name]), degrade_ratio_min_dict[layer_name], NoC_DR_dict[layer_name], L2_to_DRAM_DR_dict[layer_name], DRAM_to_L2_DR_dict[layer_name], str(degrade_ratio_dict_min_dict[layer_name]), compuation_cycles_min_dict[layer_name], iter_num_dict[layer_name]]
+		edp_res_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["edp"]["iact_L2"]
+		edp_res_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["edp"]["iact_DRAM"]
+		energy_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["e_sum"]["iact_L2"]
+		energy_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["e_sum"]["iact_DRAM"]
+
+		delay_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["delay"]["iact_L2"]
+		delay_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["delay"]["iact_DRAM"]
+
+		code_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["code"]
+		code_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["code"]
+
+		degrade_ratio_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio"]["iact_L2"]
+		degrade_ratio_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio"]["iact_DRAM"]
+
+		NoC_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["NoC"]
+		L2_to_DRAM_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["L2_to_DRAM"]
+		DRAM_to_L2_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["DRAM_to_L2"]
+		NoP_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["NoP"]
+		
+		NoC_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["NoC"]
+		L2_to_DRAM_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["L2_to_DRAM"]
+		DRAM_to_L2_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["DRAM_to_L2"]
+		NoP_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["NoP"]
+		
+		degrade_ratio_dict_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]
+		degrade_ratio_dict_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]
+		compuation_cycles_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["compuation_cycles"]["iact_L2"]
+		compuation_cycles_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["compuation_cycles"]["iact_DRAM"]
+
+		iter_num_dict["iact_L2"][layer_name] = iter_num_total
+		iter_num_dict["iact_DRAM"][layer_name] = iter_num_total
+
+		edp_total += GA_Solver.best_out["edp"]["iact_L2"]
+		
+		layer_data_record = [layer_name, edp_res_min_dict["iact_L2"][layer_name], energy_min_dict["iact_L2"][layer_name], delay_min_dict["iact_L2"][layer_name], str(code_min_dict["iact_L2"][layer_name]), degrade_ratio_min_dict["iact_L2"][layer_name], NoC_DR_dict["iact_L2"][layer_name], L2_to_DRAM_DR_dict["iact_L2"][layer_name], DRAM_to_L2_DR_dict["iact_L2"][layer_name], str(degrade_ratio_dict_min_dict["iact_L2"][layer_name]), compuation_cycles_min_dict["iact_L2"][layer_name], iter_num_dict["iact_L2"][layer_name]]
 		excel_data.append(layer_data_record)
 	
 	# --- 结果输出
 	file_1 = result_dir + "/final_result_record_" + multi_layer_tag + ".txt"
 	f = open(file_1,'w')
-	print(edp_res_min_dict, file=f)
-	print(energy_min_dict, file=f)
-	print(delay_min_dict, file=f)
-	print(code_min_dict, file = f)
-	print(degrade_ratio_min_dict, file = f)
-	print(NoC_DR_dict, file = f)
-	print(L2_to_DRAM_DR_dict, file = f)
-	print(DRAM_to_L2_DR_dict, file = f)
-	print(compuation_cycles_min_dict, file = f)
-	print(iter_num_dict, file = f)
+	print(edp_res_min_dict["iact_L2"], file=f)
+	print(energy_min_dict["iact_L2"], file=f)
+	print(delay_min_dict["iact_L2"], file=f)
+	print(code_min_dict["iact_L2"], file = f)
+	print(degrade_ratio_min_dict["iact_L2"], file = f)
+	print(NoC_DR_dict["iact_L2"], file = f)
+	print(L2_to_DRAM_DR_dict["iact_L2"], file = f)
+	print(DRAM_to_L2_DR_dict["iact_L2"], file = f)
+	print(NoP_DR_dict["iact_L2"], file = f)
+	print(compuation_cycles_min_dict["iact_L2"], file = f)
+	print(iter_num_dict["iact_L2"], file = f)
 	print(i_act_enough_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
+	print("par_num: ", par_num_dict, file = f)
+	print("par_num_detail: ", par_num_detail_dict, file = f)
+	print("layer_name_dict: ", layer_name_dict, file=f)
+	f.close()
+
+	# --- 结果输出
+	file_2 = result_dir + "/final_result_record_" + multi_layer_tag + "_iactDRAM.txt"
+	f = open(file_2,'w')
+	print(edp_res_min_dict["iact_DRAM"], file=f)
+	print(energy_min_dict["iact_DRAM"], file=f)
+	print(delay_min_dict["iact_DRAM"], file=f)
+	print(code_min_dict["iact_DRAM"], file = f)
+	print(degrade_ratio_min_dict["iact_DRAM"], file = f)
+	print(NoC_DR_dict["iact_DRAM"], file = f)
+	print(L2_to_DRAM_DR_dict["iact_DRAM"], file = f)
+	print(DRAM_to_L2_DR_dict["iact_DRAM"], file = f)
+	print(NoP_DR_dict["iact_DRAM"], file = f)
+	print(compuation_cycles_min_dict["iact_DRAM"], file = f)
+	print(iter_num_dict["iact_DRAM"], file = f)
+	print(i_act_enough_dict, file = f)
+	print("edp_total: ", edp_total, file = f)
+	print("par_num: ", par_num_dict, file = f)
+	print("par_num_detail: ", par_num_detail_dict, file = f)
+	print("layer_name_dict: ", layer_name_dict, file=f)
 	f.close()
 
 	# --- excel 结果输出
@@ -732,16 +948,19 @@ if __name__ == '__main__':
 
 		if architecture == "ours":
 			HW_param = HW_param_ours
+			HW_param["maxChiplet"] = HW_param_ours["Chiplet"]
 			memory_param = memory_param_ours
 			noc_topo = noc_topo_ours
 			io_die_tag = 1
 		elif architecture == "nnbaton":
 			HW_param = HW_param_nnabton
+			HW_param["maxChiplet"] = HW_param_nnabton["Chiplet"]
 			memory_param = memory_param_nnbaton
 			noc_topo = noc_topo_nnbaton
 			io_die_tag = 0
 		elif architecture == "simba":
 			HW_param = HW_param_simba
+			HW_param["maxChiplet"] = HW_param_simba["Chiplet"]
 			memory_param = memory_param_simba
 			noc_topo = noc_topo_simba
 			io_die_tag = 0
@@ -763,13 +982,30 @@ if __name__ == '__main__':
 		if_multicast = 1
 
 		# --- 神经网络参数
-		layer_dict, input_activation_num = getLayerParam(app_name)
+		layer_dict, layer_name_dict = getLayerParam(app_name)
 		partiton_size_list = {"P":2, "Q":2}
 		chiplet_num = HW_param["Chiplet"][0] * HW_param["Chiplet"][1]
 		OL2_mem = memory_param["OL2"]*8*1024/act_wgt_width * chiplet_num
 		WL2_mem = memory_param["WL2"]*8*1024/act_wgt_width * chiplet_num
-		if layer_fuse_tag == 1:
-			tail_layer_dict, tail_iact_num_dict, head_layer_dict, head_iact_num_dict = getLayerParamForMulti(layer_dict, input_activation_num, partiton_size_list)
+		mem_size_dict = {"O":OL2_mem, "W":WL2_mem}
+		layer_dict, head_layer_dict, tail_layer_dict = getLayerParamForMulti(layer_dict, mem_size_dict)
+		print("layer_name_dict----------------------------------")
+		print(layer_name_dict)
+		print(" ")
+		print("layer_dict---------------------------------------")
+		for layer_name, layer in layer_dict.items():
+			print(layer_name, ": ", layer)
+		print(" ")
+		print("head_layer_dict----------------------------------")
+		for layer_name, layer in head_layer_dict.items():
+			print(layer_name, ": ", layer)
+		print(" ")
+		print("tail_layer_dict----------------------------------")
+		for layer_name, layer in tail_layer_dict.items():
+			print(layer_name, ": ", layer)
+		assert(len(head_layer_dict) == len(tail_layer_dict))
+		#if layer_fuse_tag == 1:
+		#	tail_layer_dict, tail_iact_num_dict, head_layer_dict, head_iact_num_dict = getLayerParamForMulti(layer_dict, input_activation_num, partiton_size_list)
 
 		# --- 获得空间并行度
 		spatial_parallel_list = getSpatialParallel(HW_param, chiplet_parallel, PE_parallel)
@@ -780,10 +1016,11 @@ if __name__ == '__main__':
 		iterTime = num_gen * num_iter
 
 		if alg == "GA":
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, optimization_objective, io_die_tag=io_die_tag)
-			if layer_fuse_tag == 1:
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, optimization_objective, multi_layer_tag = "headLayer", io_die_tag=io_die_tag)
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, optimization_objective, multi_layer_tag = "tailLayer", io_die_tag=io_die_tag)
+			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
+			if len(head_layer_dict) > 0:
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "headLayer", io_die_tag=io_die_tag)
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "tailLayer", io_die_tag=io_die_tag)
+			#gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
 		elif alg == "random":
 			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
 			if layer_fuse_tag == 1:

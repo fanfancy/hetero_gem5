@@ -1,4 +1,8 @@
 python multi_network_DSE.py \
-	--nn_list resnet50+resnet18+resnet18same+resnet50same \
-	--chiplet_num 16 \
-	--Optimization_Objective edp
+	--architecture simba \
+	--nn_list resnet18+resnet50+VGG16+vit \
+	--chiplet_num 36 \
+	--Optimization_Objective edp \
+	--BW_Reallocator_tag 1 \
+	--tp_TH 8 \
+	--sp_TH 10

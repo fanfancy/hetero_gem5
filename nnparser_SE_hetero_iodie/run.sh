@@ -1,13 +1,13 @@
 python3 test_intralayer.py \
 	--architecture simba \
-	--app_name VGG16 \
+	--app_name vit \
 	--alg GA \
-	--encode_type index \
+	--encode_type num \
 	--dataflow ours \
-	--chiplet_num_max 16 \
+	--chiplet_num_max 36 \
 	--chiplet_num_min 1 \
 	--chiplet_parallel K_stable \
 	--PE_parallel All \
 	--save_all_records 0 \
-	--layer_fuse_tag 0 \
+	--layer_fuse_tag 1 \
 	--optimization_objective edp
