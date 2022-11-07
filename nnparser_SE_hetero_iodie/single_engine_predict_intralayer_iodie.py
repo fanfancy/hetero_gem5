@@ -37,7 +37,7 @@ def calPSumAllReduce(output_num, chiplet_num, PC3 ):
     return delay, energy_list
 
 
-def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, i_act_SRAM_enough=0, weight_SRAM_enough=0, fuse_par_num=1, fuse_tag = "initial", flag = "ours", io_die_tag = 1):
+def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, if_multicast, i_act_SRAM_enough=0, o_act_DRAM=0, weight_SRAM_enough=0, fuse_par_num=1, fuse_tag = "initial", flag = "ours", io_die_tag = 1):
     route_table = NoC_param["route_table"]
     bw_scales = NoC_param["bw_scales"]
     F = NoC_param["F"]
@@ -407,7 +407,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 	# -- update in 22.7.20 : 一旦片上放得下所有的输出结果，就不再将输出输出到DRAM
     if (if_out_final[cur]!=1): 
         chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_psum)) *repeat_num[cur]
-    elif ol2_cp == "top":
+    elif ol2_cp == "top" and o_act_DRAM == 0:
         chip_pkt_num_wr_opt += 0
     else:
         chip_pkt_num_wr_opt += int(math.ceil(OL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) *repeat_num[cur]
@@ -427,14 +427,14 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         
     cur = data_flow[al2_cp_id]; inner = data_flow[al2_cp_id-1]  
     #print("Chip: read act mem ",AL2_need[inner],"repeat ",repeat_num[cur])
-    assert(fuse_tag == "tailLayer" or fuse_tag == "initial" or fuse_tag == "headLayer")
+    assert(fuse_tag == "tailFuse" or fuse_tag == "initial" or fuse_tag == "headFuse")
     chip_pkt_num_rd_act = {"DRAM":0, "chiplet":0}
     if al2_cp == "top":
         if i_act_SRAM_enough:
             chip_pkt_num_rd_act["chiplet"] = int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
         else:
             chip_pkt_num_rd_act["DRAM"] = int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
-        #if fuse_tag == "tailLayer":
+        #if fuse_tag == "tailFuse":
         #    chip_pkt_num_rd_act += 0
         #else:
         #    chip_pkt_num_rd_act += int(math.ceil(AL2_need[inner]/flit_per_pkt/neu_per_flit_act_wgt)) * 1
@@ -672,8 +672,17 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
             worstlinks.append("L2toDRAM")
         if nop_F_cur == degrade_ratio:
             worstlinks.append("NoP")
+	
+    flit_needed = {}
+    flit_needed["input_DRAM"] = (chip_pkt_num_rd_act["DRAM"]) * flit_per_pkt
+    flit_needed["weight_DRAM"] = (chip_pkt_num_rd_wgt["DRAM"]) * flit_per_pkt
+    flit_needed["input_L2"] = (chip_pkt_num_rd_act["chiplet"]) * flit_per_pkt
+    flit_needed["weight_L2"] = (chip_pkt_num_rd_wgt["chiplet"]) * flit_per_pkt
+    flit_needed["output_rd"] = (chip_pkt_num_rd_opt) * flit_per_pkt
+    flit_needed["output_wr"] = (chip_pkt_num_wr_opt) * flit_per_pkt
+    flit_needed["chiplet_parallel"] = [PK3,PQ3,PP3,PC3]
 
-    return(degrade_ratio*compuation_cycles, degrade_ratio, degrade_ratio_dict,  compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
+    return(degrade_ratio*compuation_cycles, degrade_ratio, degrade_ratio_dict, flit_needed, compuation_cycles,runtime_list,cp_list,utilization_ratio_list, \
         energy_dram_list, energy_L2_list,energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks)
 
 # end 性能测评

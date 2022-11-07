@@ -579,18 +579,25 @@ def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaTy
 
 def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
-	edp_res_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	energy_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	delay_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	code_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	degrade_ratio_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	NoC_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	L2_to_DRAM_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	DRAM_to_L2_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	NoP_DR_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	degrade_ratio_dict_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	compuation_cycles_min_dict = {"iact_L2":{}, "iact_DRAM":{}}
-	iter_num_dict = {"iact_L2":{}, "iact_DRAM":{}}
+	edp_res_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	energy_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	delay_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	code_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	degrade_ratio_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	NoC_DR_dict = {"mid":{} , "head":{}, "tail":{}}
+	L2_to_DRAM_DR_dict = {"mid":{} , "head":{}, "tail":{}}
+	DRAM_to_L2_DR_dict = {"mid":{} , "head":{}, "tail":{}}
+	NoP_DR_dict = {"mid":{} , "head":{}, "tail":{}}
+	degrade_ratio_dict_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	input_DRAM_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	input_L2_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	weight_DRAM_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	weight_L2_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	output_rd_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	output_wr_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	chiplet_spatial_parallel_dict = {"mid":{} , "head":{}, "tail":{}}
+	compuation_cycles_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	iter_num_dict = {"mid":{} , "head":{}, "tail":{}}
 	edp_total = 0
 	excel_data = []
 	i_act_enough_dict = {}
@@ -696,90 +703,126 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 			GA_Solver.evaluationRecord()
 		
 		# --- 各层结果记录
-		edp_res_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["edp"]["iact_L2"]
-		edp_res_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["edp"]["iact_DRAM"]
-		energy_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["e_sum"]["iact_L2"]
-		energy_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["e_sum"]["iact_DRAM"]
+		for pos in ["mid", "head", "tail"]:
+			edp_res_min_dict[pos][layer_name] = GA_Solver.best_out["edp"][pos]
+			energy_min_dict[pos][layer_name] = GA_Solver.best_out["e_sum"][pos]
+			delay_min_dict[pos][layer_name] = GA_Solver.best_out["delay"][pos]
+			code_min_dict[pos][layer_name] = GA_Solver.best_out["code"]
+			degrade_ratio_min_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio"][pos]
 
-		delay_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["delay"]["iact_L2"]
-		delay_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["delay"]["iact_DRAM"]
+			NoC_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["NoC"]
+			L2_to_DRAM_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["L2_to_DRAM"]
+			DRAM_to_L2_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["DRAM_to_L2"]
+			NoP_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["NoP"]
 
-		code_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["code"]
-		code_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["code"]
+			input_DRAM_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["input_DRAM"]
+			weight_DRAM_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["weight_DRAM"]
+			input_L2_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["input_L2"]
+			weight_L2_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["weight_L2"]
+			output_rd_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["output_rd"]
+			output_wr_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["output_wr"]
+			chiplet_spatial_parallel_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["chiplet_parallel"]
 
-		degrade_ratio_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio"]["iact_L2"]
-		degrade_ratio_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio"]["iact_DRAM"]
+			degrade_ratio_dict_min_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]
+			compuation_cycles_min_dict[pos][layer_name] = GA_Solver.best_out["compuation_cycles"][pos]
+			iter_num_dict[pos][layer_name] = iter_num_total
 
-		NoC_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["NoC"]
-		L2_to_DRAM_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["L2_to_DRAM"]
-		DRAM_to_L2_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["DRAM_to_L2"]
-		NoP_DR_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]["NoP"]
+
+		edp_total += GA_Solver.best_out["edp"]["mid"]
 		
-		NoC_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["NoC"]
-		L2_to_DRAM_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["L2_to_DRAM"]
-		DRAM_to_L2_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["DRAM_to_L2"]
-		NoP_DR_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]["NoP"]
-		
-		degrade_ratio_dict_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_L2"]
-		degrade_ratio_dict_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["degrade_ratio_dict"]["iact_DRAM"]
-		compuation_cycles_min_dict["iact_L2"][layer_name] = GA_Solver.best_out["compuation_cycles"]["iact_L2"]
-		compuation_cycles_min_dict["iact_DRAM"][layer_name] = GA_Solver.best_out["compuation_cycles"]["iact_DRAM"]
-
-		iter_num_dict["iact_L2"][layer_name] = iter_num_total
-		iter_num_dict["iact_DRAM"][layer_name] = iter_num_total
-
-		edp_total += GA_Solver.best_out["edp"]["iact_L2"]
-		
-		layer_data_record = [layer_name, edp_res_min_dict["iact_L2"][layer_name], energy_min_dict["iact_L2"][layer_name], delay_min_dict["iact_L2"][layer_name], str(code_min_dict["iact_L2"][layer_name]), degrade_ratio_min_dict["iact_L2"][layer_name], NoC_DR_dict["iact_L2"][layer_name], L2_to_DRAM_DR_dict["iact_L2"][layer_name], DRAM_to_L2_DR_dict["iact_L2"][layer_name], str(degrade_ratio_dict_min_dict["iact_L2"][layer_name]), compuation_cycles_min_dict["iact_L2"][layer_name], iter_num_dict["iact_L2"][layer_name]]
+		layer_data_record = [layer_name, edp_res_min_dict["mid"][layer_name], energy_min_dict["mid"][layer_name], delay_min_dict["mid"][layer_name], str(code_min_dict["mid"][layer_name]), degrade_ratio_min_dict["mid"][layer_name], NoC_DR_dict["mid"][layer_name], L2_to_DRAM_DR_dict["mid"][layer_name], DRAM_to_L2_DR_dict["mid"][layer_name], str(degrade_ratio_dict_min_dict["mid"][layer_name]), input_DRAM_flit_needed_min_dict["mid"][layer_name], input_L2_flit_needed_min_dict["mid"][layer_name], weight_DRAM_flit_needed_min_dict["mid"][layer_name], weight_L2_flit_needed_min_dict["mid"][layer_name], output_rd_flit_needed_min_dict["mid"][layer_name], output_wr_flit_needed_min_dict["mid"][layer_name], compuation_cycles_min_dict["mid"][layer_name], iter_num_dict["mid"][layer_name]]
 		excel_data.append(layer_data_record)
 	
-	# --- 结果输出
-	file_1 = result_dir + "/final_result_record_" + multi_layer_tag + ".txt"
+	# --- 结果输出 mid
+	file_1 = result_dir + "/final_result_record_" + multi_layer_tag + "_midLayer.txt"
 	f = open(file_1,'w')
-	print(edp_res_min_dict["iact_L2"], file=f)
-	print(energy_min_dict["iact_L2"], file=f)
-	print(delay_min_dict["iact_L2"], file=f)
-	print(code_min_dict["iact_L2"], file = f)
-	print(degrade_ratio_min_dict["iact_L2"], file = f)
-	print(NoC_DR_dict["iact_L2"], file = f)
-	print(L2_to_DRAM_DR_dict["iact_L2"], file = f)
-	print(DRAM_to_L2_DR_dict["iact_L2"], file = f)
-	print(NoP_DR_dict["iact_L2"], file = f)
-	print(compuation_cycles_min_dict["iact_L2"], file = f)
-	print(iter_num_dict["iact_L2"], file = f)
-	print(i_act_enough_dict, file = f)
+	print("edp: ", edp_res_min_dict["mid"], file=f)
+	print("energy: ", energy_min_dict["mid"], file=f)
+	print("delay: ", delay_min_dict["mid"], file=f)
+	print("code: ", code_min_dict["mid"], file = f)
+	print("degrade_ratio: ", degrade_ratio_min_dict["mid"], file = f)
+	print("NoC_DR: ", NoC_DR_dict["mid"], file = f)
+	print("L2_to_DRAM_DR: ", L2_to_DRAM_DR_dict["mid"], file = f)
+	print("DRAM_to_L2_DR: ", DRAM_to_L2_DR_dict["mid"], file = f)
+	print("NoP_DR: ", NoP_DR_dict["mid"], file = f)
+	print("input_DRAM_flit_needed: ",  input_DRAM_flit_needed_min_dict["mid"], file = f)
+	print("weight_DRAM_flit_needed: ",  weight_DRAM_flit_needed_min_dict["mid"], file = f)
+	print("input_L2_flit_needed: ",  input_L2_flit_needed_min_dict["mid"], file = f)
+	print("weight_L2_flit_needed: ",  weight_L2_flit_needed_min_dict["mid"], file = f)
+	print("output_rd_flit_needed: ",  output_rd_flit_needed_min_dict["mid"], file = f)
+	print("output_wr_flit_needed: ",  output_wr_flit_needed_min_dict["mid"], file = f)
+	print("chiplet_spatial_parallel: ",  chiplet_spatial_parallel_dict["mid"], file = f)
+	print("compuation_cycles: ", compuation_cycles_min_dict["mid"], file = f)
+	print("iter_num: ", iter_num_dict["mid"], file = f)
+	print("i_act_enough: ", i_act_enough_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
 	print("par_num: ", par_num_dict, file = f)
 	print("par_num_detail: ", par_num_detail_dict, file = f)
 	print("layer_name_dict: ", layer_name_dict, file=f)
 	f.close()
 
-	# --- 结果输出
-	file_2 = result_dir + "/final_result_record_" + multi_layer_tag + "_iactDRAM.txt"
+	# --- 结果输出 head
+	file_2 = result_dir + "/final_result_record_" + multi_layer_tag + "_headLayer.txt"
 	f = open(file_2,'w')
-	print(edp_res_min_dict["iact_DRAM"], file=f)
-	print(energy_min_dict["iact_DRAM"], file=f)
-	print(delay_min_dict["iact_DRAM"], file=f)
-	print(code_min_dict["iact_DRAM"], file = f)
-	print(degrade_ratio_min_dict["iact_DRAM"], file = f)
-	print(NoC_DR_dict["iact_DRAM"], file = f)
-	print(L2_to_DRAM_DR_dict["iact_DRAM"], file = f)
-	print(DRAM_to_L2_DR_dict["iact_DRAM"], file = f)
-	print(NoP_DR_dict["iact_DRAM"], file = f)
-	print(compuation_cycles_min_dict["iact_DRAM"], file = f)
-	print(iter_num_dict["iact_DRAM"], file = f)
-	print(i_act_enough_dict, file = f)
+	print("edp: ", edp_res_min_dict["head"], file=f)
+	print("energy: ", energy_min_dict["head"], file=f)
+	print("delay: ", delay_min_dict["head"], file=f)
+	print("code: ", code_min_dict["head"], file = f)
+	print("degrade_ratio: ", degrade_ratio_min_dict["head"], file = f)
+	print("NoC_DR: ", NoC_DR_dict["head"], file = f)
+	print("L2_to_DRAM_DR: ", L2_to_DRAM_DR_dict["head"], file = f)
+	print("DRAM_to_L2_DR: ", DRAM_to_L2_DR_dict["head"], file = f)
+	print("NoP_DR: ", NoP_DR_dict["head"], file = f)
+	print("input_DRAM_flit_needed: ",  input_DRAM_flit_needed_min_dict["head"], file = f)
+	print("weight_DRAM_flit_needed: ",  weight_DRAM_flit_needed_min_dict["head"], file = f)
+	print("input_L2_flit_needed: ",  input_L2_flit_needed_min_dict["head"], file = f)
+	print("weight_L2_flit_needed: ",  weight_L2_flit_needed_min_dict["head"], file = f)
+	print("output_rd_flit_needed: ",  output_rd_flit_needed_min_dict["head"], file = f)
+	print("output_wr_flit_needed: ",  output_wr_flit_needed_min_dict["head"], file = f)
+	print("chiplet_spatial_parallel: ",  chiplet_spatial_parallel_dict["head"], file = f)
+	print("compuation_cycles: ", compuation_cycles_min_dict["head"], file = f)
+	print("iter_num_dict: ", iter_num_dict["head"], file = f)
+	print("i_act_enough_dict: ", i_act_enough_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
 	print("par_num: ", par_num_dict, file = f)
 	print("par_num_detail: ", par_num_detail_dict, file = f)
 	print("layer_name_dict: ", layer_name_dict, file=f)
 	f.close()
+
+	# --- 结果输出 tail
+	file_3 = result_dir + "/final_result_record_" + multi_layer_tag + "_tailLayer.txt"
+	f = open(file_3,'w')
+	print("edp: ", edp_res_min_dict["tail"], file=f)
+	print("energy: ", energy_min_dict["tail"], file=f)
+	print("delay: ", delay_min_dict["tail"], file=f)
+	print("code: ", code_min_dict["tail"], file = f)
+	print("degrade_ratio: ", degrade_ratio_min_dict["tail"], file = f)
+	print("NoC_DR: ", NoC_DR_dict["tail"], file = f)
+	print("L2_to_DRAM_DR: ", L2_to_DRAM_DR_dict["tail"], file = f)
+	print("DRAM_to_L2_DR: ", DRAM_to_L2_DR_dict["tail"], file = f)
+	print("NoP_DR: ", NoP_DR_dict["tail"], file = f)
+	print("input_DRAM_flit_needed: ",  input_DRAM_flit_needed_min_dict["tail"], file = f)
+	print("weight_DRAM_flit_needed: ",  weight_DRAM_flit_needed_min_dict["tail"], file = f)
+	print("input_L2_flit_needed: ",  input_L2_flit_needed_min_dict["tail"], file = f)
+	print("weight_L2_flit_needed: ",  weight_L2_flit_needed_min_dict["tail"], file = f)
+	print("output_rd_flit_needed: ",  output_rd_flit_needed_min_dict["tail"], file = f)
+	print("output_wr_flit_needed: ",  output_wr_flit_needed_min_dict["tail"], file = f)
+	print("chiplet_spatial_parallel: ",  chiplet_spatial_parallel_dict["tail"], file = f)
+	print("compuation_cycles: ", compuation_cycles_min_dict["tail"], file = f)
+	print("iter_num_dict: ", iter_num_dict["tail"], file = f)
+	print("i_act_enough_dict: ", i_act_enough_dict, file = f)
+	print("edp_total: ", edp_total, file = f)
+	print("par_num: ", par_num_dict, file = f)
+	print("par_num_detail: ", par_num_detail_dict, file = f)
+	print("layer_name_dict: ", layer_name_dict, file=f)
+	f.close()
+
 
 	# --- excel 结果输出
 	workbook = openpyxl.Workbook()
 	sheet = workbook.get_sheet_by_name('Sheet') 
 	# 写入标题
-	column_tite = ["layer_name","fitness","energy", "delay", "code", "degrade_ratio(DR)", "NoC_DR", "L2_to_DRAM_DR", "DRAM_to_L2_DR", "DR_dict", "computation_cycles", "iter_num"]
+	column_tite = ["layer_name","fitness","energy", "delay", "code", "degrade_ratio(DR)", "NoC_DR", "L2_to_DRAM_DR", "DRAM_to_L2_DR", "DR_dict", "input_DRAM_flit_needed", "input_L2_flit_needed", "weight_DRAM_flit_needed", "weight_L2_flit_needed", "output_rd_flit_needed", "output_wr_flit_needed", "computation_cycles", "iter_num"]
 	for col,column in enumerate(column_tite):
 		sheet.cell(1, col+1, column)
 	
@@ -866,12 +909,12 @@ def run_test_intralayer(app_name, chiplet_num, architecture="ours", alg="GA", en
 		
 		if alg == "GA":
 			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headLayer")
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailLayer")
+			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headFuse")
+			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailFuse")
 		elif alg == "random":
 			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
-			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headLayer")
-			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailLayer")
+			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headFuse")
+			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailFuse")
 		else:
 			print("Error alg {}, not supported!".format(alg))
 
@@ -1018,13 +1061,13 @@ if __name__ == '__main__':
 		if alg == "GA":
 			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
 			if len(head_layer_dict) > 0:
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "headLayer", io_die_tag=io_die_tag)
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "tailLayer", io_die_tag=io_die_tag)
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "headFuse", io_die_tag=io_die_tag)
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "tailFuse", io_die_tag=io_die_tag)
 			#gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
 		elif alg == "random":
 			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
 			if layer_fuse_tag == 1:
-				randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headLayer")
-				randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailLayer")
+				randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headFuse")
+				randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailFuse")
 		else:
 			print("Error alg {}, not supported!".format(alg))

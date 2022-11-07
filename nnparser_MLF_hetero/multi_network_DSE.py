@@ -5,6 +5,7 @@ import random
 from matplotlib import pyplot as plt
 import argparse
 import numpy as np
+import shutil
 import datetime
 PE_Frequency = 1000 * 1000 * 1000
 Optimization_Objective_index = {"edp": 0, "energy": 2, "latency": 1}
@@ -12,7 +13,7 @@ Optimization_Objective_index = {"edp": 0, "energy": 2, "latency": 1}
 # --- debug param
 debug_in_getIdealParam = False
 debug_in_BWR = False
-debug_in_BWR_simple = False
+debug_in_BWR_simple = True
 debug_in_evaluation_tp_sp = False
 debug_in_evoluation_temporal_spatial = False
 debug_in_evoluation_temporal_spatial_simple = False
@@ -79,8 +80,8 @@ class multi_network_DSE:
 		# --- TH Param ---
 		self.space_tp_TH = tp_TH			# max tp num
 		self.space_sp_TH = sp_TH			# max sp num
-		self.chiplet_partition_TH = 100		# max chiplet partition num per TP Tile
-		self.workload_schedule_TH = 1000	# max workload schedule method num
+		self.chiplet_partition_TH = 200		# max chiplet partition num per TP Tile
+		self.workload_schedule_TH = 5000	# max workload schedule method num
 
 		self.chiplet_partition_dict = None
 
@@ -89,8 +90,10 @@ class multi_network_DSE:
 		self.ideal_param_dict_workload = None
 		self.workload_fitness_dict = {}
 		self.workload_BWNeeded_dict = {}
+		self.workload_FlitNeeded_dict = {}
 		self.merge_workload_fitness_dict = None
 		self.merge_workload_BWNeeded_dict = None
+		self.merge_workload_FlitNeeded_dict = None
 		self.merge_workload_dict = None
 
 		# --- record variable ---
@@ -103,6 +106,11 @@ class multi_network_DSE:
 		self.tp_sp_space_best = None
 		self.tp_sp_space_record = []
 		self.sample_num = 0
+		self.merge_workload_dict_best = None
+
+		# --- final result ---
+		self.final_workload_BWNeeded_dict = None
+		self.final_workload_FN_dict = None
 	
 	# initialize: 初始化操作
 	def initialize(self):
@@ -140,72 +148,210 @@ class multi_network_DSE:
 	# setTotalWorkloadFitness: 获得每个Workload的性能参数
 	def setTotalWorkloadFitness(self):
 		for workload in self.workload_list:
-			file = "{}/SE_result/{}/{}{}.txt".format(cur_dir, self.architecture, workload, "_startTile")
-			f = open(file)
+			file = "{}/SE_result/{}/{}{}.txt".format(cur_dir, self.architecture, workload, "_headTile")
+			f_h = open(file)
 
-			file_n = "{}/SE_result/{}/{}{}.txt".format(cur_dir, self.architecture, workload, "_midTile")
-			f_n = open(file_n)
+			file_m = "{}/SE_result/{}/{}{}.txt".format(cur_dir, self.architecture, workload, "_midTile")
+			f_m = open(file_m)
 
-			lines = f.readlines()
-			lines_n = f_n.readlines()
+			file_t = "{}/SE_result/{}/{}{}.txt".format(cur_dir, self.architecture, workload, "_tailTile")
+			f_t = open(file_t)
+
+			file_a = "{}/SE_result/{}/{}{}.txt".format(cur_dir, self.architecture, workload, "_aloneTile")
+			f_a = open(file_a)
+
+			lines_h = f_h.readlines()
+			lines_m = f_m.readlines()
+			lines_t = f_t.readlines()
+			lines_a = f_a.readlines()
 			self.workload_fitness_dict[workload] = {}
-			for line_id in range(len(lines)):
-				line = lines[line_id]
-				line_n = lines_n[line_id]
-				if line.startswith("chiplet"):
-					line_item = line.replace("\n","").split("\t")
-					line_item_n = line_n.replace("\n","").split("\t")
-					chiplet_num = int(line_item[1])
-					assert(chiplet_num == int(line_item_n[1]))
-					edp = float(line_item[3])
-					latency = float(line_item[5])
-					energy = float(line_item[7])
-					edp_n = float(line_item_n[3])
-					latency_n = float(line_item_n[5])
-					energy_n = float(line_item_n[7])
+			for line_id in range(len(lines_h)):
+				line_h = lines_h[line_id]
+				line_m = lines_m[line_id]
+				line_t = lines_t[line_id]
+				line_a = lines_a[line_id]
+				if line_h.startswith("chiplet"):
+					line_item_h = line_h.replace("\n","").split("\t")
+					line_item_m = line_m.replace("\n","").split("\t")
+					line_item_t = line_t.replace("\n","").split("\t")
+					line_item_a = line_a.replace("\n","").split("\t")
+					chiplet_num = int(line_item_h[1])
+					assert(chiplet_num == int(line_item_m[1]))
+					assert(chiplet_num == int(line_item_t[1]))
+					assert(chiplet_num == int(line_item_a[1]))
+					
+					edp_h = float(line_item_h[3])
+					latency_h = float(line_item_h[5])
+					energy_h = float(line_item_h[7])
+					edp_m = float(line_item_m[3])
+					latency_m = float(line_item_m[5])
+					energy_m = float(line_item_m[7])
+					edp_t = float(line_item_t[3])
+					latency_t = float(line_item_t[5])
+					energy_t = float(line_item_t[7])
+					edp_a = float(line_item_a[3])
+					latency_a = float(line_item_a[5])
+					energy_a = float(line_item_a[7])
 					self.workload_fitness_dict[workload][chiplet_num] = {}
-					self.workload_fitness_dict[workload][chiplet_num]["startTile"] = [edp, latency, energy]
-					self.workload_fitness_dict[workload][chiplet_num]["midTile"] = [edp_n, latency_n, energy_n]
+					self.workload_fitness_dict[workload][chiplet_num]["headTile"] = [edp_h, latency_h, energy_h]
+					self.workload_fitness_dict[workload][chiplet_num]["midTile"] = [edp_m, latency_m, energy_m]
+					self.workload_fitness_dict[workload][chiplet_num]["tailTile"] = [edp_t, latency_t, energy_t]
+					self.workload_fitness_dict[workload][chiplet_num]["aloneTile"] = [edp_a, latency_a, energy_a]
 			
 			self.workload_BWNeeded_dict[workload] = {}
-			BW_dir = cur_dir + "/SE_result/" + self.architecture + "/BW_result/" + workload +"_startTile/"
-			BW_dir_n = cur_dir + "/SE_result/" + self.architecture + "/BW_result/" + workload + "_midTile/"
+			BW_dir_h = cur_dir + "/SE_result/" + self.architecture + "/BW_result/" + workload + "_headTile/"
+			BW_dir_m = cur_dir + "/SE_result/" + self.architecture + "/BW_result/" + workload + "_midTile/"
+			BW_dir_t = cur_dir + "/SE_result/" + self.architecture + "/BW_result/" + workload + "_tailTile/"
+			BW_dir_a = cur_dir + "/SE_result/" + self.architecture + "/BW_result/" + workload + "_aloneTile/"
 			for i in range(self.chiplet_num):
 				chiplet_num = i + 1
 				self.workload_BWNeeded_dict[workload][chiplet_num] = {}
-				BW_file = BW_dir + "chiplet_num_" + str(chiplet_num) + ".txt"
-				BW_f = open(BW_file)
-				lines = BW_f.readlines()
-				BW_file_n = BW_dir_n + "chiplet_num_" + str(chiplet_num) + ".txt"
-				BW_f_n = open(BW_file_n)
-				lines_n = BW_f_n.readlines()
-				for line_id in range(len(lines)):
-					line = lines[line_id]
-					line_n = lines_n[line_id]
-					if line.startswith("layer_id") or line == "":
+				BW_file_h = BW_dir_h + "chiplet_num_" + str(chiplet_num) + ".txt"
+				BW_f_h = open(BW_file_h)
+				lines_h = BW_f_h.readlines()
+				BW_file_m = BW_dir_m + "chiplet_num_" + str(chiplet_num) + ".txt"
+				BW_f_m = open(BW_file_m)
+				lines_m = BW_f_m.readlines()
+				BW_file_t = BW_dir_t + "chiplet_num_" + str(chiplet_num) + ".txt"
+				BW_f_t = open(BW_file_t)
+				lines_t = BW_f_t.readlines()
+				BW_file_a = BW_dir_a + "chiplet_num_" + str(chiplet_num) + ".txt"
+				BW_f_a = open(BW_file_a)
+				lines_a = BW_f_a.readlines()
+
+				for line_id in range(len(lines_h)):
+					line_h = lines_h[line_id]
+					line_m = lines_m[line_id]
+					line_t = lines_t[line_id]
+					line_a = lines_a[line_id]
+					if line_h.startswith("layer_id") or line_h == "":
 						pass
 					else:
-						line_item = line.replace("\n","").split("\t")
-						layer_id = int(line_item[0])
-						latency = float(line_item[1])
-						NoC_NR = float(line_item[2])
-						L2_to_DRAM_NR = float(line_item[3])
-						DRAM_to_L2_NR = float(line_item[4])
-						BW_list = [latency, NoC_NR, L2_to_DRAM_NR, DRAM_to_L2_NR]
+						line_item_h = line_h.replace("\n","").split("\t")
+						layer_id_h = int(line_item_h[0])
+						latency_h = float(line_item_h[1])
+						NoC_NR_h = float(line_item_h[2])
+						L2_to_DRAM_NR_h = float(line_item_h[3])
+						DRAM_to_L2_NR_h = float(line_item_h[4])
+						BW_list_h = [latency_h, NoC_NR_h, L2_to_DRAM_NR_h, DRAM_to_L2_NR_h]
 
-						line_item_n = line_n.replace("\n","").split("\t")
-						layer_id_n = int(line_item_n[0])
-						latency_n = float(line_item_n[1])
-						NoC_NR_n = float(line_item_n[2])
-						L2_to_DRAM_NR_n = float(line_item_n[3])
-						DRAM_to_L2_NR_n = float(line_item_n[4])
-						BW_list_n = [latency_n, NoC_NR_n, L2_to_DRAM_NR_n, DRAM_to_L2_NR_n]
+						line_item_m = line_m.replace("\n","").split("\t")
+						layer_id_m = int(line_item_m[0])
+						latency_m = float(line_item_m[1])
+						NoC_NR_m = float(line_item_m[2])
+						L2_to_DRAM_NR_m = float(line_item_m[3])
+						DRAM_to_L2_NR_m = float(line_item_m[4])
+						BW_list_m = [latency_m, NoC_NR_m, L2_to_DRAM_NR_m, DRAM_to_L2_NR_m]
 
-						assert(layer_id == layer_id_n)
+						line_item_t = line_t.replace("\n","").split("\t")
+						layer_id_t = int(line_item_t[0])
+						latency_t = float(line_item_t[1])
+						NoC_NR_t = float(line_item_t[2])
+						L2_to_DRAM_NR_t = float(line_item_t[3])
+						DRAM_to_L2_NR_t = float(line_item_t[4])
+						BW_list_t = [latency_t, NoC_NR_t, L2_to_DRAM_NR_t, DRAM_to_L2_NR_t]
 
-						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id] = {}
-						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id]["startTile"] = BW_list
-						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id]["midTile"] = BW_list_n
+						line_item_a = line_a.replace("\n","").split("\t")
+						layer_id_a = int(line_item_a[0])
+						latency_a = float(line_item_a[1])
+						NoC_NR_a = float(line_item_a[2])
+						L2_to_DRAM_NR_a = float(line_item_a[3])
+						DRAM_to_L2_NR_a = float(line_item_a[4])
+						BW_list_a = [latency_a, NoC_NR_a, L2_to_DRAM_NR_a, DRAM_to_L2_NR_a]
+
+						assert(layer_id_h == layer_id_m)
+						assert(layer_id_h == layer_id_a)
+						assert(layer_id_h == layer_id_t)
+
+						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id_h] = {}
+						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id_h]["headTile"] = BW_list_h
+						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id_h]["midTile"] = BW_list_m
+						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id_h]["tailTile"] = BW_list_t
+						self.workload_BWNeeded_dict[workload][chiplet_num][layer_id_h]["aloneTile"] = BW_list_a
+			
+			self.workload_FlitNeeded_dict[workload] = {}
+			FN_dir_h = cur_dir + "/SE_result/" + self.architecture + "/FN_result/" + workload + "_headTile/"
+			FN_dir_m = cur_dir + "/SE_result/" + self.architecture + "/FN_result/" + workload + "_midTile/"
+			FN_dir_t = cur_dir + "/SE_result/" + self.architecture + "/FN_result/" + workload + "_tailTile/"
+			FN_dir_a = cur_dir + "/SE_result/" + self.architecture + "/FN_result/" + workload + "_aloneTile/"
+			for i in range(self.chiplet_num):
+				chiplet_num = i + 1
+				self.workload_FlitNeeded_dict[workload][chiplet_num] = {}
+				FN_file_h = FN_dir_h + "chiplet_num_" + str(chiplet_num) + ".txt"
+				FN_f_h = open(FN_file_h)
+				lines_h = FN_f_h.readlines()
+				FN_file_m = FN_dir_m + "chiplet_num_" + str(chiplet_num) + ".txt"
+				FN_f_m = open(FN_file_m)
+				lines_m = FN_f_m.readlines()
+				FN_file_t = FN_dir_t + "chiplet_num_" + str(chiplet_num) + ".txt"
+				FN_f_t = open(FN_file_t)
+				lines_t = FN_f_t.readlines()
+				FN_file_a = FN_dir_a + "chiplet_num_" + str(chiplet_num) + ".txt"
+				FN_f_a = open(FN_file_a)
+				lines_a = FN_f_a.readlines()
+
+				for line_id in range(len(lines_h)):
+					line_h = lines_h[line_id]
+					line_m = lines_m[line_id]
+					line_t = lines_t[line_id]
+					line_a = lines_a[line_id]
+					if line_h.startswith("layer_id") or line_h == "":
+						pass
+					else:
+						line_item_h = line_h.replace("\n","").split("\t")
+						layer_id_h = int(line_item_h[0])
+						iact_DRAM_FN_h = float(line_item_h[1])
+						weight_DRAM_FN_h = float(line_item_h[2])
+						iact_L2_FN_h = float(line_item_h[3])
+						weight_L2_FN_h = float(line_item_h[4])
+						oact_rd_FN_h = float(line_item_h[5])
+						oact_wr_FN_h = float(line_item_h[6])
+						chiplet_spatial_parallel_h = str(line_item_h[7])
+						FN_list_h = [iact_DRAM_FN_h, weight_DRAM_FN_h, iact_L2_FN_h, weight_L2_FN_h, oact_rd_FN_h, oact_wr_FN_h, chiplet_spatial_parallel_h]
+
+						line_item_m = line_m.replace("\n","").split("\t")
+						layer_id_m = int(line_item_m[0])
+						iact_DRAM_FN_m = float(line_item_m[1])
+						weight_DRAM_FN_m = float(line_item_m[2])
+						iact_L2_FN_m = float(line_item_m[3])
+						weight_L2_FN_m = float(line_item_m[4])
+						oact_rd_FN_m = float(line_item_m[5])
+						oact_wr_FN_m = float(line_item_m[6])
+						chiplet_spatial_parallel_m = str(line_item_m[7])
+						FN_list_m = [iact_DRAM_FN_m, weight_DRAM_FN_m, iact_L2_FN_m, weight_L2_FN_m, oact_rd_FN_m, oact_wr_FN_m, chiplet_spatial_parallel_m]
+
+
+						line_item_t = line_t.replace("\n","").split("\t")
+						layer_id_t = int(line_item_t[0])
+						iact_DRAM_FN_t = float(line_item_t[1])
+						weight_DRAM_FN_t = float(line_item_t[2])
+						iact_L2_FN_t = float(line_item_t[3])
+						weight_L2_FN_t = float(line_item_t[4])
+						oact_rd_FN_t = float(line_item_t[5])
+						oact_wr_FN_t = float(line_item_t[6])
+						chiplet_spatial_parallel_t = str(line_item_t[7])
+						FN_list_t = [iact_DRAM_FN_t, weight_DRAM_FN_t, iact_L2_FN_t, weight_L2_FN_t, oact_rd_FN_t, oact_wr_FN_t, chiplet_spatial_parallel_t]
+
+						line_item_a = line_a.replace("\n","").split("\t")
+						layer_id_a = int(line_item_a[0])
+						iact_DRAM_FN_a = float(line_item_a[1])
+						weight_DRAM_FN_a = float(line_item_a[2])
+						iact_L2_FN_a = float(line_item_a[3])
+						weight_L2_FN_a = float(line_item_a[4])
+						oact_rd_FN_a = float(line_item_a[5])
+						oact_wr_FN_a = float(line_item_a[6])
+						chiplet_spatial_parallel_a = str(line_item_a[7])
+						FN_list_a = [iact_DRAM_FN_a, weight_DRAM_FN_a, iact_L2_FN_a, weight_L2_FN_a, oact_rd_FN_a, oact_wr_FN_a, chiplet_spatial_parallel_a]
+
+						assert(layer_id_h == layer_id_m)
+						assert(layer_id_h == layer_id_a)
+						assert(layer_id_h == layer_id_t)
+
+						self.workload_FlitNeeded_dict[workload][chiplet_num][layer_id_h] = {}
+						self.workload_FlitNeeded_dict[workload][chiplet_num][layer_id_h]["headTile"] = FN_list_h
+						self.workload_FlitNeeded_dict[workload][chiplet_num][layer_id_h]["midTile"] = FN_list_m
+						self.workload_FlitNeeded_dict[workload][chiplet_num][layer_id_h]["tailTile"] = FN_list_t
+						self.workload_FlitNeeded_dict[workload][chiplet_num][layer_id_h]["aloneTile"] = FN_list_a
 	
 	# calIdealParam: 计算每个[tp_id, sp_id]内任务的理论参数量
 	def calIdealParam(self, tp_sp_space):
@@ -245,18 +391,23 @@ class multi_network_DSE:
 
 					if app_name not in self.merge_workload_dict:
 						self.merge_workload_dict[app_name] = {}
-					end_layer_id = 0
-					start_layer_id = 0
+
 					for w_id in app_w_list:
-						if w_id == app_w_list[0]:
-							tag = "startTile"
+						if len(app_w_list) == 1:
+							tag = "aloneTile"
 							start_layer_id = self.workload_dict[app_name]["w" + str(w_id)][0]
+							end_layer_id = self.workload_dict[app_name]["w" + str(w_id)][1]
+						elif w_id == app_w_list[0]:
+							tag = "headTile"
+							start_layer_id = self.workload_dict[app_name]["w" + str(w_id)][0]
+						elif w_id == app_w_list[-1]:
+							tag = "tailTile"
+							end_layer_id = self.workload_dict[app_name]["w" + str(w_id)][1]
 						else:
 							tag = "midTile"
 						merge_workload_name += "w" + str(w_id)
 						w_name = app_name + "w" + str(w_id)
 						app_w_name_list.append(w_name)
-						end_layer_id = self.workload_dict[app_name]["w" + str(w_id)][1]
 						w_tag_dict[w_name] = tag
 					
 					self.merge_workload_dict[app_name][merge_workload_name] = [start_layer_id, end_layer_id]
@@ -288,6 +439,90 @@ class multi_network_DSE:
 		
 		return merge_tp_sp_space
 	
+	# getFinalBWFN：得到最终的BW与FN参数
+	def getFinalBWFN(self):
+		self.final_workload_BWNeeded_dict = {}
+		self.final_workload_FN_dict = {}
+		tp_sp_space = self.tp_sp_space_best
+		chiplet_partition = self.Nchip_partition_best
+
+		for tp_id, sp_space in tp_sp_space.items():
+			for sp_id, w_name_list in sp_space.items():
+				Nchip = chiplet_partition[tp_id][sp_id]
+
+				for w_name in w_name_list:
+					self.final_workload_BWNeeded_dict[w_name] = {}
+					self.final_workload_FN_dict[w_name] = {}
+					w_name_list = w_name.split("w")
+					app_name = w_name_list[0]
+					w_id_list = w_name_list[1:]
+					workload_tag = {}
+					for w_id in w_id_list:
+						if len(w_id_list) == 1:
+							tag = "aloneTile"
+						elif w_id == w_id_list[0]:
+							tag = "headTile"
+						elif w_id == w_id_list[-1]:
+							tag = "tailTile"
+						else:
+							tag = "midTile"
+						w_id_name = app_name + "w" + w_id
+						workload_tag[w_id_name] = tag
+
+					layer_offset = 0
+					for w_id_name, tag in workload_tag.items():
+						for layer_id, BW_list in self.workload_BWNeeded_dict[w_id_name][Nchip].items():
+								layer_id_real = layer_id + layer_offset
+								assert(layer_id_real not in self.final_workload_BWNeeded_dict[w_name])
+								self.final_workload_BWNeeded_dict[w_name][layer_id_real] = BW_list[tag]
+								self.final_workload_FN_dict[w_name][layer_id_real] = self.workload_FlitNeeded_dict[w_id_name][Nchip][layer_id][tag]
+						layer_offset = layer_id_real
+
+		MNN_result_outdir = os.path.join(cur_dir,"multi_nn_result")
+		os.makedirs(MNN_result_outdir, exist_ok=True)
+		MNN_result_outdir = os.path.join(MNN_result_outdir,"final_result_output")
+		if os.path.exists(MNN_result_outdir):
+			shutil.rmtree(MNN_result_outdir)
+		os.makedirs(MNN_result_outdir, exist_ok=True)
+		BW_dir = os.path.join(MNN_result_outdir,"BW_result")
+		os.makedirs(BW_dir, exist_ok=True)
+		FN_dir = os.path.join(MNN_result_outdir,"FN_result")
+		os.makedirs(FN_dir, exist_ok=True)
+		
+		title_FN = "layer_id\tiact_DRAM_FN\tweight_DRAM_FN\tiact_L2_FN\tweight_L2_FN\toact_rd_FN\toact_wr_FN\tchiplet_spatial_parallel"
+		title_BW = "layer_id\tlatency\tNoC_DR\tL2_to_DRAM_DR\tDRAM_to_L2_DR\t"
+		for workload_name in self.final_workload_BWNeeded_dict:
+			BW_file = BW_dir + "/" + workload_name + ".txt"
+			FN_file = FN_dir + "/" + workload_name + ".txt"
+			BW_f = open(BW_file, 'w')
+			FN_f = open(FN_file, 'w')
+			print(title_BW, file = BW_f)
+			print(title_FN, file = FN_f)
+			for layer_id in self.final_workload_BWNeeded_dict[workload_name]:
+				BW_list = self.final_workload_BWNeeded_dict[workload_name][layer_id]
+				FN_list = self.final_workload_FN_dict[workload_name][layer_id]
+
+				BW_line = "{}\t{}\t{}\t{}\t{}".format(layer_id, BW_list[0], BW_list[1], BW_list[2], BW_list[3])
+				FN_line = "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}".format(layer_id, FN_list[0], FN_list[1], FN_list[2], FN_list[3], FN_list[4], FN_list[5], FN_list[6])
+				
+				print(BW_line, file = BW_f)
+				print(FN_line, file = FN_f)
+			
+			BW_f.close()
+			FN_f.close()
+		
+		sp_tp_result_file = MNN_result_outdir + "/sp_tp_out.txt"
+		sp_tp_result_f = open(sp_tp_result_file, 'w')
+		for tp_id, sp_space in tp_sp_space.items():
+			line = "tp" + str(tp_id)
+			for sp_id, workload_list in sp_space.items():
+				Nchip = chiplet_partition[tp_id][sp_id]
+				line += "\t(sp{}:{})".format(sp_id, Nchip)
+				for workload in workload_list:
+					line += " " + workload
+			print(line, file = sp_tp_result_f)
+		sp_tp_result_f.close()
+
 	# getChipletPartionDict: 获得chiplet数目的可能拆分
 	# chiplet_partition_dict : 
 		## { 1:[[36]],
@@ -470,11 +705,15 @@ class multi_network_DSE:
 				if debug_in_BWR:
 					print(tick, state)
 				
-				if debug_in_BWR_simple:
-					print(degrad_ratio_list, sum(np.array(degrad_ratio_list) == 1))
+				if debug_in_BWR:
+					print("degrad_ratio_list: ", degrad_ratio_list, sum(np.array(degrad_ratio_list) == 1))
 
 				######################## update ########################
 				if sum(np.array(degrad_ratio_list) <= 1) >= 1 and sum(np.array(degrad_ratio_list) <= 1) < len(degrad_ratio_list):
+					if debug_in_BWR_simple:
+						print('total_cycle_dict = ', total_cycle_dict)
+						print('total_cycle_list = ', total_cycle_list)
+
 					nn_name = nn_name_list[np.argmin(degrad_ratio_list)]
 					improve_ratio = (1 - max(dram_to_L2_min_dict[nn_name][state[nn_name]], L2_to_DRAM_min_dict[nn_name][state[nn_name]])) / (len(degrad_ratio_list) - 1) * (eva_nn_chiplet_num_dict[nn_name] % 4)
 					nn_name_list.remove(nn_name)
@@ -497,7 +736,7 @@ class multi_network_DSE:
 					total_cycle_list.sort()
 
 					tick = total_cycle_list[index]
-					if debug_in_BWR:
+					if debug_in_BWR_simple:
 						print('--------------')
 						print('index = ', index)
 						print('tick = ', tick)
@@ -510,10 +749,12 @@ class multi_network_DSE:
 			# output
 			#########################################################
 			for sp_id, workload_fitness in sp_workload_fitness.items():
+				tick_pre = 0
 				for workload, fitness in workload_fitness.items():
 					workload_BW_list = self.merge_workload_BWNeeded_dict[workload][Nchip]
 					layer_id = list(workload_BW_list.keys())[-1]
-					latency_sp = total_cycle_dict[sp_id][workload + '_' + str(layer_id)]
+					latency_sp = total_cycle_dict[sp_id][workload + '_' + str(layer_id)] - tick_pre
+					tick_pre = total_cycle_dict[sp_id][workload + '_' + str(layer_id)]
 					energy_sp = sp_workload_fitness_bw[sp_id][workload][2]
 					edp_sp = latency_sp * energy_sp / PE_Frequency
 					sp_workload_fitness_bw[sp_id][workload] = [edp_sp, latency_sp, energy_sp]
@@ -632,6 +873,7 @@ class multi_network_DSE:
 			print('schedule_name = ', schedule_name)
 			print('fitness = ', total_fitness)
 		
+		#exit()
 		return schedule_name, total_fitness, best_Nchip_partition
 
 	# decodeCode: workload_code进行解码，解码成每个[tp_id, sp_id]内包含哪些workload的形式
@@ -803,6 +1045,7 @@ class multi_network_DSE:
 				self.schedule_best = schedule_name
 				self.tp_sp_space_best = tp_sp_space
 				self.Nchip_partition_best = Nchip_partition
+				self.merge_workload_dict_best = self.merge_workload_dict
 			
 			if debug_in_record_fitness_iter:
 				print("--------------------------------------------------------")
@@ -819,6 +1062,9 @@ class multi_network_DSE:
 				print("-----best_fitess: ", self.fitness_best)
 				print("-----best_schedule_name: ", self.schedule_best)
 				print("-----best_Nchip_partition: ", self.Nchip_partition_best)
+				print("-----best_merge_workload_dict: ", self.merge_workload_dict_best)
+		
+		self.getFinalBWFN()
 
 def plot(nn_name_list, architecture):
 	id = 1
@@ -952,6 +1198,7 @@ if __name__ == '__main__':
 	print("{:-^120}".format(" RESULT "), file = result_out_file)
 	print("total_sample_num = {}".format(MNN_Engine.sample_num), file = result_out_file)
 	print("schedule name = {}".format(MNN_Engine.schedule_best), file = result_out_file)
+	print("merge_workload = {}".format(MNN_Engine.merge_workload_dict_best), file = result_out_file)
 	print("{:-<100}".format("schedule space result "), file = result_out_file)
 	for tp_id, sp_space in MNN_Engine.tp_sp_space_best.items():
 		line = "\ttp_id({})\t".format(tp_id)
