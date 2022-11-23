@@ -15,7 +15,7 @@ Optimization_Objective_index = {"edp": 0, "energy": 2, "latency": 1}
 # --- debug param
 debug_in_getIdealParam = False
 debug_in_BWR = False
-debug_in_BWR_simple = True
+debug_in_BWR_simple = False
 debug_in_evaluation_tp_sp = False
 debug_in_evoluation_temporal_spatial = False
 debug_in_evoluation_temporal_spatial_simple = False
@@ -751,7 +751,7 @@ class multi_network_DSE:
 		for app_id, app_name in enumerate(self.workload_dict):
 			app_id_dict[app_name] = app_id
 
-		max_iter = 100
+		max_iter = 1000
 		iter_num = 0
 		while iter_num < max_iter:
 			iter_num += 1
@@ -833,7 +833,9 @@ class multi_network_DSE:
 				break
 		return workload_code_list, sp_num_max
 
+	#########################################################
 	# Layout mapping and bandwidth reallocate 
+	#########################################################
 	def layout_mapping(self):
 		if debug_in_BWR_simple:
 			print(str(sys._getframe().f_lineno) + ': self.tp_sp_space_best = ', self.tp_sp_space_best)
@@ -1156,9 +1158,7 @@ class multi_network_DSE:
 				print("-----best_schedule_name: ", self.schedule_best)
 				print("-----best_Nchip_partition: ", self.Nchip_partition_best)
 
-		self.getFinalBWFN()
-		total_fitness = self.layout_mapping()
-		print('total_fitness = ', total_fitness)
+		
 
 def plot(nn_name_list, architecture):
 	id = 1
@@ -1256,6 +1256,12 @@ if __name__ == '__main__':
 	MNN_Engine = multi_network_DSE(architecture, chiplet_num, workload_dict, Optimization_Objective, tp_TH=opt.tp_TH, sp_TH=opt.sp_TH, BW_tag=opt.BW_Reallocator_tag, layout_mapping_method=opt.layout_mapping_method)
 	start_time = datetime.datetime.now()
 	MNN_Engine.evoluation_temporal_spatial()
+	#########################################################
+	# output
+	#########################################################
+	MNN_Engine.getFinalBWFN()
+	total_fitness = MNN_Engine.layout_mapping()
+	print('total_fitness = ', total_fitness)
 
 	# 控制台输出
 	print("Sim END----------------------------------------------------------")
