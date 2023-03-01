@@ -1,5 +1,6 @@
 from linecache import lazycache
 import os
+import math
 import copy
 import random
 from matplotlib import pyplot as plt
@@ -7,13 +8,14 @@ import argparse
 import numpy as np
 import shutil
 import datetime
+import sys
 PE_Frequency = 1000 * 1000 * 1000
 Optimization_Objective_index = {"edp": 0, "energy": 2, "latency": 1}
 
 # --- debug param
 debug_in_getIdealParam = False
 debug_in_BWR = False
-debug_in_BWR_simple = True
+debug_in_BWR_simple = False
 debug_in_evaluation_tp_sp = False
 debug_in_evoluation_temporal_spatial = False
 debug_in_evoluation_temporal_spatial_simple = False
@@ -68,13 +70,16 @@ def getNNParam(nn_name):
 	return nnParam_dict
 
 class multi_network_DSE:
-	def __init__(self, architecture, chiplet_num, workload_dict, Optimization_Objective, tp_TH, sp_TH, BW_tag = 1, debug_tag = 0):
+	def __init__(self, architecture, chiplet_num, workload_dict, Optimization_Objective, tp_TH, sp_TH, BW_tag = 1, debug_tag = 0, layout_mapping_method = 'balance'):
 		self.architecture = architecture
 		self.chiplet_num = chiplet_num
+		self.cluster_size = 4
+		self.cluster_num = math.ceil(chiplet_num / self.cluster_size)
 		self.workload_dict = workload_dict
 		self.workload_list = []
 		self.debug_tag = debug_tag
 		self.BW_Reallocate_tag = BW_tag
+		self.layout_mapping_method = layout_mapping_method
 		self.Optimization_Objective = Optimization_Objective
 		
 		# --- TH Param ---
@@ -111,6 +116,9 @@ class multi_network_DSE:
 		# --- final result ---
 		self.final_workload_BWNeeded_dict = None
 		self.final_workload_FN_dict = None
+		self.final_merge_workload_fitness_dict = None
+		self.final_merge_workload_BWNeeded_dict = None
+
 	
 	# initialize: 初始化操作
 	def initialize(self):
@@ -597,169 +605,6 @@ class multi_network_DSE:
 		fitness_list = [edp_tp, latency_tp, energy_tp]
 		return tp_name, fitness_list
 
-	# BW_Reallocate: Bandwidth reallocate
-	def BW_Reallocate(self, sp_workload_fitness, sp_Nchip):
-		sp_workload_fitness_bw = {}
-		bw_reallocate_result = {}
-		if len(sp_workload_fitness.keys()) == 1:
-			for sp_id, workload_fitness in sp_workload_fitness.items():
-				sp_workload_fitness_bw[sp_id] = {}
-				bw_reallocate_result[sp_id] = {}
-				for workload, fitness in workload_fitness.items():
-					sp_workload_fitness_bw[sp_id][workload] = fitness
-		else:
-			"""
-			sp_workload_fitness =  
-			{
-				0: {
-					'resnet18': [1793044.2722481424, 514782.6666666666, 3483109258.2400002], 
-					'resnet50': [9630241.645624578, 1326631.466666666, 7259168719.872001]
-				}, 
-				1: {'resnet50same': [15876227.827040443, 1926204.2666666668, 8242234793.984004]}
-			}
-			sp_Nchip =  {1: 6, 0: 10}
-			"""
-			#########################################################
-			# init
-			#########################################################
-			delay_min_dict = {}
-			degrad_ratio_dict = {}
-			dram_to_L2_min_dict = {}
-			L2_to_DRAM_min_dict = {}
-			total_cycle_dict = {}
-			total_cycle_list = []
-			eva_nn_chiplet_num_dict = {}
-
-			for sp_id, workload_fitness in sp_workload_fitness.items():
-				sp_workload_fitness_bw[sp_id] = {}
-				bw_reallocate_result[sp_id] = {}
-				Nchip = sp_Nchip[sp_id]
-				if debug_in_BWR:
-					print('workload_fitness.keys() = ', workload_fitness.keys())
-					print('Nchip = ', Nchip)
-				delay_min_dict[sp_id] = {}
-				degrad_ratio_dict[sp_id] = {}
-				L2_to_DRAM_min_dict[sp_id] = {}
-				dram_to_L2_min_dict[sp_id] = {}
-				eva_nn_chiplet_num_dict[sp_id] = Nchip
-
-				for workload, fitness in workload_fitness.items():
-					sp_workload_fitness_bw[sp_id][workload] = fitness
-					workload_BW_list = self.merge_workload_BWNeeded_dict[workload][Nchip]
-					if debug_in_BWR:
-						print('workload_BW_list = ', workload_BW_list)
-					
-					for layer_id, BW_list in workload_BW_list.items():
-						# latency = BW_list[0]
-						# NoC_NR = BW_list[1]
-						# L2_to_DRAM_NR = BW_list[2]
-						# DRAM_to_L2_NR = BW_list[3]
-						delay_min_dict[sp_id][workload + '_' + str(layer_id)] = BW_list[0]
-						degrad_ratio_dict[sp_id][workload + '_' + str(layer_id)] = max(BW_list[1], BW_list[2], BW_list[3])
-						L2_to_DRAM_min_dict[sp_id][workload + '_' + str(layer_id)] = BW_list[2]
-						dram_to_L2_min_dict[sp_id][workload + '_' + str(layer_id)] = BW_list[3]
-
-			if debug_in_BWR:
-				print('delay_min_dict = ', delay_min_dict)
-				print('degrad_ratio_dict = ', degrad_ratio_dict)
-				print('dram_to_L2_min_dict = ', dram_to_L2_min_dict)
-				print('L2_to_DRAM_min_dict = ', L2_to_DRAM_min_dict)
-			
-			for nn_name in sp_workload_fitness.keys():
-				total_cycle_dict[nn_name] = {}
-				cycle = 0
-				for layer, item in delay_min_dict[nn_name].items():
-					cycle += item
-					total_cycle_dict[nn_name][layer] = int(cycle)
-					total_cycle_list.append(int(cycle))
-			# total_cycle = max(total_cycle_dict.values())
-			total_cycle_list.sort()
-			if debug_in_BWR:
-				print('total_cycle_dict = ', total_cycle_dict)
-				print('total_cycle_list = ', total_cycle_list)
-			######################## event ########################
-			event_dict = {}
-			old_tick = 0
-			index = 0
-			while index < len(total_cycle_list):
-				nn_name_list = list(total_cycle_dict.keys())
-				tick = total_cycle_list[index]
-				state = {}
-				for nn_name in total_cycle_dict.keys():
-					layer_list = list(total_cycle_dict[nn_name].keys())
-					now_layer = layer_list[0]
-					for i, layer in enumerate(layer_list):
-						if total_cycle_dict[nn_name][layer] == tick:
-							now_layer = layer
-						elif total_cycle_dict[nn_name][layer] < tick and i < len(layer_list) - 1:
-							now_layer = layer_list[i + 1]
-						else:
-							break
-					state[nn_name] = now_layer
-				event_dict[tick] = state
-
-				degrad_ratio_list = []
-				for nn_name in state.keys():
-					degrad_ratio_list.append(degrad_ratio_dict[nn_name][state[nn_name]])
-				
-				if debug_in_BWR:
-					print(tick, state)
-				
-				if debug_in_BWR:
-					print("degrad_ratio_list: ", degrad_ratio_list, sum(np.array(degrad_ratio_list) == 1))
-
-				######################## update ########################
-				if sum(np.array(degrad_ratio_list) <= 1) >= 1 and sum(np.array(degrad_ratio_list) <= 1) < len(degrad_ratio_list):
-					if debug_in_BWR_simple:
-						print('total_cycle_dict = ', total_cycle_dict)
-						print('total_cycle_list = ', total_cycle_list)
-
-					nn_name = nn_name_list[np.argmin(degrad_ratio_list)]
-					improve_ratio = (1 - max(dram_to_L2_min_dict[nn_name][state[nn_name]], L2_to_DRAM_min_dict[nn_name][state[nn_name]])) / (len(degrad_ratio_list) - 1) * (eva_nn_chiplet_num_dict[nn_name] % 4)
-					nn_name_list.remove(nn_name)
-
-					if debug_in_BWR_simple:
-						print('improve_ratio = ', improve_ratio)
-						print('tick - old_tick = ', tick - old_tick)
-					for nn in nn_name_list:
-						if debug_in_BWR:
-							print('int(((tick - old_tick) * improve_ratio) / eva_nn_chiplet_num_dict[nn]) = ', int(((tick - old_tick) * improve_ratio) / eva_nn_chiplet_num_dict[nn]))
-						for layer in total_cycle_dict[nn].keys():
-							if total_cycle_dict[nn][layer] >= tick:
-								total_cycle_dict[nn][layer] -= int(((tick - old_tick) * improve_ratio) / eva_nn_chiplet_num_dict[nn])
-					
-					total_cycle_list = []
-					for nn in eva_nn_chiplet_num_dict.keys():
-						cycle = 0
-						for layer in total_cycle_dict[nn].keys():
-							total_cycle_list.append(total_cycle_dict[nn][layer])
-					total_cycle_list.sort()
-
-					tick = total_cycle_list[index]
-					if debug_in_BWR_simple:
-						print('--------------')
-						print('index = ', index)
-						print('tick = ', tick)
-						print('new_total_cycle_dict = ', total_cycle_dict)
-						print('total_cycle_list = ', total_cycle_list)
-				old_tick = tick
-				index += 1
-
-			#########################################################
-			# output
-			#########################################################
-			for sp_id, workload_fitness in sp_workload_fitness.items():
-				tick_pre = 0
-				for workload, fitness in workload_fitness.items():
-					workload_BW_list = self.merge_workload_BWNeeded_dict[workload][Nchip]
-					layer_id = list(workload_BW_list.keys())[-1]
-					latency_sp = total_cycle_dict[sp_id][workload + '_' + str(layer_id)] - tick_pre
-					tick_pre = total_cycle_dict[sp_id][workload + '_' + str(layer_id)]
-					energy_sp = sp_workload_fitness_bw[sp_id][workload][2]
-					edp_sp = latency_sp * energy_sp / PE_Frequency
-					sp_workload_fitness_bw[sp_id][workload] = [edp_sp, latency_sp, energy_sp]
-		return sp_workload_fitness_bw, bw_reallocate_result
-
 	# getChipletAllocateMethods_random: get chiplet allocate method randomly
 	def getChipletAllocateMethods_random(self, sp_idealParam, TH):
 		sp_num = len(sp_idealParam)
@@ -797,7 +642,6 @@ class multi_network_DSE:
 			print("DEBUG IN evaluation_tp_sp()----------------------")
 
 		tp_sp_fitness = {}
-		bw_reallocate_result = {}
 		best_Nchip_partition = {}
 
 		# 评估开始：
@@ -834,19 +678,9 @@ class multi_network_DSE:
 					print('sp_Nchip = ', sp_Nchip)
 					print('sp_workload_fitness = ', sp_workload_fitness)
 				
-				# 1.2.2 BW Reallocate
-				if self.BW_Reallocate_tag == 1:
-					sp_workload_fitness_bw , bw_reallocate = self.BW_Reallocate(sp_workload_fitness, sp_Nchip)
-					if debug_in_BWR_simple and debug_in_evaluation_tp_sp:
-						print('sp_workload_fitness_bw = ', sp_workload_fitness_bw)
-						print('bw_reallocate = ', bw_reallocate)
-				else:
-					sp_workload_fitness_bw = copy.deepcopy(sp_workload_fitness)
-					bw_reallocate = None
-				
 				# 1.2.3 Cal Fitness
 				sp_fitness_dict = {}
-				for sp_id, workload_fitness in sp_workload_fitness_bw.items():
+				for sp_id, workload_fitness in sp_workload_fitness.items():
 					sp_name, fitness = self.calSP(workload_fitness, sp_id)
 					sp_fitness_dict[sp_name] = fitness
 				tp_name, tp_fitness = self.calTP(sp_fitness_dict, tp_id)
@@ -855,15 +689,15 @@ class multi_network_DSE:
 				Objective_id = Optimization_Objective_index[self.Optimization_Objective]
 				if best_tp_fitness == None or tp_fitness[Objective_id] < best_tp_fitness[Objective_id]:
 					best_tp_fitness = copy.deepcopy(tp_fitness)
-					best_bw_reallocate = copy.deepcopy(bw_reallocate)
 					best_tp_name = tp_name
 					best_Nchip = copy.deepcopy(sp_Nchip)
+					final_merge_workload_fitness_dict = self.merge_workload_fitness_dict
+
 				
 				self.sample_num += 1
 
 			# 1.3 最优方案记录，得到TP Tile内的评估结果	
 			tp_sp_fitness[best_tp_name] = best_tp_fitness
-			bw_reallocate_result[tp_id] = best_bw_reallocate
 			best_Nchip_partition[tp_id] = copy.deepcopy(best_Nchip)
 
 		# 2. calSP, 对多个TP Tile进行合并评估
@@ -917,7 +751,7 @@ class multi_network_DSE:
 		for app_id, app_name in enumerate(self.workload_dict):
 			app_id_dict[app_name] = app_id
 
-		max_iter = 100
+		max_iter = 1000
 		iter_num = 0
 		while iter_num < max_iter:
 			iter_num += 1
@@ -999,6 +833,262 @@ class multi_network_DSE:
 				break
 		return workload_code_list, sp_num_max
 
+	#########################################################
+	# Layout mapping and bandwidth reallocate 
+	#########################################################
+	def layout_mapping(self):
+		if debug_in_BWR_simple:
+			print(str(sys._getframe().f_lineno) + ': self.tp_sp_space_best = ', self.tp_sp_space_best)
+			print(str(sys._getframe().f_lineno) + ': self.Nchip_partition_best = ', self.Nchip_partition_best)
+			print(str(sys._getframe().f_lineno) + ': self.final_merge_workload_fitness_dict = ', self.final_merge_workload_fitness_dict)
+			print(str(sys._getframe().f_lineno) + ': self.final_workload_BWNeeded_dict = ', self.final_workload_BWNeeded_dict)
+			
+		sp_workload_fitness_bw = {}
+		
+		for tp_id, sp_space in self.tp_sp_space_best.items():
+			sp_workload_fitness = {}
+			sp_workload_fitness_bw[tp_id] = {}
+
+			for sp_id in sp_space:
+				sp_workload_fitness[sp_id] = {}
+				Nchip = self.Nchip_partition_best[tp_id][sp_id]
+				for workload in sp_space[sp_id]:
+					if debug_in_BWR:
+						print('workload = ', workload)
+						print('Nchip = ', Nchip)
+						print('self.final_merge_workload_fitness_dict[workload]= ', self.final_merge_workload_fitness_dict[workload])
+					fitness = self.final_merge_workload_fitness_dict[workload][Nchip]
+					sp_workload_fitness[sp_id][workload] = fitness
+			if debug_in_BWR:
+				print(str(sys._getframe().f_lineno) + ': sp_workload_fitness = ', sp_workload_fitness)
+			if len(sp_workload_fitness.keys()) == 1:
+				for sp_id, workload_fitness in sp_workload_fitness.items():
+					sp_workload_fitness_bw[tp_id][sp_id] = {}
+					for workload, fitness in workload_fitness.items():
+						sp_workload_fitness_bw[tp_id][sp_id][workload] = fitness
+			else:
+				'''
+				sp_workload_fitness =  
+				{
+					0: {
+						'resnet18': [1793044.2722481424, 514782.6666666666, 3483109258.2400002], 
+						'resnet50': [9630241.645624578, 1326631.466666666, 7259168719.872001]
+					}, 
+					1: {'resnet50same': [15876227.827040443, 1926204.2666666668, 8242234793.984004]}
+				}
+				sp_Nchip =  {1: 6, 0: 10}
+				'''
+				#########################################################
+				# init
+				#########################################################
+				delay_min_dict = {}
+				degrad_ratio_dict = {}
+				dram_to_L2_min_dict = {}
+				L2_to_DRAM_min_dict = {}
+				total_cycle_dict = {}
+				total_cycle_list = []
+				eva_nn_chiplet_num_dict = {}
+
+				for sp_id, workload_fitness in sp_workload_fitness.items():
+					sp_workload_fitness_bw[tp_id][sp_id] = {}
+					Nchip = self.Nchip_partition_best[tp_id][sp_id]
+					if debug_in_BWR:
+						print(str(sys._getframe().f_lineno) + ': workload_fitness.keys() = ', workload_fitness.keys())
+						print(str(sys._getframe().f_lineno) + ': Nchip = ', Nchip)
+					delay_min_dict[sp_id] = {}
+					degrad_ratio_dict[sp_id] = {}
+					L2_to_DRAM_min_dict[sp_id] = {}
+					dram_to_L2_min_dict[sp_id] = {}
+					eva_nn_chiplet_num_dict[sp_id] = Nchip
+					
+					for workload, fitness in workload_fitness.items():
+						sp_workload_fitness_bw[tp_id][sp_id][workload] = fitness
+						workload_BW_list = self.final_merge_workload_BWNeeded_dict[workload][Nchip]
+						
+						if debug_in_BWR:
+							print(str(sys._getframe().f_lineno) + ': workload_BW_list = ', workload_BW_list)
+						
+						for layer_id, BW_list in workload_BW_list.items():
+							# latency = BW_list[0]
+							# NoC_NR = BW_list[1]
+							# L2_to_DRAM_NR = BW_list[2]
+							# DRAM_to_L2_NR = BW_list[3]
+							delay_min_dict[sp_id][workload + '_' + str(layer_id)] = BW_list[0]
+							degrad_ratio_dict[sp_id][workload + '_' + str(layer_id)] = max(BW_list[1], BW_list[2], BW_list[3])
+							L2_to_DRAM_min_dict[sp_id][workload + '_' + str(layer_id)] = BW_list[2]
+							dram_to_L2_min_dict[sp_id][workload + '_' + str(layer_id)] = BW_list[3]
+
+				if debug_in_BWR:
+					print(str(sys._getframe().f_lineno) + ': delay_min_dict = ', delay_min_dict)
+					print(str(sys._getframe().f_lineno) + ': degrad_ratio_dict = ', degrad_ratio_dict)
+					print(str(sys._getframe().f_lineno) + ': dram_to_L2_min_dict = ', dram_to_L2_min_dict)
+					print(str(sys._getframe().f_lineno) + ': L2_to_DRAM_min_dict = ', L2_to_DRAM_min_dict)
+					print(str(sys._getframe().f_lineno) + ': eva_nn_chiplet_num_dict = ', eva_nn_chiplet_num_dict)
+
+				
+				for nn_name in sp_workload_fitness.keys():
+					total_cycle_dict[nn_name] = {}
+					cycle = 0
+					for layer, item in delay_min_dict[nn_name].items():
+						cycle += item
+						total_cycle_dict[nn_name][layer] = int(cycle)
+						total_cycle_list.append(int(cycle))
+				# total_cycle = max(total_cycle_dict.values())
+				total_cycle_list.sort()
+				if debug_in_BWR:
+					print(str(sys._getframe().f_lineno) + ': total_cycle_dict = ', total_cycle_dict)
+					print(str(sys._getframe().f_lineno) + ': total_cycle_list = ', total_cycle_list)
+				#########################################################
+				# event
+				#########################################################
+				event_dict = {}
+				old_tick = 0
+				index = 0
+				while index < len(total_cycle_list):
+					nn_name_list = list(total_cycle_dict.keys())
+					tick = total_cycle_list[index]
+					state = {}
+					for nn_name in total_cycle_dict.keys():
+						layer_list = list(total_cycle_dict[nn_name].keys())
+						now_layer = layer_list[0]
+						for i, layer in enumerate(layer_list):
+							if total_cycle_dict[nn_name][layer] == tick:
+								now_layer = layer
+							elif total_cycle_dict[nn_name][layer] < tick and i < len(layer_list) - 1:
+								now_layer = layer_list[i + 1]
+							else:
+								break
+						state[nn_name] = now_layer
+					event_dict[tick] = state
+
+					if debug_in_BWR:
+						print(str(sys._getframe().f_lineno) + ': ', tick, state)
+					#########################################################
+					# layout mapping
+					#########################################################
+					degrad_ratio_list = []
+					network_list = []
+					for nn_name in state.keys():
+						degrad_ratio_list = degrad_ratio_list + [degrad_ratio_dict[nn_name][state[nn_name]]] * eva_nn_chiplet_num_dict[nn_name]
+						network_list = network_list + [nn_name] * eva_nn_chiplet_num_dict[nn_name]
+
+					degrad_ratio_list = np.array(degrad_ratio_list)
+					network_list = np.array(network_list)
+
+					if self.layout_mapping_method == 'balance':
+						degrad_ratio_list = degrad_ratio_list.reshape([self.cluster_size, self.cluster_num]).T
+						network_list = network_list.reshape([self.cluster_size, self.cluster_num]).T
+					elif self.layout_mapping_method == 'concentrate':
+						degrad_ratio_list = degrad_ratio_list.reshape([self.cluster_num, self.cluster_size])
+						network_list = network_list.reshape([self.cluster_num, self.cluster_size])
+					elif self.layout_mapping_method == 'random':
+						np.random.shuffle(network_list)
+						degrad_ratio_list = []
+						for nn_name in network_list:
+							degrad_ratio_list = degrad_ratio_list + [degrad_ratio_dict[nn_name][state[nn_name]]]
+						
+						degrad_ratio_list = np.array(degrad_ratio_list)
+						network_list = np.array(network_list)
+						degrad_ratio_list = degrad_ratio_list.reshape([self.cluster_num, self.cluster_size])
+						network_list = network_list.reshape([self.cluster_num, self.cluster_size])
+					else:
+						raise NotImplementedError
+
+					if debug_in_BWR:
+						print('degrad_ratio_list = ', degrad_ratio_list)
+						print('network_list = ', network_list)
+					#########################################################
+					# bandwidth allocation 
+					#########################################################
+					for nn_name in nn_name_list:
+						if debug_in_BWR:
+							print(str(sys._getframe().f_lineno) + ': nn_name = ', nn_name)
+
+						if degrad_ratio_dict[nn_name][state[nn_name]] > 1:
+							flag = True
+							min_degrade = float('inf')
+
+							for i in range(self.cluster_num):
+								if nn_name in network_list[i]:
+									if sum(degrad_ratio_list[i] < 1) >= 1:
+										# can be shared bandwidth
+										degrade = sum((1 - degrad_ratio_list[i]) * (degrad_ratio_list[i] < 1))
+										if degrade < min_degrade:
+											min_degrade = degrade
+									else:
+										# can not be shared bandwidth for this network
+										flag = False
+										break
+								else:
+									continue
+
+							if flag:
+								#########################################################
+								# improve_ratio
+								#########################################################
+								if degrad_ratio_dict[nn_name][state[nn_name]] - min_degrade < 1:
+									improve_ratio = (degrad_ratio_dict[nn_name][state[nn_name]] - 1) / degrad_ratio_dict[nn_name][state[nn_name]]
+								else:
+									improve_ratio = min_degrade / degrad_ratio_dict[nn_name][state[nn_name]]
+								if debug_in_BWR:
+									print(str(sys._getframe().f_lineno) + ': nn_name = ', nn_name)
+									print(str(sys._getframe().f_lineno) + ': improve_ratio = ', improve_ratio)
+									print(str(sys._getframe().f_lineno) + ': tick - old_tick = ', tick - old_tick)
+									print(str(sys._getframe().f_lineno) + ': int((tick - old_tick) * improve_ratio) = ', int((tick - old_tick) * improve_ratio))
+								#########################################################
+								# update
+								#########################################################
+								for layer in total_cycle_dict[nn_name].keys():
+									if total_cycle_dict[nn_name][layer] >= tick:
+										total_cycle_dict[nn_name][layer] -= int((tick - old_tick) * improve_ratio)
+
+								total_cycle_list = []
+								for nn_name in eva_nn_chiplet_num_dict.keys():
+									cycle = 0
+									for layer in total_cycle_dict[nn_name].keys():
+										total_cycle_list.append(total_cycle_dict[nn_name][layer])
+								total_cycle_list.sort()
+
+								tick = total_cycle_list[index]
+								if debug_in_BWR:
+									print('--------------')
+									print(str(sys._getframe().f_lineno) + ': index = ', index)
+									print(str(sys._getframe().f_lineno) + ': tick = ', tick)
+									print(str(sys._getframe().f_lineno) + ': new_total_cycle_dict = ', total_cycle_dict)
+									print(str(sys._getframe().f_lineno) + ': total_cycle_list = ', total_cycle_list)
+								break
+
+					old_tick = tick
+					index += 1
+				#########################################################
+				# output
+				#########################################################
+				for sp_id, workload_fitness in sp_workload_fitness.items():
+					Nchip = self.Nchip_partition_best[tp_id][sp_id]
+					for workload, fitness in workload_fitness.items():
+						workload_BW_list = self.final_merge_workload_BWNeeded_dict[workload][Nchip]
+						layer_id = list(workload_BW_list.keys())[-1]
+						latency_sp = total_cycle_dict[sp_id][workload + '_' + str(layer_id)]
+						energy_sp = sp_workload_fitness_bw[tp_id][sp_id][workload][2]
+						edp_sp = latency_sp * energy_sp / PE_Frequency
+						sp_workload_fitness_bw[tp_id][sp_id][workload] = [edp_sp, latency_sp, energy_sp]
+		
+		tp_sp_fitness = {}
+		for tp_id, sp_space in sp_workload_fitness_bw.items():
+			sp_fitness_dict = {}
+			for sp_id, workload_fitness in sp_space.items():
+				sp_name, fitness = self.calSP(workload_fitness, sp_id)
+				sp_fitness_dict[sp_name] = fitness
+			tp_name, tp_fitness = self.calTP(sp_fitness_dict, tp_id)
+			tp_sp_fitness[tp_name] = tp_fitness
+		schedule_name, total_fitness = self.calSP(tp_sp_fitness, None)
+		if debug_in_BWR_simple:
+			print('sp_workload_fitness_bw = ', sp_workload_fitness_bw)
+			print('schedule_name = ', schedule_name)
+			print('total_fitness = ', total_fitness)
+		return total_fitness
+
+
 	# evoluation_temporal_spatial: 探索函数，主运行函数
 	def evoluation_temporal_spatial(self):
 		self.initialize()
@@ -1046,6 +1136,8 @@ class multi_network_DSE:
 				self.tp_sp_space_best = tp_sp_space
 				self.Nchip_partition_best = Nchip_partition
 				self.merge_workload_dict_best = self.merge_workload_dict
+				self.final_merge_workload_fitness_dict = self.merge_workload_fitness_dict
+				self.final_merge_workload_BWNeeded_dict = self.merge_workload_BWNeeded_dict
 			
 			if debug_in_record_fitness_iter:
 				print("--------------------------------------------------------")
@@ -1053,6 +1145,9 @@ class multi_network_DSE:
 				print("now_fitess: ", fitness)
 				print("best_schedule_name: ", self.schedule_best)
 				print("best_fitess: ", self.fitness_best)
+				print("tp_sp_space_best: ", self.tp_sp_space_best)
+				print("merge_workload_dict_best: ", self.merge_workload_dict_best)
+				print("final_merge_workload_fitness_dict: ", self.final_merge_workload_fitness_dict)
 			
 			self.fitness_record.append(fitness)
 			self.schedule_record.append(schedule_name)
@@ -1062,9 +1157,8 @@ class multi_network_DSE:
 				print("-----best_fitess: ", self.fitness_best)
 				print("-----best_schedule_name: ", self.schedule_best)
 				print("-----best_Nchip_partition: ", self.Nchip_partition_best)
-				print("-----best_merge_workload_dict: ", self.merge_workload_dict_best)
+
 		
-		self.getFinalBWFN()
 
 def plot(nn_name_list, architecture):
 	id = 1
@@ -1137,6 +1231,7 @@ if __name__ == '__main__':
 	parser.add_argument('--alg', type=str, default='GA', help='use layer fuse or not')
 	parser.add_argument('--encode_type', type=str, default='index', help='encode type')
 	parser.add_argument('--BW_Reallocator_tag', type=int, default=1, help='use BW Reallocator or not')
+	parser.add_argument('--layout_mapping_method', type=str, default='balance', help='balance, concentrate or random')
 	parser.add_argument('--tp_TH', type=int, default=10, help='tp max num')
 	parser.add_argument('--sp_TH', type=int, default=10, help='sp max num')
 	
@@ -1158,9 +1253,15 @@ if __name__ == '__main__':
 	workload_dict = loadWorkloadDict(workload_file, nn_name_list)
 
 	# DSE
-	MNN_Engine = multi_network_DSE(architecture, chiplet_num, workload_dict, Optimization_Objective, tp_TH=opt.tp_TH, sp_TH=opt.sp_TH, BW_tag=opt.BW_Reallocator_tag)
+	MNN_Engine = multi_network_DSE(architecture, chiplet_num, workload_dict, Optimization_Objective, tp_TH=opt.tp_TH, sp_TH=opt.sp_TH, BW_tag=opt.BW_Reallocator_tag, layout_mapping_method=opt.layout_mapping_method)
 	start_time = datetime.datetime.now()
 	MNN_Engine.evoluation_temporal_spatial()
+	#########################################################
+	# output
+	#########################################################
+	MNN_Engine.getFinalBWFN()
+	total_fitness = MNN_Engine.layout_mapping()
+	print('total_fitness = ', total_fitness)
 
 	# 控制台输出
 	print("Sim END----------------------------------------------------------")
