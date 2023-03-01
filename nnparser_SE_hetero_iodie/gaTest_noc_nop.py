@@ -24,6 +24,7 @@ num_iter = 10
 class GASolver():
 	def __init__(self, num_children, num_iter, memory_param, NoC_param, if_multicast, record_filename, optimization_objective="edp", input_act_enough=0, weight_enough=0, fuse_par_num=1, fuse_tag = "initial", debug = 0, io_die_tag = 1):
 		self.GAGen = None
+		self.GADec = None
 		self.memory_param = memory_param
 		self.NoC_param = NoC_param
 		self.if_multicast = if_multicast
@@ -58,9 +59,11 @@ class GASolver():
 		self.record = []
 
 		self.record_filename = record_filename
+		self.sheet_name = 0
 
-	def setGAGen(self, GAGen):
+	def setGAGen(self, GAGen, GADec):
 		self.GAGen = GAGen
+		self.GADec = GADec
 		self.total_reset()
 	
 	def generation_reset(self):
@@ -87,10 +90,11 @@ class GASolver():
 		flit_needed_dict = {"mid":None , "head":None, "tail":None}
 		compuation_cycles_dict = {"mid":None , "head":None, "tail":None}
 
-		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = self.GAGen.GaGetChild(Ga_code)
+		code_c = self.GAGen.codeChange(Ga_code)
+		for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = self.GADec.decode(code_c)
 		#---计算适应度 as mid layer of the workload---
 		delay_dict["mid"], degrade_ratio_dict["mid"], degrade_ratio_dict_dict["mid"], flit_needed_dict["mid"], compuation_cycles_dict["mid"], runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GAGen.HW_param, self.memory_param, self.NoC_param, self.if_multicast, self.input_act_enough, 0, self.weight_enough, self.fuse_par_num, self.fuse_tag, flag = flag, io_die_tag = self.io_die_tag)
+			calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GADec.HW_param, self.memory_param, self.NoC_param, self.if_multicast, self.input_act_enough, 0, self.weight_enough, self.fuse_par_num, self.fuse_tag, flag = flag, io_die_tag = self.io_die_tag)
 		#---比较适应度，并记录相关变量---
 		e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
 		e_sum_dict["mid"] = e_mem + energy_die2die+energy_MAC + energy_psum_list[2]
@@ -102,7 +106,7 @@ class GASolver():
 			i_act_SRAM_enough = 0
 			o_act_DRAM = 0
 			delay_dict["head"], degrade_ratio_dict["head"], degrade_ratio_dict_dict["head"], flit_needed_dict["head"], compuation_cycles_dict["head"], runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GAGen.HW_param, self.memory_param, self.NoC_param, self.if_multicast, i_act_SRAM_enough, o_act_DRAM, self.weight_enough, self.fuse_par_num, self.fuse_tag, flag = flag, io_die_tag = self.io_die_tag)
+				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GADec.HW_param, self.memory_param, self.NoC_param, self.if_multicast, i_act_SRAM_enough, o_act_DRAM, self.weight_enough, self.fuse_par_num, self.fuse_tag, flag = flag, io_die_tag = self.io_die_tag)
 			#---比较适应度，并记录相关变量---
 			e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
 			e_sum_dict["head"] = e_mem + energy_die2die+energy_MAC + energy_psum_list[2]
@@ -122,7 +126,7 @@ class GASolver():
 			i_act_SRAM_enough = self.input_act_enough
 			o_act_DRAM = 1
 			delay_dict["tail"], degrade_ratio_dict["tail"], degrade_ratio_dict_dict["tail"], flit_needed_dict["tail"], compuation_cycles_dict["tail"], runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GAGen.HW_param, self.memory_param, self.NoC_param, self.if_multicast, i_act_SRAM_enough, o_act_DRAM, self.weight_enough, self.fuse_par_num, self.fuse_tag, flag = flag, io_die_tag = self.io_die_tag)
+				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, self.GAGen.network_param, self.GADec.HW_param, self.memory_param, self.NoC_param, self.if_multicast, i_act_SRAM_enough, o_act_DRAM, self.weight_enough, self.fuse_par_num, self.fuse_tag, flag = flag, io_die_tag = self.io_die_tag)
 			#---比较适应度，并记录相关变量---
 			e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
 			e_sum_dict["tail"] = e_mem + energy_die2die+energy_MAC + energy_psum_list[2]
@@ -144,10 +148,10 @@ class GASolver():
 		self.fitness = np.zeros(self.num_children)
 		self.generation_record = {}
 		for i in range(self.num_children):
-			if self.GAGen.GaType == "index":
-				child_gen = self.GAGen.getGaCode_index()
-			elif self.GAGen.GaType == "num":
-				child_gen = self.GAGen.getGaCode_num()
+			if self.GAGen.EncodeType == "index":
+				child_gen = self.GAGen.getCode_index()
+			elif self.GAGen.EncodeType == "num":
+				child_gen = self.GAGen.getCode_num()
 			self.generation.append(child_gen)
 			edp_dict, e_sum_dict, delay_dict, code, degrade_ratio_dict, degrade_ratio_dict_dict, flit_needed_dict, compuation_cycles_dict, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = self.calFitnessAll(self.generation[i])
 			if self.optimization_objective == "edp":
@@ -293,14 +297,14 @@ class GASolver():
 			if ran < pc:
 				child1, child2 = self.crossover(parent1, parent2)
 			else:
-				if self.GAGen.GaType == "index":
-					child1 = self.GAGen.getGaCode_index()
-					child2 = self.GAGen.getGaCode_index()
-				elif self.GAGen.GaType == "num":
-					child1 = self.GAGen.getGaCode_num()
-					child2 = self.GAGen.getGaCode_num()
+				if self.GAGen.EncodeType == "index":
+					child1 = self.GAGen.getCode_index()
+					child2 = self.GAGen.getCode_index()
+				elif self.GAGen.EncodeType == "num":
+					child1 = self.GAGen.getCode_num()
+					child2 = self.GAGen.getCode_num()
 
-			if self.GAGen.GaType == "index":
+			if self.GAGen.EncodeType == "index":
 				child1 = self.mutate_index(child1)
 				child2 = self.mutate_index(child2)
 			else:
@@ -322,6 +326,8 @@ class GASolver():
 		file_data = []
 		title = []
 
+		self.sheet_name += 1
+
 		for name in self.best_evalatuion_record[0]:
 			title.append(name)
 		for index in reversed(range(len(self.best_evalatuion_record))):
@@ -331,15 +337,23 @@ class GASolver():
 				record_list.append(str(record[item]))
 			file_data.append(record_list)
 		
-		workbook = openpyxl.Workbook()
-		sheet = workbook.get_sheet_by_name('Sheet') 
+		if self.sheet_name == 1 or os.path.exists(filename) == False:
+			workbook = openpyxl.Workbook()
+		else:
+			workbook = openpyxl.load_workbook(filename)
+		
+		assert(str(self.sheet_name) not in workbook.sheetnames)
+		new_sheet = workbook.create_sheet(title=str(self.sheet_name),index=len(workbook.sheetnames))
+		workbook.active = len(workbook.sheetnames)
+		new_sheet.title = str(self.sheet_name)
+		
 		# 写入标题
 		for col,column in enumerate(title):
-			sheet.cell(1, col+1, column)
+			new_sheet.cell(1, col+1, column)
 		# 写入每一行
 		for row, data in enumerate(file_data):
 			for col, column_data in enumerate(data):
-				sheet.cell(row+2, col+1, column_data)
+				new_sheet.cell(row+2, col+1, column_data)
 
 		workbook.save(filename)
 
@@ -468,7 +482,7 @@ def gaTest_NoC_ours(GaType, app_name, layer_name, network_param):
 	GA_Solver = GASolver(memory_param, NoC_param, if_multicast)
 
 	filename = './GaTest/'+app_name+"_"+layer_name+"_random.xls"
-	GATest = GaEncode(GaType, network_param, HW_param, spatial_parallel, debug)
+	GATest = Encoder(GaType, network_param, HW_param, spatial_parallel, debug)
 	GA_Solver.setGAGen(GATest)
 
 	GA_Solver.gaIter()

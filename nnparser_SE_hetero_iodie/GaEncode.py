@@ -122,7 +122,7 @@ class GaEncode:
 		self.NoP2NoCnode = []
 		self.A_W_offset = {}
 		self.setNodeID()
-	
+
 	def getTileDict(self):
 		for dim in self.temporal_param:
 			if dim != "R" and dim != "S":
@@ -799,7 +799,7 @@ class GaEncode:
 
 		out_id = 0		
 		for i in reversed(range(len(ol1_ratio))):
-			if ol1_ratio[i] == 1 and O_correlation[data_flow_dim[i]] == 0:
+			if ol1_ratio[i] != 1 and O_correlation[data_flow_dim[i]] == 1:
 				out_id = i
 				break
 		for i in range(len(ol1_ratio)):
@@ -924,6 +924,659 @@ class GaEncode:
 			self.printOut(for_list, act_wgt_dict, parallel_dim_list, out_dict)
 
 		return for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code
+
+class Encoder:
+	def __init__(self, EncodeType, network_param, spatial_parallel = None, debug=0, architecture_level=3, temporal_level=3, debug_file="./random_test_record.txt"):
+		self.network_param = network_param
+		self.spatial_parallel = spatial_parallel
+		self.architecture_level = architecture_level
+		self.temporal_level = temporal_level
+		self.debug = debug
+		self.debug_file = debug_file
+
+		self.temporal_param = None
+		#self.getTemporalParam()
+
+		self.EncodeType = EncodeType
+		self.tile_num_max = 40
+		self.loop_tile_dict = {}
+		#self.getTileDict()
+		self.tile_order_dict = None
+		self.getTileOrder()
+	
+	def getTileOrder(self):
+		list_t = list(range(self.temporal_level))
+		self.tile_order_dict = [list_t]
+		order_num = 1
+		for i in range(self.temporal_level):
+			order_num *= (i+1)
+		print("order_num: ", order_num)
+		while (len(self.tile_order_dict) < order_num):
+			list_shuffle = copy.deepcopy(list_t)
+			random.shuffle(list_shuffle)
+			if list_shuffle not in self.tile_order_dict:
+				self.tile_order_dict.append(list_shuffle)
+		#print("self.tile_order_dict:", self.tile_order_dict)
+		#exit()
+
+	def getTileDict(self):
+		for dim in self.temporal_param:
+			if dim != "R" and dim != "S":
+				tile_num = 0
+				iter_num = 0
+				self.loop_tile_dict[dim] = []
+				num = self.temporal_param[dim]
+				while (tile_num < self.tile_num_max and iter_num < 500):
+					iter_num += 1
+					tile_list_all = setPartition_1(num, self.temporal_level)
+					tile_list = tile_list_all[0: self.temporal_level]
+					tile_list.sort(reverse = True)
+					if tile_list not in self.loop_tile_dict[dim]:
+						self.loop_tile_dict[dim].append(tile_list)
+						tile_num += 1
+
+	def getTemporalParam(self):
+		self.temporal_param = {}
+		for dim in self.network_param:
+			if dim == "P" or dim == "Q" or dim == "C" or dim == "K" or dim == "R"or dim == "S":
+				self.temporal_param[dim] = self.network_param[dim]
+				for level in range(self.architecture_level):
+					level_name = architecture[level]
+					self.temporal_param[dim] = math.ceil(self.temporal_param[dim] / self.spatial_parallel[level_name][dim])
+	
+	def setSpatialParallel(self, spatialParallel, loop_tile_dict = None):
+		self.spatial_parallel = spatialParallel
+		self.getTemporalParam()
+		if loop_tile_dict == None:
+			self.getTileDict()
+		else:
+			self.loop_tile_dict = copy.deepcopy(loop_tile_dict)
+
+	def getTempPartitonCode(self):
+		#---维度拆分（时间并行）---
+
+		ran1 = random.randint(0,2)
+		if ran1 == 0:
+			# ---- 质因数分解
+			Pset = setPartition_1(self.temporal_param["P"], self.temporal_level)
+			Qset = setPartition_1(self.temporal_param["Q"], self.temporal_level)
+			Cset = setPartition_1(self.temporal_param["C"], self.temporal_level)
+			Kset = setPartition_1(self.temporal_param["K"], self.temporal_level)
+		else:
+			Pset = setPartition(self.temporal_param["P"], self.temporal_level)
+			Qset = setPartition(self.temporal_param["Q"], self.temporal_level)
+			Cset = setPartition(self.temporal_param["C"], self.temporal_level)
+			Kset = setPartition(self.temporal_param["K"], self.temporal_level)
+		
+		partition_code = Pset[0:self.temporal_level-1] + Qset[0:self.temporal_level-1] + Cset[0:self.temporal_level-1] + Kset[0:self.temporal_level-1]
+
+		return partition_code
+	
+	def getTempOrderCode(self):
+		#---维度排序（时间并行）---
+		order_code = []
+
+		for level in range(self.temporal_level):
+			for _ in range(architecture_dim_num[level]):
+				priority = random.random()
+				order_code.append(priority)
+		
+		return order_code
+
+	def getCode_index(self):
+		# -- loop tile
+		partition_code = []
+		PE_parallel_order = random.randint(0,1)
+		chiplet_parallel_order = random.randint(0,1)
+		partition_code.append(PE_parallel_order)
+		partition_code.append(chiplet_parallel_order)
+		tile_order_num = len(self.tile_order_dict)
+		for dim in self.loop_tile_dict:
+			tile_num = len(self.loop_tile_dict[dim])
+			index = random.randint(0,tile_num-1)
+			tile_order_index = random.randint(0,tile_order_num-1)
+			partition_code.append(index)
+			partition_code.append(tile_order_index)
+		
+		# -- loop order
+		order_code = self.getTempOrderCode()
+
+		code = partition_code + order_code
+
+		return code
+
+	def CodeChange_index(self, code):
+		# - spatial for
+		parallel_dict = {0:[], 1:[]}
+		parallel_dim_dict = {0:[], 1:[]}
+		parallel_order = code[0:2]
+		for level in range(self.architecture_level):
+			if level > 0:
+				level_name = architecture[level]
+				for dim in self.spatial_parallel[level_name]:
+					dim_id = dim2id[dim]
+					num = self.spatial_parallel[level_name][dim]
+					if num > 1:
+						parallel_dict[level-1].append(num)
+						parallel_dim_dict[level-1].append(dim_id)
+				#print("parallel_dict[level-1] : ", parallel_dict[level-1])
+				#print("parallel_dim_dict[level-1] : ", parallel_dim_dict[level-1])
+				if len(parallel_dict[level-1]) == 1:
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
+				elif len(parallel_dict[level-1]) == 0:
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
+		
+		for i in range(len(parallel_order)):
+			order = parallel_order[i]
+			if order == 1:
+				# -- reverse
+				parallel_dict[i][0], parallel_dict[i][1] = parallel_dict[i][1], parallel_dict[i][0]
+				parallel_dim_dict[i][0], parallel_dim_dict[i][1] = parallel_dim_dict[i][1], parallel_dim_dict[i][0]
+		
+		parallel_code_c = parallel_dim_dict[0] + parallel_dim_dict[1] + parallel_dict[0] + parallel_dict[1]
+		
+		# - temporal
+		P_tile_index = code[0+2]
+		P_tile_order = code[1+2]
+		Q_tile_index = code[2+2]
+		Q_tile_order = code[3+2]
+		C_tile_index = code[4+2]
+		C_tile_order = code[5+2]
+		K_tile_index = code[6+2]
+		K_tile_order = code[7+2]
+		order_code = code[8+2:]
+		# -- temporal for code
+		for_code = {}
+		for_code[0] = [self.loop_tile_dict["P"][P_tile_index][i] for i in self.tile_order_dict[P_tile_order]]
+		for_code[1] = [self.loop_tile_dict["Q"][Q_tile_index][i] for i in self.tile_order_dict[Q_tile_order]]
+		for_code[2] = [self.loop_tile_dict["C"][C_tile_index][i] for i in self.tile_order_dict[C_tile_order]]
+		for_code[3] = [self.loop_tile_dict["K"][K_tile_index][i] for i in self.tile_order_dict[K_tile_order]]
+
+		partition_code_c = for_code[0] + for_code[1] + for_code[2] + for_code[3]
+
+		# -- loop order
+		loop_order_c = []
+		t_start = 0
+		for t_level in range(self.temporal_level):
+			t_num = architecture_dim_num[t_level]
+			loop_order = copy.deepcopy(order_code[t_start: t_start+t_num])
+			t_start += t_num
+
+			m_sorted = sorted(enumerate(loop_order), key=lambda x:x[1])
+			loop_order_sorted_index = [m[0] for m in m_sorted]
+			loop_order_c += copy.deepcopy(loop_order_sorted_index)
+
+		code_c = parallel_code_c + partition_code_c + loop_order_c
+
+		if self.debug == 1:
+			print("Debug in CodeChange :")
+			print("--- code_change : ", code_c)
+
+		return code_c
+
+	def getCode_num(self):
+
+		pe_parallel_order, chiplet_parallel_order = random.randint(0,1), random.randint(0,1)
+		parallel_order_code = [pe_parallel_order, chiplet_parallel_order]
+
+
+		partition_code = self.getTempPartitonCode()
+		order_code = self.getTempOrderCode()
+
+		code = parallel_order_code + partition_code + order_code
+
+		return code
+	
+	def CodeChange_num(self, code):
+		# - spatial for
+		parallel_dict = {0:[], 1:[]}
+		parallel_dim_dict = {0:[], 1:[]}
+		for level in range(self.architecture_level):
+			if level > 0:
+				level_name = architecture[level]
+				for dim in self.spatial_parallel[level_name]:
+					dim_id = dim2id[dim]
+					num = self.spatial_parallel[level_name][dim]
+					if num > 1:
+						parallel_dict[level-1].append(num)
+						parallel_dim_dict[level-1].append(dim_id)
+				if len(parallel_dict[level-1]) == 1:
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
+				elif len(parallel_dict[level-1]) == 0:
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
+					parallel_dict[level-1].append(1)
+					parallel_dim_dict[level-1].append(0)
+		
+		parallel_order = code[0:2]
+		for i in range(len(parallel_order)):
+			order = parallel_order[i]
+			if order == 1:
+				# -- reverse
+				parallel_dict[i][0], parallel_dict[i][1] = parallel_dict[i][1], parallel_dict[i][0]
+				parallel_dim_dict[i][0], parallel_dim_dict[i][1] = parallel_dim_dict[i][1], parallel_dim_dict[i][0]
+
+		parallel_code_c = parallel_dim_dict[0] + parallel_dim_dict[1] + parallel_dict[0] + parallel_dict[1]
+		
+		# - temporal
+		partition_code = code[0+2:8+2]
+		order_code = code[8+2:]
+		# -- temporal for code
+		for_code = {}
+		P_rest = self.temporal_param["P"]
+		Q_rest = self.temporal_param["Q"]
+		C_rest = self.temporal_param["C"]
+		K_rest = self.temporal_param["K"]
+		for t_level in range(self.temporal_level-1):
+			for_p = partition_code[t_level]
+			for_q = partition_code[(self.temporal_level-1)*1 + t_level]
+			for_c = partition_code[(self.temporal_level-1)*2 + t_level]
+			for_k = partition_code[(self.temporal_level-1)*3 + t_level]
+			for_code[0].append(for_p)
+			for_code[1].append(for_q)
+			for_code[2].append(for_c)
+			for_code[3].append(for_k)
+
+			P_rest /= for_p
+			Q_rest /= for_q
+			C_rest /= for_c
+			K_rest /= for_k
+		for_code[0].append(math.ceil(P_rest))
+		for_code[1].append(math.ceil(Q_rest))
+		for_code[2].append(math.ceil(C_rest))
+		for_code[3].append(math.ceil(K_rest))
+		
+		partition_code_c = for_code[0] + for_code[1] + for_code[2] + for_code[3]
+
+		# -- loop order
+		loop_order_c = []
+		t_start = 0
+		for t_level in range(self.temporal_level):
+			t_num = architecture_dim_num[t_level]
+			loop_order = copy.deepcopy(order_code[t_start: t_start+t_num])
+			t_start += t_num
+
+			m_sorted = sorted(enumerate(loop_order), key=lambda x:x[1])
+			loop_order_sorted_index = [m[0] for m in m_sorted]
+			loop_order_c += copy.deepcopy(loop_order_sorted_index)
+		
+		code_c = parallel_code_c + partition_code_c + loop_order_c
+
+		return code_c
+
+	def getCode(self):
+		if self.EncodeType == "num":
+			code = self.getCode_num()
+		elif self.EncodeType == "index":
+			code = self.getCode_index()
+		else:
+			print("Error EncodeType({}), (num,index) are provided".format(self.EncodeType))
+			exit()
+		return code
+	
+	def codeChange(self, code):
+		if self.EncodeType == "num":
+			code_c = self.CodeChange_num(code)
+		elif self.EncodeType == "index":
+			code_c = self.CodeChange_index(code)
+		else:
+			print("Error EncodeType({}), (num,index) are provided".format(self.EncodeType))
+			exit()
+		return code_c
+
+class Decoder:
+	def __init__(self, temporal_level, HW_param, nn_param, temporal_order_mergy=0):
+		self.temporal_level = temporal_level
+		self.temporal_order_mergy = temporal_order_mergy 	# 多级的order是否要合并考虑先后顺序，还是按各层级各自考虑
+
+		self.HW_param = HW_param
+		self.PE_param = HW_param["PE"]
+		self.PEs = self.PE_param[0] * self.PE_param[1]
+		self.chiplet_param = HW_param["Chiplet"]
+		self.chiplets = self.chiplet_param[0] * self.chiplet_param[1]
+		self.R = nn_param["R"]
+		self.S = nn_param["S"]
+
+		self.NoC_node_offset = []
+		self.NoP2NoCnode = []
+		self.A_W_offset = {}
+		self.setNodeID()
+	
+	def setNodeID(self):
+		Chiplet_lenth = self.chiplet_param[0]
+		Chiplet_height = self.chiplet_param[1]
+		PE_lenth = self.PE_param[0]
+		PE_height = self.PE_param[1]
+		assert(Chiplet_lenth*Chiplet_height == self.chiplets)
+		assert(PE_lenth*PE_height == self.PEs)
+
+		if PE_height == 2:
+			self.A_W_offset["o"] = 0
+			self.A_W_offset["a"] = PE_lenth + 1
+			self.A_W_offset["w"] = PE_lenth + 1
+			self.A_W_offset["noc-chiplet"] = 0
+		else:
+			assert(PE_height > 1)
+			self.A_W_offset["o"] = 0
+			self.A_W_offset["a"] = PE_lenth + 1
+			self.A_W_offset["w"] = (PE_lenth + 1) * 2
+			self.A_W_offset["noc-chiplet"] = 0
+		PE_num = (PE_lenth + 1) * PE_height
+
+		num = 0
+		for i in range(self.chiplets):
+			if i % Chiplet_lenth == 0: 
+				self.NoP2NoCnode.append(0)
+			num += PE_num
+			self.NoC_node_offset.append(num)
+			self.NoP2NoCnode.append(num)
+
+			if (i+1) % Chiplet_lenth == 0:
+				num += PE_num
+
+	# 获得并行下的节点分组情况
+	def setmappingSet(self, height, lenth, set1, set2, ol2_node = A_W_offset['o']):
+		num = height * lenth
+		assert(num >= set1*set2)
+		list1 = {}
+		list2 = {}
+		node_list = []
+		ID = 0
+		for i in range(num):
+			if i % lenth == ol2_node:
+				ID += 1
+			node_list.append(ID)
+			ID += 1
+		for i in range(set1*set2):
+			set1_id = i // set2
+			if set1_id not in list1:
+				list1[set1_id] = []
+			list1[set1_id].append(node_list[i])
+
+		for i in range(set1*set2):
+			set2_id = i // set1
+			if set2_id not in list2:
+				list2[set2_id] = []
+			list2[set2_id].append(list1[i % set1][set2_id])
+		return list1, list2
+
+	def getActWgtSet(self, correlate_p1, correlate_p2, p1_set, p2_set):
+		dict = {}
+		if correlate_p1 == 0 and correlate_p2 == 0:
+			dict[0] = []
+			for set_id_p1 in p1_set:
+				dict[0] += p1_set[set_id_p1]
+		elif correlate_p1 == 1 and correlate_p2 == 0:
+			dict = p1_set
+		elif correlate_p1 == 0 and correlate_p2 == 1:
+			dict = p2_set
+		else:
+			node_num = 0
+			for set_id_p1 in p1_set:
+				for node_id in p1_set[set_id_p1]:
+					dict[node_num] = [node_id]
+					node_num += 1
+		return dict
+	
+	# 获得计算核心对于act与wgt的共享情况
+	# p1_num, p2_num分别是并行维度1和2的数目
+	def getPEDistribution(self, flag, height, lenth, act_correlate, wgt_correlate, parallel_num):
+		act_PE_dict = {}
+		wgt_PE_dict = {}
+		act_set_type = "0"
+		wgt_set_type = "0"
+
+		#---act + wgt send节点列表---
+		if flag == 0:
+			act_PE_dict["send"] = {0:[A_W_offset["a"]]}
+			wgt_PE_dict["send"] = {0:[A_W_offset["w"]]}
+		else:
+			act_PE_dict["send"] = {0:[0]}
+			wgt_PE_dict["send"] = {0:[0]}
+
+		#---获得p1，p2的列表
+		if len(parallel_num) == 0:
+			p1_num = 1
+			p2_num = 1
+		elif len(parallel_num) == 1:
+			p1_num = parallel_num[0]
+			p2_num = 1
+		else:
+			p1_num = parallel_num[0]
+			p2_num = parallel_num[1]
+		p1_dict, p2_dict = self.setmappingSet(height, lenth, p1_num, p2_num)
+		#---act recv节点列表---
+		if len(act_correlate) == 0:
+			act_p1 = 0
+			act_p2 = 0
+			wgt_p1 = 0
+			wgt_p2 = 0
+		elif len(act_correlate) == 1:
+			act_p1 = act_correlate[0]
+			act_p2 = 0
+			wgt_p1 = wgt_correlate[0]
+			wgt_p2 = 0
+		else:
+			act_p1 = act_correlate[0]
+			act_p2 = act_correlate[1]
+			wgt_p1 = wgt_correlate[0]
+			wgt_p2 = wgt_correlate[1]
+
+		act_PE_dict["recv"] = self.getActWgtSet(act_p1, act_p2, p1_dict, p2_dict)
+		wgt_PE_dict["recv"] = self.getActWgtSet(wgt_p1, wgt_p2, p1_dict, p2_dict)
+
+		act_set_num = len(act_PE_dict["recv"])
+		wgt_set_num = len(wgt_PE_dict["recv"])
+		
+		act_set_type = "set_"+str(act_set_num)+"e_"+str(int(height * lenth / act_set_num))
+		wgt_set_type = "set_"+str(wgt_set_num)+"e_"+str(int(height * lenth / wgt_set_num))
+		return act_PE_dict, wgt_PE_dict, act_set_type, wgt_set_type
+
+	# 给dict的每个元素加上固定偏移量num
+	# dict = {"send":{0:[],...},"recv":{0:[]...}}
+	def dictAddInt(self, dict, num):
+		send = dict["send"]
+		recv = dict["recv"]
+		for i in send:
+			for x in range(len(send[i])):
+				send[i][x] += num
+
+		for i in recv:
+			for x in range(len(recv[i])):
+				recv[i][x] +=  num
+		dict1 = copy.deepcopy({"send":send,"recv":recv})
+		return dict1
+
+	# 转换为chiplet
+	def dictChipletChange(self, dict, flag1, flag2):
+		send = dict["send"]
+		recv = dict["recv"]
+		for i in send:
+			for x in range(len(send[i])):
+				num = send[i][x]
+				send[i][x] = self.NoP2NoCnode[num] + self.A_W_offset[flag1]
+		for i in recv:
+			for x in range(len(recv[i])):
+				num = recv[i][x]
+				recv[i][x] = self.NoP2NoCnode[num] + self.A_W_offset[flag2]
+		dict1 = copy.deepcopy({"send":send,"recv":recv})
+		return dict1
+
+	# type = 0 : NoC ; type = 1 : NoP
+	def getPEExtent(self, dict, type=0, flag1 = 0, flag2 = 0):
+		list = []
+		#list.append(dict)
+		if type == 0:
+			for i in self.NoC_node_offset:
+				dict1 = copy.deepcopy(dict)
+				dict1 = self.dictAddInt(dict1, i)		
+				list.append(dict1)
+		else:
+			dict1 = copy.deepcopy(dict)
+			dict1 = self.dictChipletChange(dict1,flag1,flag2)
+			return dict1
+		return list
+
+	# 获得输出特征图的数据节点通信关系
+	def getOutputDict(self, runtimeCoreNum, runtimeChipNum):
+		rd_out_PE_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.PE_param[0], self.PE_param[1], [1,1], [1,1], [runtimeCoreNum, 1])
+		wr_out_PE_dict_temp = {"send":rd_out_PE_dict_temp["recv"],"recv":{0:[0]}}
+		rd_out_Chiplet_dict_temp,a1,b1,c1 = self.getPEDistribution(1, self.chiplet_param[0], self.chiplet_param[1], [1,1], [1,1], [runtimeChipNum, 1])
+		wr_out_Chiplet_dict_temp = {"send":rd_out_Chiplet_dict_temp["recv"],"recv":{0:[0]}}
+
+		#if self.PEs == 16:
+		#	rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
+		#	wr_out_PE_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
+		#elif self.PEs == 4:
+		#	rd_out_PE_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
+		#	wr_out_PE_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
+		#if self.Chiplets == 16:
+		#	rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_16_e_1[0]}
+		#	wr_out_Chiplet_dict_temp = {"send":set_16_e_1[0],"recv":{0:[0]}}
+		#elif self.Chiplets == 4:
+		#	rd_out_Chiplet_dict_temp = {"send":{0:[0]},"recv":set_4_e_1[0]}
+		#	wr_out_Chiplet_dict_temp = {"send":set_4_e_1[0],"recv":{0:[0]}}
+		rd_out_PE_dict = self.getPEExtent(rd_out_PE_dict_temp)
+		wr_out_PE_dict = self.getPEExtent(wr_out_PE_dict_temp)
+		rd_out_Chiplet_dict = self.getPEExtent(rd_out_Chiplet_dict_temp,1,"o","o")
+		wr_out_Chiplet_dict = self.getPEExtent(wr_out_Chiplet_dict_temp,1,"o","o")
+		return rd_out_PE_dict, wr_out_PE_dict, rd_out_Chiplet_dict, wr_out_Chiplet_dict
+
+	def decode(self, code):
+		# code --> for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list
+		spatial_parallel_dim = code[0:4]							# --> 0:P, 1:Q, 2:C, 3:K
+		spatial_parallel_num = code[4:8]
+		temporal_parallel_num = {}
+		temporal_parallel_num[0] = code[8:(8+1*self.temporal_level)]
+		temporal_parallel_num[1] = code[(8+1*self.temporal_level):(8+2*self.temporal_level)]
+		temporal_parallel_num[2] = code[(8+2*self.temporal_level):(8+3*self.temporal_level)]
+		temporal_parallel_num[3] = code[(8+3*self.temporal_level):(8+4*self.temporal_level)]
+		temporal_parallel_order = code[(8+4*self.temporal_level):]	# --> 6, 4, ...
+
+		# --> temporal parallel decode
+		dataflow = []	# --> ['P1', 'Q1', 'P2'..., 'top']
+		ol1_ratio = []
+		al1_ratio = []
+		wl1_ratio = []
+		all_param = []
+		out_final = []
+		out_correlation_final = 0
+		dim_t_list = [1,1,1,1,1,1]
+		if self.temporal_order_mergy:
+			# todo
+			pass
+		else:
+			for i in range(self.temporal_level):
+				if i == 0:
+					order = temporal_parallel_order[0:6]
+				else:
+					order = temporal_parallel_order[2+i*4 : 6+i*4]
+				
+				for dim_id in order:
+					t_index = dim_t_list[dim_id]
+					dim = dim_list[dim_id] + str(t_index)
+					if dim_id == 4:
+						num = self.R
+					elif dim_id == 5:
+						num = self.S
+					else:
+						num = temporal_parallel_num[dim_id][t_index-1]
+					if num == 1:
+						pass
+					else:
+						dataflow.append(dim)
+						all_param.append(num)
+						if O_correlation[dim_id]:
+							ol1_ratio.append(num)
+							out_correlation_final = len(dataflow)
+						else:
+							ol1_ratio.append(1)
+						if A_correlation[dim_id]:
+							al1_ratio.append(num)
+						else:
+							al1_ratio.append(1)
+						if W_correlation[dim_id]:
+							wl1_ratio.append(num)
+						else:
+							wl1_ratio.append(1) 
+					
+					dim_t_list[dim_id] += 1
+		
+		for i in range(len(ol1_ratio)):
+			if i < out_correlation_final:
+				out_final.append(0)
+			else:
+				out_final.append(1)
+
+		dataflow.append("top")
+		ol1_ratio.append(1)
+		al1_ratio.append(1)
+		wl1_ratio.append(1)
+		all_param.append(1)
+		out_final.append(1)
+		
+		temporal_for_list = {}
+		temporal_for_list[0] = dataflow
+		temporal_for_list[1] = ol1_ratio
+		temporal_for_list[2] = al1_ratio
+		temporal_for_list[3] = wl1_ratio
+		temporal_for_list[4] = all_param
+		temporal_for_list[5] = out_final
+		temporal_for_list[6] = None
+		temporal_for_list[7] = None
+		temporal_for_list[8] = None
+		temporal_for_list[9] = None
+
+		partition_list = {"P": temporal_parallel_num[0], "Q": temporal_parallel_num[1], "C": temporal_parallel_num[2], "K": temporal_parallel_num[3]}
+		for i in range(3-self.temporal_level):
+			partition_list["P"].append(1)
+			partition_list["Q"].append(1)
+			partition_list["C"].append(1)
+			partition_list["K"].append(1)
+		# --> spatial parallel decode
+		parallel_dim_list = {0:[1,1,1,1],1:[1,1,1,1]}
+		act_wgt_dict = {}
+		act_correlate = {"chiplet":[], "PE":[]}
+		wgt_correlate = {"chiplet":[], "PE":[]}
+		parallel_set_dict = {"chiplet":[], "PE":[]}
+		for i, dim_id in enumerate(spatial_parallel_dim):
+			dim_num = spatial_parallel_num[i]
+			if i < 2:
+				archi = "PE"
+				parallel_dim_list[0][dim_id] *= dim_num
+			else:
+				archi = "chiplet"
+				parallel_dim_list[1][dim_id] *= dim_num
+			
+			if dim_num == 1:
+				pass
+			else:
+				act_correlate[archi].append(A_correlation[dim_id])
+				wgt_correlate[archi].append(W_correlation[dim_id])
+				parallel_set_dict[archi].append(dim_num)
+		
+		act_PE_dict_temp, wgt_PE_dict_temp, if_act_share_PE, if_wgt_share_PE = self.getPEDistribution(0, self.PE_param[0], self.PE_param[1], act_correlate["PE"],wgt_correlate["PE"], parallel_set_dict["PE"])
+		act_Chiplet_dict_temp, wgt_Chiplet_dict_temp, if_act_share_Chiplet, if_wgt_share_Chiplet = self.getPEDistribution(1, self.chiplet_param[0], self.chiplet_param[1], act_correlate["chiplet"],wgt_correlate["chiplet"], parallel_set_dict["chiplet"])
+		act_wgt_dict["act_core"] = self.getPEExtent(act_PE_dict_temp)
+		act_wgt_dict["wgt_core"] = self.getPEExtent(wgt_PE_dict_temp)
+		act_wgt_dict["act_chiplet"] = self.getPEExtent(act_Chiplet_dict_temp,1,"o","a")
+		act_wgt_dict["wgt_chiplet"] = self.getPEExtent(wgt_Chiplet_dict_temp,1,"o","w")
+
+		out_dict = {}
+		runtimeCoreNum = 1
+		runtimeChipNum = 1
+		for mm in range(4):
+			runtimeCoreNum *= parallel_dim_list[0][mm]
+			runtimeChipNum *= parallel_dim_list[1][mm]
+		out_dict["rd_core"], out_dict["wr_core"], out_dict["rd_chip"], out_dict["wr_chip"] = self.getOutputDict(runtimeCoreNum, runtimeChipNum)
+
+		return temporal_for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code
+
 
 # -- 之前那一套，包含了空间并行度探索的编码方案
 class RandomEncode:

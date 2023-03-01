@@ -1,13 +1,16 @@
 python3 test_intralayer.py \
 	--architecture ours \
-	--app_name vit \
+	--app_name resnet18_t2 \
 	--alg GA \
-	--encode_type num \
+	--encode_type index \
 	--dataflow ours \
 	--chiplet_num_max 16 \
 	--chiplet_num_min 1 \
-	--chiplet_parallel  K_stable \
+	--chiplet_parallel  P_stable \
 	--PE_parallel All \
-	--save_all_records 0 \
-	--layer_fuse_tag 1 \
-	--optimization_objective edp
+	--save_all_records 1 \
+	--layer_fuse_tag 0 \
+	--optimization_objective edp \
+	--temporal_level 3
+
+	

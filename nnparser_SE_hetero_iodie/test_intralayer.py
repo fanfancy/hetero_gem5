@@ -160,7 +160,11 @@ def getLayerParam(app_name):
 	layer_name_dict = {}
 	layer_num -= 1
 	for i, layer in layer_dict.items():
-		if i == 0:
+		if i == 0 and i == layer_num:
+			partition_tag = 0
+			weight_behind = 0
+			weight_above = 0
+		elif i == 0:
 			partition_tag = 0
 			weight_behind = layer_dict[i+1]["w_num"]
 			weight_above = 0
@@ -283,7 +287,7 @@ def getLayerParamForMulti(layer_dict, mem_size_dict):
 			layer_dict[layer_name]["i_act_enough"] = 1
 		# --- head layer
 		par_useful = 1
-		if partition_tag <= 1 and oact_num > O_mem:
+		if partition_tag <= 1 and oact_num > O_mem and len(layer_dict) > 1:
 			weight_enough = ( (w_num + w_num_behind) <= W_mem )
 			P_par = 1
 			Q_par = 1
@@ -531,7 +535,7 @@ def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaTy
 	for layer_name in layer_dict:
 		# ---输出文件
 		if save_all_records == 1:
-			record_filename = record_dir + "/" + layer_name + "_" + multi_layer_tag + ".xls"
+			record_filename = record_dir + "/" + layer_name + "_" + multi_layer_tag + ".xlsx"
 		else:
 			record_filename = None
 
@@ -577,7 +581,7 @@ def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaTy
 	f.close()
 	randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, result_dir)
 
-def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
+def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
 	edp_res_min_dict = {"mid":{} , "head":{}, "tail":{}}
 	energy_min_dict = {"mid":{} , "head":{}, "tail":{}}
@@ -611,7 +615,7 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 		# ---输出文件
 		print("-------START LAYER : {} ----------".format(layer_name))
 		if save_all_records == 1:
-			record_filename = record_dir + "/" + layer_name + "_" + multi_layer_tag + ".xls"
+			record_filename = record_dir + "/" + layer_name + "_" + multi_layer_tag + ".xlsx"
 		else:
 			record_filename = None
 		
@@ -629,9 +633,11 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 			par_num_detail_dict[layer_name] = [1,1]
 		par_num_dict[layer_name] = par_num
 
-		GAGen = GaEncode(GaType, network_param, HW_param, debug=0)
+		GAGen = Encoder(GaType, network_param, temporal_level=temporal_level, debug=0)
+		GADec = Decoder(temporal_level, HW_param, network_param)
+		#GAGen = GaEncode(GaType, network_param, HW_param, debug=0)
 		GA_Solver = GASolver(num_gen, num_iter, memory_param, NoC_param, if_multicast, record_filename, optimization_objective, i_act_enough,weight_enough, par_num, multi_layer_tag, io_die_tag = io_die_tag)
-		GA_Solver.setGAGen(GAGen)
+		GA_Solver.setGAGen(GAGen, GADec)
 
 		# --- Initial: 初始进行硬件并行度方案的择优
 		fitness_sp_dict = {}
@@ -830,10 +836,12 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 	for row, data in enumerate(excel_data):
 		for col, column_data in enumerate(data):
 			sheet.cell(row+2, col+1, column_data)
-	filename = result_dir + "/final_result_record.xls"
+	filename = result_dir + "/final_result_record.xlsx"
 	workbook.save(filename)
 
-def run_test_intralayer(app_name, chiplet_num, architecture="ours", alg="GA", encode_type="index", save_all_records=0):
+	return edp_res_min_dict, energy_min_dict, delay_min_dict, code_min_dict
+
+def run_test_intralayer(app_name, chiplet_num, temporal_level, architecture="ours", alg="GA", encode_type="index", save_all_records=0):
 	abs_path = os.path.dirname(os.path.abspath(__file__))
 	chiplet_parallel_list = ["P_stable", "PK_stable", "K_stable"]
 	PE_parallel = "All"
@@ -908,9 +916,9 @@ def run_test_intralayer(app_name, chiplet_num, architecture="ours", alg="GA", en
 		iterTime = num_gen * num_iter
 		
 		if alg == "GA":
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headFuse")
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailFuse")
+			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, temporal_level, NoC_param, all_sim_node_num)
+			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, temporal_level, NoC_param, all_sim_node_num, multi_layer_tag = "headFuse")
+			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, temporal_level, NoC_param, all_sim_node_num, multi_layer_tag = "tailFuse")
 		elif alg == "random":
 			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
 			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headFuse")
@@ -935,6 +943,7 @@ if __name__ == '__main__':
 	parser.add_argument('--save_all_records', type=int, default=0, help='save all record')
 	parser.add_argument('--layer_fuse_tag', type=int, default=1, help='layer_fuse_tag')
 	parser.add_argument('--optimization_objective', type=str, default="edp", help='optimization_objective')
+	parser.add_argument('--temporal_level', type=int, default=3, help='temporal level')
 	opt = parser.parse_args()
 
 	abs_path = os.path.dirname(os.path.abspath(__file__))
@@ -951,6 +960,7 @@ if __name__ == '__main__':
 	save_all_records = opt.save_all_records
 	layer_fuse_tag = opt.layer_fuse_tag
 	optimization_objective = opt.optimization_objective
+	temporal_level = opt.temporal_level
 
 	record_outdir = os.path.join(abs_path, "output_record")
 	os.makedirs(record_outdir, exist_ok=True)
@@ -958,8 +968,26 @@ if __name__ == '__main__':
 	os.makedirs(record_outdir, exist_ok=True)
 	record_outdir = os.path.join(record_outdir, chiplet_parallel + "_and_" + PE_parallel)
 	os.makedirs(record_outdir, exist_ok=True)
-	record_outdir = os.path.join(record_outdir, alg + "_" + encode_type)
+	record_outdir = os.path.join(record_outdir, alg + "_" + encode_type + "_" + optimization_objective)
 	os.makedirs(record_outdir, exist_ok=True)
+
+	# --- 最终结果记录
+	debug_final = 1
+	if debug_final:
+		file_debug_final = app_name + "_result_record.txt"
+		if os.path.exists(file_debug_final) == False:
+			f_debug_final = open(file_debug_final, 'w')
+		else:
+			f_debug_final = open(file_debug_final, 'a')
+		print("{:-^120}".format(" SETTING "), file = f_debug_final)
+		print("architecture={}".format(architecture), file = f_debug_final)
+		print("alg={}".format(alg), file = f_debug_final)
+		print("encode_type={}".format(encode_type), file = f_debug_final)
+		print("chiplet_num=[{} ~ {}]".format(chiplet_num_max, chiplet_num_min), file = f_debug_final)
+		print("chiplet_parallel={}, PE_parallel={}".format(chiplet_parallel, PE_parallel), file = f_debug_final)
+		print("temporal_level={}".format(temporal_level), file = f_debug_final)
+		print("optimization_objective={}".format(optimization_objective), file = f_debug_final)
+		print("{:-^120}".format(" RESULT "), file = f_debug_final)
 	
 	for i in range(chiplet_num_min-1, chiplet_num_max):
 		chiplet_num = i+1
@@ -971,7 +999,7 @@ if __name__ == '__main__':
 		os.makedirs(result_outdir, exist_ok=True)
 		result_outdir = os.path.join(result_outdir, "chiplet_num_"+str(chiplet_num))
 		os.makedirs(result_outdir, exist_ok=True)
-		result_outdir = os.path.join(result_outdir, alg + "_" + encode_type)
+		result_outdir = os.path.join(result_outdir, alg + "_" + encode_type +"_" +  optimization_objective)
 		os.makedirs(result_outdir, exist_ok=True)
 		result_outdir = os.path.join(result_outdir, chiplet_parallel + "_and_" + PE_parallel)
 		os.makedirs(result_outdir, exist_ok=True)
@@ -982,7 +1010,7 @@ if __name__ == '__main__':
 		memory_param_nnbaton = {"OL1":1.5,"OL2":1.5*16,"AL1":800/1024,"AL2":64,"WL1":18,"WL2":18*16} 	# from nnbaton
 		#memory_param_ours = {"OL1":8 ,"OL2":128,"AL1":16,"AL2":256,"WL1":64,"WL2":1024}		# from granularity exploration
 		memory_param_ours = {"OL1":3 ,"OL2":48,"AL1":8,"AL2":48,"WL1":32,"WL2":32*16}		# from simba
-		HW_param_simba = {"Chiplet":[6,6],"PE":[4,4],"intra_PE":{"C":8,"K":8}}       	# from granularity exploration
+		HW_param_simba = {"Chiplet":[4,4],"PE":[4,4],"intra_PE":{"C":8,"K":8}}       	# from granularity exploration
 		memory_param_simba = {"OL1":3 ,"OL2":48,"AL1":8,"AL2":48,"WL1":32,"WL2":32}		# simba mem
 		noc_topo_ours = 'Ring'
 		noc_topo_nnbaton = 'Bus'
@@ -1012,7 +1040,7 @@ if __name__ == '__main__':
 			exit()
 
 		if chiplet_num != None:
-			HW_param["Chiplet"] = [int(chiplet_num), 1]
+			HW_param["Chiplet"] = [1, int(chiplet_num)]
 
 		NoC_w = HW_param["PE"][1] + 1
 		NOC_NODE_NUM = NoC_w * HW_param["PE"][0]
@@ -1059,10 +1087,10 @@ if __name__ == '__main__':
 		iterTime = num_gen * num_iter
 
 		if alg == "GA":
-			gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
+			edp_res_min_dict, energy_min_dict, delay_min_dict, code_min_dict = gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
 			if len(head_layer_dict) > 0:
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "headFuse", io_die_tag=io_die_tag)
-				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "tailFuse", io_die_tag=io_die_tag)
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "headFuse", io_die_tag=io_die_tag)
+				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "tailFuse", io_die_tag=io_die_tag)
 			#gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
 		elif alg == "random":
 			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
@@ -1071,3 +1099,11 @@ if __name__ == '__main__':
 				randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailFuse")
 		else:
 			print("Error alg {}, not supported!".format(alg))
+		
+		if debug_final:
+			print("chiplet_num={} ----------".format(chiplet_num), file = f_debug_final)
+			print("edp_min={}".format(edp_res_min_dict["mid"]), file = f_debug_final)
+			print("energy_min={}".format(energy_min_dict["mid"]), file = f_debug_final)
+			print("delay_min={}".format(delay_min_dict["mid"]), file = f_debug_final)
+			print("code_min={}".format(code_min_dict["mid"]), file = f_debug_final)
+		
