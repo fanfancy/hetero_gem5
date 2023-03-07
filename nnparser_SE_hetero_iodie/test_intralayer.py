@@ -15,55 +15,69 @@ from basicParam_noc_nop import *
 from GaEncode import *
 from gaTest_noc_nop import *
 
-def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num , if_multicast, excel_filename, i_act_enough, flag = "ours", io_die_tag = 1):
+def randomTest(CodeGen, Parser, iterTimes, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num , if_multicast, workload_name, excel_filename, i_act_enough, weight_enough, fuse_par_num, fuse_tag, objective="edp", flag = "ours", io_die_tag = 1):
 
 	degrade_ratio_list = []
 	excel_datas = []
 
-	edp_res_min = 0
-	energy_min = 0
-	delay_min = 0
-	fitness_min_ran = 0
+	best_fitness = 0
 	fitness_list = []
-	fitness_min_ran_list = []
+	best_fitness_list = []
+	best_sample = {}
 
 	energy_list_d = {}
 	latency_list_d = {}
 	sp_id = 0
+
+	iters_per_sp = math.ceil(iterTimes / len(spatial_parallel_list))
 	for spatial_parallel in spatial_parallel_list:
-		energy_list = []
-		latency_list = []
-		GAGen.setSpatialParallel(spatial_parallel)
+		sp_energy_list = []
+		sp_latency_list = []
+		CodeGen.setSpatialParallel(spatial_parallel)
 		print("SpatialParallel is {} ----------".format(spatial_parallel))
-		for i in range(iterTime):
-			print("iterTime----({}, {})".format(i, iterTime))
-			#---生成个代---
-			GaCode = GAGen.getGaCode()
-			for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = GAGen.GaGetChild(GaCode)
-			#---计算适应度---
-			delay, degrade_ratio, degrade_ratio_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
-				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, GAGen.network_param, GAGen.HW_param, memory_param, NoC_param, if_multicast, i_act_enough, flag = flag, io_die_tag = io_die_tag)
+		for i in range(iters_per_sp):
+			print("iterTime----({}, {}, {})".format(i, iters_per_sp, iterTimes))
+			# --- 生成个代，与个体解码 --- #
+			code = CodeGen.getGaCode()
+			code_c = CodeGen.codeChange(code)
+			for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, code = Parser.decode(code_c)
+			# --- 计算适应度 --- #
+			delay, degrade_ratio, degrade_ratio_dict, flit_needed_dict, compuation_cycles, runtime_list,cp_list,utilization_ratio_list, energy_dram_list, energy_L2_list, energy_L1_list, energy_die2die, energy_MAC, energy_psum_list, delay_psum, worstlinks = \
+				calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, CodeGen.network_param, CodeGen.HW_param, memory_param, NoC_param, if_multicast, i_act_enough, 0, weight_enough, fuse_par_num, fuse_tag, flag = flag, io_die_tag = io_die_tag)
 			
 			#---比较适应度，并记录相关变量---
 			e_mem = sum(energy_dram_list)+sum(energy_L2_list)+sum(energy_L1_list)
 			e_sum = e_mem + energy_die2die+energy_MAC + energy_psum_list[2]
-			edp_res = (delay + delay_psum) * e_sum  /(PE_freq * freq_1G) # pJ*s
-			fitness = edp_res
-			energy_list.append(e_sum)
-			latency_list.append(delay)
-			if fitness_min_ran == 0 or fitness < fitness_min_ran:
-				fitness_min_ran = fitness
-				for_list_min = copy.deepcopy(for_list)
-				act_wgt_dict_min = copy.deepcopy(act_wgt_dict)
-				out_dict_min = copy.deepcopy(out_dict)
-				parallel_dim_list_min = copy.deepcopy(parallel_dim_list)
-				partition_list_min = copy.deepcopy(partition_list)
-				compuation_cycles_min = compuation_cycles
-				degrade_ratio_min = degrade_ratio
-				degrade_ratio_dict_min = degrade_ratio_dict
-				code_min = code
+			edp = (delay + delay_psum) * e_sum  /(PE_freq * freq_1G) # pJ*s
+			sp_energy_list.append(e_sum)
+			sp_latency_list.append(delay + delay_psum)
+
+			if objective == "edp":
+				fitness = edp
+			elif objective == "energy":
+				fitness = e_sum
+			elif objective == "latency":
+				fitness = delay + delay_psum
+			if best_fitness == 0 or fitness < best_fitness:
+				best_fitness = fitness
+				best_compuation_cycles = compuation_cycles
+				best_degrade_ratio = degrade_ratio
+				best_degrade_ratio_dict = copy.deepcopy(degrade_ratio_dict)
+				best_code = code
+				best_sample["for_list"] 			= copy.deepcopy(for_list)
+				best_sample["act_wgt_dict"] 		= copy.deepcopy(act_wgt_dict)
+				best_sample["out_dict"] 			= copy.deepcopy(out_dict)
+				best_sample["parallel_dim_list"] 	= copy.deepcopy(parallel_dim_list)
+				best_sample["partition_list"] 		= copy.deepcopy(partition_list)
+				best_sample["fitness"] 				= fitness
+				best_sample["edp"] 					= edp
+				best_sample["energy"] 				= e_sum
+				best_sample["delay"] 				= delay + delay_psum
+				best_sample["compuation_cycles"] 	= compuation_cycles
+				best_sample["degrade_ratio"] 		= degrade_ratio
+				best_sample["code"] 				= code
 			fitness_list.append(fitness)
-			fitness_min_ran_list.append(fitness_min_ran)
+			best_fitness_list.append(best_fitness)
 			degrade_ratio_list.append (degrade_ratio_dict)
 
 			excel_datas.append([str(spatial_parallel), i, fitness, degrade_ratio, str(for_list[0]), \
@@ -79,21 +93,17 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 				utilization_ratio_list[0], utilization_ratio_list[1], utilization_ratio_list[2],utilization_ratio_list[3], utilization_ratio_list[4], utilization_ratio_list[5], \
 				energy_dram_list[0], energy_dram_list[1], energy_dram_list[2], energy_dram_list[3], \
 				energy_L2_list[0], energy_L2_list[1], energy_L2_list[2], energy_L2_list[3], \
-				energy_L1_list[0], energy_L1_list[1], energy_psum_list[0], energy_psum_list[1], \
-				sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, energy_psum_list[2], e_mem, e_sum , delay, edp_res, str(worstlinks), str(code) ])
+				energy_L1_list[0], energy_L1_list[1], energy_L1_list[2], energy_psum_list[0], energy_psum_list[1], \
+				sum(energy_dram_list), sum(energy_L2_list), sum(energy_L1_list), energy_die2die, energy_MAC, energy_psum_list[2], e_mem, e_sum , delay, edp, str(worstlinks), str(code) ])
 			
-			print("fitness_min = {}, compuation_cycles = {}, degrade_ratio = {}".format(fitness_min_ran, compuation_cycles_min, str(degrade_ratio_dict_min)))
-			if edp_res_min == 0 or edp_res < edp_res_min:
-				edp_res_min = edp_res
-				energy_min = e_sum
-				delay_min = delay
-		
-		energy_list_d[sp_id] = energy_list
-		latency_list_d[sp_id] = latency_list
+			print("fitness_min = {}, compuation_cycles = {}, degrade_ratio = {}".format(best_fitness, best_compuation_cycles, str(best_degrade_ratio_dict)))
+			
+		energy_list_d[sp_id] = sp_energy_list
+		latency_list_d[sp_id] = sp_latency_list
 		sp_id += 1
 	#---生成task file
-	#createTaskFile(for_list_min, act_wgt_dict_min, out_dict_min, parallel_dim_list_min, partition_list_min,GAGen.network_param, GAGen.HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast)
-	
+	createTaskFile(workload_name, best_sample["for_list"], best_sample["act_wgt_dict"], best_sample["out_dict"], best_sample["parallel_dim_list"], best_sample["partition_list"],CodeGen.network_param, CodeGen.HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast)
+
 	#---记录方案的性能指标
 	if excel_filename != None:
 		workbook = openpyxl.Workbook()
@@ -107,7 +117,7 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 			"ol1_util","al1_util","wl1_util","ol2_util","al2_util","wl2_util", \
 			"e_wr_opt_dram", "e_rd_opt_dram", "e_rd_wgt_dram", "e_rd_act_dram", \
 			"e_wr_opt_L2", "e_rd_opt_L2", "e_rd_wgt_L2", "e_rd_act_L2", \
-			"e_rd_wgt_L1", "e_rd_act_L1", "e_psum_d2d", "e_psum_dram", \
+			"e_rd_wgt_L1", "e_rd_act_L1", "e_rd_opt_L1", "e_psum_d2d", "e_psum_dram", \
 			"e_dram", "e_L2", "e_L1", "e_die2die", "e_MAC", "e_psum","e_mem",  "e_sum", "delay", "EDP pJ*s", "worstlinks", "code"]
 		for col,column in enumerate(column_tite):
 			sheet.cell(1, col+1, column)
@@ -117,7 +127,7 @@ def randomTest(GAGen,iterTime, spatial_parallel_list, memory_param, NoC_param, a
 				sheet.cell(row+2, col+1, column_data)
 
 		workbook.save(excel_filename)
-	return edp_res_min, energy_min, delay_min, code_min, degrade_ratio_min, degrade_ratio_dict_min, compuation_cycles_min, latency_list_d, energy_list_d
+	return best_sample, best_degrade_ratio_dict, latency_list_d, energy_list_d
 
 # Modified in 22/9/17:
 # --- head, tail的判断以及作为头层增加的列数自动化生成  
@@ -515,92 +525,120 @@ def randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, outDir):
 	plt.tight_layout(pad=1.1)
 	plt.savefig(outDir + "/" + layer_name + "_scatter_plot.png", bbox_inches = 'tight')
 
-def randomTest_NoC_ours(iterTime, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, input_act_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
+def randomTest_NoC_ours(mid_result_record_file, nn_name, iterTime, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, all_sim_node_num, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
-	edp_res_min_dict = {}
-	energy_min_dict = {}
-	delay_min_dict = {}
-	code_min_dict = {}
-	degrade_ratio_min_dict = {}
+	best_edp_dict = {}
+	best_energy_dict = {}
+	best_delay_dict = {}
+	best_code_dict = {}
+	best_degrade_ratio_dict = {}
 	NoC_DR_dict = {}
 	L2_to_DRAM_DR_dict = {}
 	DRAM_to_L2_DR_dict = {}
-	degrade_ratio_dict_min_dict = {}
-	compuation_cycles_min_dict = {}
+	NoP_DR_dict = {}
+	best_degrade_ratio_dict_dict = {}
+	best_compuation_cycles_dict = {}
+
+	best_sample_dict = {}
+
 	edp_total = 0
 
 	latency_list_dict = {}
 	energy_list_dict = {}
 
+	i_act_enough_dict = {}
+	layer_par_num_dict = {}
+	layer_par_num_detail_dict = {}
+
 	for layer_name in layer_dict:
-		# ---输出文件
+		# --- 输出文件名 --- #
 		if save_all_records == 1:
 			record_filename = record_dir + "/" + layer_name + "_" + multi_layer_tag + ".xlsx"
 		else:
 			record_filename = None
+		workload_name = "{}_{}".format(nn_name, layer_name)
 
-		# --- 初始化参数		
+		# --- 初始化参数 --- #
 		network_param = layer_dict[layer_name]
-		i_act_num = input_act_num_dict[layer_name]
-		chiplet_num = HW_param["Chiplet"][0] * HW_param["Chiplet"][1]
-		OL2_mem = memory_param["OL2"]*8*1024/act_wgt_width * chiplet_num
-		if i_act_num <= OL2_mem:
-			i_act_enough = 1
+		i_act_enough = layer_dict[layer_name]['i_act_enough']
+		i_act_enough_dict[layer_name] = i_act_enough
+		if "weight_enough" in layer_dict[layer_name]:
+			weight_enough = layer_dict[layer_name]["weight_enough"]
+			par_num = layer_dict[layer_name]['P_par'] * layer_dict[layer_name]['Q_par']
+			layer_par_num_detail_dict[layer_name] = [layer_dict[layer_name]['P_par'], layer_dict[layer_name]['Q_par']]
 		else:
-			i_act_enough = 0
-		GAGen = GaEncode(GaType, network_param, HW_param, debug=0)
+			weight_enough = 0
+			par_num = 1
+			layer_par_num_detail_dict[layer_name] = [1, 1]
+		layer_par_num_dict[layer_name] = par_num
 
-		edp_res_min, energy_min, delay_min, code_min, degrade_ratio_1, degrade_ratio_dict_1, compuation_cycles_1,  latency_list_d, energy_list_d = randomTest(GAGen, iterTime, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num, if_multicast, record_filename, i_act_enough, io_die_tag = io_die_tag)
-		edp_res_min_dict[layer_name] = edp_res_min
-		energy_min_dict[layer_name] = energy_min
-		delay_min_dict[layer_name] = delay_min
-		code_min_dict[layer_name] = code_min
-		degrade_ratio_min_dict[layer_name] = degrade_ratio_1
-		NoC_DR_dict[layer_name] = degrade_ratio_dict_1["NoC"]
-		L2_to_DRAM_DR_dict[layer_name] = degrade_ratio_dict_1["L2_to_DRAM"]
-		DRAM_to_L2_DR_dict[layer_name] = degrade_ratio_dict_1["DRAM_to_L2"]
-		degrade_ratio_dict_min_dict[layer_name] = degrade_ratio_dict_1
-		compuation_cycles_min_dict[layer_name] = compuation_cycles_1
-		edp_total += edp_res_min
+		CodeGen = Encoder(GaType, network_param, temporal_level, debug=0)
+		Parser = Decoder(temporal_level, HW_param, network_param)
+
+		best_sample, degrade_ratio_dict, latency_list_d, energy_list_d = \
+			randomTest(CodeGen, Parser, iterTime, spatial_parallel_list, memory_param, NoC_param, all_sim_node_num, if_multicast, record_filename, workload_name, i_act_enough, weight_enough, par_num, multi_layer_tag, io_die_tag = io_die_tag)
+		best_edp_dict[layer_name] 		= best_sample["edp"]
+		best_energy_dict[layer_name] 	= best_sample["energy"]
+		best_delay_dict[layer_name] 	= best_sample["delay"]
+		best_code_dict[layer_name] 		= best_sample["code"]
+		best_degrade_ratio_dict[layer_name] = best_sample["degrade_ratio"]
+		NoC_DR_dict[layer_name] = degrade_ratio_dict["NoC"]
+		L2_to_DRAM_DR_dict[layer_name] = degrade_ratio_dict["L2_to_DRAM"]
+		DRAM_to_L2_DR_dict[layer_name] = degrade_ratio_dict["DRAM_to_L2"]
+		best_degrade_ratio_dict_dict[layer_name] = degrade_ratio_dict
+		best_compuation_cycles_dict[layer_name] = best_sample["compuation_cycles"]
+		edp_total += best_sample["edp"]
 		latency_list_dict[layer_name] = latency_list_d
 		energy_list_dict[layer_name] = energy_list_d
+
+		best_sample_dict[layer_name] = best_sample
+
+		# randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, result_dir)
 	
 	file_1 = result_dir + "/final_result_record_" + multi_layer_tag + ".txt"
 	f = open(file_1,'w')
-	print(edp_res_min_dict, file=f)
-	print(energy_min_dict, file=f)
-	print(delay_min_dict, file=f)
-	print(code_min_dict, file = f)
-	print(degrade_ratio_min_dict, file = f)
+	print(best_edp_dict, file=f)
+	print(best_energy_dict, file=f)
+	print(best_delay_dict, file=f)
+	print(best_code_dict, file = f)
+	print(best_degrade_ratio_dict, file = f)
 	print(NoC_DR_dict, file = f)
 	print(L2_to_DRAM_DR_dict, file = f)
 	print(DRAM_to_L2_DR_dict, file = f)
-	print(degrade_ratio_dict_min_dict, file = f)
-	print(compuation_cycles_min_dict, file = f)
+	print(best_degrade_ratio_dict_dict, file = f)
+	print(best_compuation_cycles_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
 	f.close()
-	randomTestScatterPlot(latency_list_d, energy_list_d, layer_name, result_dir)
+
+	file_2 = mid_result_record_file
+	f_2 = open(file_2, 'w')
+	for layer_name, best_sample in best_sample.items():
+		print("layer_name\t{}".format(layer_name), file=f_2)
+		for index, value in best_sample.items():
+			print("---\t{}\t{}".format(index, value), file=f_2)
+		print("", file=f_2)
+	f_2.close()
 
 def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir, GaType, HW_param, memory_param, layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag="initial", if_multicast=1, io_die_tag = 1):
 	
-	edp_res_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	energy_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	delay_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	code_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	degrade_ratio_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_edp_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_energy_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_delay_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_code_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_degrade_ratio_dict = {"mid":{} , "head":{}, "tail":{}}
 	NoC_DR_dict = {"mid":{} , "head":{}, "tail":{}}
 	L2_to_DRAM_DR_dict = {"mid":{} , "head":{}, "tail":{}}
 	DRAM_to_L2_DR_dict = {"mid":{} , "head":{}, "tail":{}}
 	NoP_DR_dict = {"mid":{} , "head":{}, "tail":{}}
-	degrade_ratio_dict_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	input_DRAM_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	input_L2_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	weight_DRAM_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	weight_L2_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	output_rd_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
-	output_wr_flit_needed_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_degrade_ratio_dict_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_input_DRAM_flit_needed_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_input_L2_flit_needed_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_weight_DRAM_flit_needed_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_weight_L2_flit_needed_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_output_rd_flit_needed_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_output_wr_flit_needed_dict = {"mid":{} , "head":{}, "tail":{}}
 	chiplet_spatial_parallel_dict = {"mid":{} , "head":{}, "tail":{}}
-	compuation_cycles_min_dict = {"mid":{} , "head":{}, "tail":{}}
+	best_compuation_cycles_dict = {"mid":{} , "head":{}, "tail":{}}
 	iter_num_dict = {"mid":{} , "head":{}, "tail":{}}
 	edp_total = 0
 	excel_data = []
@@ -710,55 +748,55 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 		
 		# --- 各层结果记录
 		for pos in ["mid", "head", "tail"]:
-			edp_res_min_dict[pos][layer_name] = GA_Solver.best_out["edp"][pos]
-			energy_min_dict[pos][layer_name] = GA_Solver.best_out["e_sum"][pos]
-			delay_min_dict[pos][layer_name] = GA_Solver.best_out["delay"][pos]
-			code_min_dict[pos][layer_name] = GA_Solver.best_out["code"]
-			degrade_ratio_min_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio"][pos]
+			best_edp_dict[pos][layer_name] = GA_Solver.best_out["edp"][pos]
+			best_energy_dict[pos][layer_name] = GA_Solver.best_out["e_sum"][pos]
+			best_delay_dict[pos][layer_name] = GA_Solver.best_out["delay"][pos]
+			best_code_dict[pos][layer_name] = GA_Solver.best_out["code"]
+			best_degrade_ratio_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio"][pos]
 
 			NoC_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["NoC"]
 			L2_to_DRAM_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["L2_to_DRAM"]
 			DRAM_to_L2_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["DRAM_to_L2"]
 			NoP_DR_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]["NoP"]
 
-			input_DRAM_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["input_DRAM"]
-			weight_DRAM_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["weight_DRAM"]
-			input_L2_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["input_L2"]
-			weight_L2_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["weight_L2"]
-			output_rd_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["output_rd"]
-			output_wr_flit_needed_min_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["output_wr"]
+			best_input_DRAM_flit_needed_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["input_DRAM"]
+			best_weight_DRAM_flit_needed_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["weight_DRAM"]
+			best_input_L2_flit_needed_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["input_L2"]
+			best_weight_L2_flit_needed_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["weight_L2"]
+			best_output_rd_flit_needed_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["output_rd"]
+			best_output_wr_flit_needed_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["output_wr"]
 			chiplet_spatial_parallel_dict[pos][layer_name] = GA_Solver.best_out["flit_needed_dict"][pos]["chiplet_parallel"]
 
-			degrade_ratio_dict_min_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]
-			compuation_cycles_min_dict[pos][layer_name] = GA_Solver.best_out["compuation_cycles"][pos]
+			best_degrade_ratio_dict_dict[pos][layer_name] = GA_Solver.best_out["degrade_ratio_dict"][pos]
+			best_compuation_cycles_dict[pos][layer_name] = GA_Solver.best_out["compuation_cycles"][pos]
 			iter_num_dict[pos][layer_name] = iter_num_total
 
 
 		edp_total += GA_Solver.best_out["edp"]["mid"]
 		
-		layer_data_record = [layer_name, edp_res_min_dict["mid"][layer_name], energy_min_dict["mid"][layer_name], delay_min_dict["mid"][layer_name], str(code_min_dict["mid"][layer_name]), degrade_ratio_min_dict["mid"][layer_name], NoC_DR_dict["mid"][layer_name], L2_to_DRAM_DR_dict["mid"][layer_name], DRAM_to_L2_DR_dict["mid"][layer_name], str(degrade_ratio_dict_min_dict["mid"][layer_name]), input_DRAM_flit_needed_min_dict["mid"][layer_name], input_L2_flit_needed_min_dict["mid"][layer_name], weight_DRAM_flit_needed_min_dict["mid"][layer_name], weight_L2_flit_needed_min_dict["mid"][layer_name], output_rd_flit_needed_min_dict["mid"][layer_name], output_wr_flit_needed_min_dict["mid"][layer_name], compuation_cycles_min_dict["mid"][layer_name], iter_num_dict["mid"][layer_name]]
+		layer_data_record = [layer_name, best_edp_dict["mid"][layer_name], best_energy_dict["mid"][layer_name], best_delay_dict["mid"][layer_name], str(best_code_dict["mid"][layer_name]), best_degrade_ratio_dict["mid"][layer_name], NoC_DR_dict["mid"][layer_name], L2_to_DRAM_DR_dict["mid"][layer_name], DRAM_to_L2_DR_dict["mid"][layer_name], str(best_degrade_ratio_dict_dict["mid"][layer_name]), best_input_DRAM_flit_needed_dict["mid"][layer_name], best_input_L2_flit_needed_dict["mid"][layer_name], best_weight_DRAM_flit_needed_dict["mid"][layer_name], best_weight_L2_flit_needed_dict["mid"][layer_name], best_output_rd_flit_needed_dict["mid"][layer_name], best_output_wr_flit_needed_dict["mid"][layer_name], best_compuation_cycles_dict["mid"][layer_name], iter_num_dict["mid"][layer_name]]
 		excel_data.append(layer_data_record)
 	
 	# --- 结果输出 mid
 	file_1 = result_dir + "/final_result_record_" + multi_layer_tag + "_midLayer.txt"
 	f = open(file_1,'w')
-	print("edp: ", edp_res_min_dict["mid"], file=f)
-	print("energy: ", energy_min_dict["mid"], file=f)
-	print("delay: ", delay_min_dict["mid"], file=f)
-	print("code: ", code_min_dict["mid"], file = f)
-	print("degrade_ratio: ", degrade_ratio_min_dict["mid"], file = f)
+	print("edp: ", best_edp_dict["mid"], file=f)
+	print("energy: ", best_energy_dict["mid"], file=f)
+	print("delay: ", best_delay_dict["mid"], file=f)
+	print("code: ", best_code_dict["mid"], file = f)
+	print("degrade_ratio: ", best_degrade_ratio_dict["mid"], file = f)
 	print("NoC_DR: ", NoC_DR_dict["mid"], file = f)
 	print("L2_to_DRAM_DR: ", L2_to_DRAM_DR_dict["mid"], file = f)
 	print("DRAM_to_L2_DR: ", DRAM_to_L2_DR_dict["mid"], file = f)
 	print("NoP_DR: ", NoP_DR_dict["mid"], file = f)
-	print("input_DRAM_flit_needed: ",  input_DRAM_flit_needed_min_dict["mid"], file = f)
-	print("weight_DRAM_flit_needed: ",  weight_DRAM_flit_needed_min_dict["mid"], file = f)
-	print("input_L2_flit_needed: ",  input_L2_flit_needed_min_dict["mid"], file = f)
-	print("weight_L2_flit_needed: ",  weight_L2_flit_needed_min_dict["mid"], file = f)
-	print("output_rd_flit_needed: ",  output_rd_flit_needed_min_dict["mid"], file = f)
-	print("output_wr_flit_needed: ",  output_wr_flit_needed_min_dict["mid"], file = f)
+	print("input_DRAM_flit_needed: ",  best_input_DRAM_flit_needed_dict["mid"], file = f)
+	print("weight_DRAM_flit_needed: ",  best_weight_DRAM_flit_needed_dict["mid"], file = f)
+	print("input_L2_flit_needed: ",  best_input_L2_flit_needed_dict["mid"], file = f)
+	print("weight_L2_flit_needed: ",  best_weight_L2_flit_needed_dict["mid"], file = f)
+	print("output_rd_flit_needed: ",  best_output_rd_flit_needed_dict["mid"], file = f)
+	print("output_wr_flit_needed: ",  best_output_wr_flit_needed_dict["mid"], file = f)
 	print("chiplet_spatial_parallel: ",  chiplet_spatial_parallel_dict["mid"], file = f)
-	print("compuation_cycles: ", compuation_cycles_min_dict["mid"], file = f)
+	print("compuation_cycles: ", best_compuation_cycles_dict["mid"], file = f)
 	print("iter_num: ", iter_num_dict["mid"], file = f)
 	print("i_act_enough: ", i_act_enough_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
@@ -770,23 +808,23 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 	# --- 结果输出 head
 	file_2 = result_dir + "/final_result_record_" + multi_layer_tag + "_headLayer.txt"
 	f = open(file_2,'w')
-	print("edp: ", edp_res_min_dict["head"], file=f)
-	print("energy: ", energy_min_dict["head"], file=f)
-	print("delay: ", delay_min_dict["head"], file=f)
-	print("code: ", code_min_dict["head"], file = f)
-	print("degrade_ratio: ", degrade_ratio_min_dict["head"], file = f)
+	print("edp: ", best_edp_dict["head"], file=f)
+	print("energy: ", best_energy_dict["head"], file=f)
+	print("delay: ", best_delay_dict["head"], file=f)
+	print("code: ", best_code_dict["head"], file = f)
+	print("degrade_ratio: ", best_degrade_ratio_dict["head"], file = f)
 	print("NoC_DR: ", NoC_DR_dict["head"], file = f)
 	print("L2_to_DRAM_DR: ", L2_to_DRAM_DR_dict["head"], file = f)
 	print("DRAM_to_L2_DR: ", DRAM_to_L2_DR_dict["head"], file = f)
 	print("NoP_DR: ", NoP_DR_dict["head"], file = f)
-	print("input_DRAM_flit_needed: ",  input_DRAM_flit_needed_min_dict["head"], file = f)
-	print("weight_DRAM_flit_needed: ",  weight_DRAM_flit_needed_min_dict["head"], file = f)
-	print("input_L2_flit_needed: ",  input_L2_flit_needed_min_dict["head"], file = f)
-	print("weight_L2_flit_needed: ",  weight_L2_flit_needed_min_dict["head"], file = f)
-	print("output_rd_flit_needed: ",  output_rd_flit_needed_min_dict["head"], file = f)
-	print("output_wr_flit_needed: ",  output_wr_flit_needed_min_dict["head"], file = f)
+	print("input_DRAM_flit_needed: ",  best_input_DRAM_flit_needed_dict["head"], file = f)
+	print("weight_DRAM_flit_needed: ",  best_weight_DRAM_flit_needed_dict["head"], file = f)
+	print("input_L2_flit_needed: ",  best_input_L2_flit_needed_dict["head"], file = f)
+	print("weight_L2_flit_needed: ",  best_weight_L2_flit_needed_dict["head"], file = f)
+	print("output_rd_flit_needed: ",  best_output_rd_flit_needed_dict["head"], file = f)
+	print("output_wr_flit_needed: ",  best_output_wr_flit_needed_dict["head"], file = f)
 	print("chiplet_spatial_parallel: ",  chiplet_spatial_parallel_dict["head"], file = f)
-	print("compuation_cycles: ", compuation_cycles_min_dict["head"], file = f)
+	print("compuation_cycles: ", best_compuation_cycles_dict["head"], file = f)
 	print("iter_num_dict: ", iter_num_dict["head"], file = f)
 	print("i_act_enough_dict: ", i_act_enough_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
@@ -798,23 +836,23 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 	# --- 结果输出 tail
 	file_3 = result_dir + "/final_result_record_" + multi_layer_tag + "_tailLayer.txt"
 	f = open(file_3,'w')
-	print("edp: ", edp_res_min_dict["tail"], file=f)
-	print("energy: ", energy_min_dict["tail"], file=f)
-	print("delay: ", delay_min_dict["tail"], file=f)
-	print("code: ", code_min_dict["tail"], file = f)
-	print("degrade_ratio: ", degrade_ratio_min_dict["tail"], file = f)
+	print("edp: ", best_edp_dict["tail"], file=f)
+	print("energy: ", best_energy_dict["tail"], file=f)
+	print("delay: ", best_delay_dict["tail"], file=f)
+	print("code: ", best_code_dict["tail"], file = f)
+	print("degrade_ratio: ", best_degrade_ratio_dict["tail"], file = f)
 	print("NoC_DR: ", NoC_DR_dict["tail"], file = f)
 	print("L2_to_DRAM_DR: ", L2_to_DRAM_DR_dict["tail"], file = f)
 	print("DRAM_to_L2_DR: ", DRAM_to_L2_DR_dict["tail"], file = f)
 	print("NoP_DR: ", NoP_DR_dict["tail"], file = f)
-	print("input_DRAM_flit_needed: ",  input_DRAM_flit_needed_min_dict["tail"], file = f)
-	print("weight_DRAM_flit_needed: ",  weight_DRAM_flit_needed_min_dict["tail"], file = f)
-	print("input_L2_flit_needed: ",  input_L2_flit_needed_min_dict["tail"], file = f)
-	print("weight_L2_flit_needed: ",  weight_L2_flit_needed_min_dict["tail"], file = f)
-	print("output_rd_flit_needed: ",  output_rd_flit_needed_min_dict["tail"], file = f)
-	print("output_wr_flit_needed: ",  output_wr_flit_needed_min_dict["tail"], file = f)
+	print("input_DRAM_flit_needed: ",  best_input_DRAM_flit_needed_dict["tail"], file = f)
+	print("weight_DRAM_flit_needed: ",  best_weight_DRAM_flit_needed_dict["tail"], file = f)
+	print("input_L2_flit_needed: ",  best_input_L2_flit_needed_dict["tail"], file = f)
+	print("weight_L2_flit_needed: ",  best_weight_L2_flit_needed_dict["tail"], file = f)
+	print("output_rd_flit_needed: ",  best_output_rd_flit_needed_dict["tail"], file = f)
+	print("output_wr_flit_needed: ",  best_output_wr_flit_needed_dict["tail"], file = f)
 	print("chiplet_spatial_parallel: ",  chiplet_spatial_parallel_dict["tail"], file = f)
-	print("compuation_cycles: ", compuation_cycles_min_dict["tail"], file = f)
+	print("compuation_cycles: ", best_compuation_cycles_dict["tail"], file = f)
 	print("iter_num_dict: ", iter_num_dict["tail"], file = f)
 	print("i_act_enough_dict: ", i_act_enough_dict, file = f)
 	print("edp_total: ", edp_total, file = f)
@@ -839,7 +877,7 @@ def gaTest_NoC_ours(num_gen, num_iter, result_dir, save_all_records, record_dir,
 	filename = result_dir + "/final_result_record.xlsx"
 	workbook.save(filename)
 
-	return edp_res_min_dict, energy_min_dict, delay_min_dict, code_min_dict
+	return best_edp_dict, best_energy_dict, best_delay_dict, best_code_dict
 
 def run_test_intralayer(app_name, chiplet_num, temporal_level, architecture="ours", alg="GA", encode_type="index", save_all_records=0):
 	abs_path = os.path.dirname(os.path.abspath(__file__))
@@ -1004,6 +1042,8 @@ if __name__ == '__main__':
 		result_outdir = os.path.join(result_outdir, chiplet_parallel + "_and_" + PE_parallel)
 		os.makedirs(result_outdir, exist_ok=True)
 
+		mid_result_record = os.path.join(abs_path, "{}_c{}_result.txt".format(app_name, chiplet_num))
+
 		# --- 硬件参数
 		HW_param_ours = {"Chiplet":[4,4],"PE":[4,4],"intra_PE":{"C":16,"K":16}}       	# from granularity exploration
 		HW_param_nnabton = {"Chiplet":[4,4],"PE":[4,4],"intra_PE":{"C":16,"K":16}}       	# from nnbaton
@@ -1093,17 +1133,17 @@ if __name__ == '__main__':
 				gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, multi_layer_tag = "tailFuse", io_die_tag=io_die_tag)
 			#gaTest_NoC_ours(num_gen, num_iter, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, NoC_param, optimization_objective, layer_name_dict, io_die_tag=io_die_tag)
 		elif alg == "random":
-			randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, input_activation_num, spatial_parallel_list, NoC_param, all_sim_node_num)
+			randomTest_NoC_ours(mid_result_record, app_name, iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, all_sim_node_num)
 			if layer_fuse_tag == 1:
-				randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, head_layer_dict, head_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "headFuse")
-				randomTest_NoC_ours(iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, tail_layer_dict, tail_iact_num_dict, spatial_parallel_list, NoC_param, all_sim_node_num, multi_layer_tag = "tailFuse")
+				randomTest_NoC_ours(mid_result_record, app_name, iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, all_sim_node_num, multi_layer_tag = "headFuse")
+				randomTest_NoC_ours(mid_result_record, app_name, iterTime, result_outdir, save_all_records, record_outdir, encode_type, HW_param, memory_param, layer_dict, spatial_parallel_list, temporal_level, NoC_param, optimization_objective, layer_name_dict, all_sim_node_num, multi_layer_tag = "tailFuse")
 		else:
 			print("Error alg {}, not supported!".format(alg))
 		
 		if debug_final:
 			print("chiplet_num={} ----------".format(chiplet_num), file = f_debug_final)
 			print("edp_min={}".format(edp_res_min_dict["mid"]), file = f_debug_final)
-			print("energy_min={}".format(energy_min_dict["mid"]), file = f_debug_final)
-			print("delay_min={}".format(delay_min_dict["mid"]), file = f_debug_final)
+			print("best_energy={}".format(energy_min_dict["mid"]), file = f_debug_final)
+			print("best_delay={}".format(delay_min_dict["mid"]), file = f_debug_final)
 			print("code_min={}".format(code_min_dict["mid"]), file = f_debug_final)
 		

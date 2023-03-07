@@ -46,13 +46,16 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     # 映射方案 (目前只实现了K维度有并行度)
     # Ga Encode
     #for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list = GaGetChild()
+    #-------------------------------------------------#
+    #----------------- Get HW Parm -------------------#
+    #-------------------------------------------------#
     CoreNum = HW_param["PE"][0] * HW_param["PE"][1]
     PE_lenth = HW_param["PE"][1]
     PE_height = HW_param["PE"][0]
     ChipNum = HW_param["Chiplet"][0] * HW_param["Chiplet"][1]
-    Chip_lenth = HW_param["maxChiplet"][1]
-    Chip_height = HW_param["maxChiplet"][0]
-    maxChipNum = Chip_lenth * Chip_lenth
+    Chip_lenth = HW_param["maxChiplet"][1]  # total chiplet lenth
+    Chip_height = HW_param["maxChiplet"][0] # total chiplet height
+    maxChipNum = Chip_lenth * Chip_lenth    # total chiplet num
     port_average = (4 + (Chip_lenth-2+Chip_height-2)*2*2 + (Chip_height-2)*(Chip_lenth-2)*4) / maxChipNum
     OL1 = memory_param["OL1"]
     OL2 = memory_param["OL2"]
@@ -60,16 +63,23 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     AL2 = memory_param["AL2"]
     WL1 = memory_param["WL1"]
     WL2 = memory_param["WL2"]
+
+    #-------------------------------------------------#
+    #------------------ Get Dataflow -----------------#
+    #-------------------------------------------------#
     data_flow = for_list[0]
     ol1_ratio = for_list[1]
     al1_ratio = for_list[2]
     wl1_ratio = for_list[3]
     all_param = for_list[4]
     out_final = for_list[5]
+
+    '''
     if_act_share_PE = for_list[6]
     if_wgt_share_PE = for_list[7]
     if_act_share_Chiplet = for_list[8]
     if_wgt_share_Chiplet = for_list[9]
+    '''
 
     # mapping parameter
     P1,P2,P3 = partition_list["P"][0],partition_list["P"][1],partition_list["P"][2]
@@ -92,12 +102,16 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     # memory node id
     ol2_node = PE_height * (PE_lenth + 1) + A_W_offset['o']
-
-    al2_node = ol2_node + PE_lenth + 1
-    wl2_node = ol2_node + (PE_lenth + 1) * 2
+    if PE_height == 2:
+        al2_node = ol2_node + PE_lenth + 1
+        wl2_node = ol2_node + PE_lenth + 1
+    else:
+        assert(PE_height > 1)
+        al2_node = ol2_node + PE_lenth + 1
+        wl2_node = ol2_node + (PE_lenth + 1) * 2
     dram_node  = 0
 
-
+    # runtime param
     runtimeP = PP3*P3*PP2*P2*P1
     runtimeQ = PQ3*Q3*PQ2*Q2*Q1
     runtimeK = PK3*K3*PK2*K2*K1*PK0
@@ -116,7 +130,9 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     #print ("compuation_num=",compuation_num)
     #print ("compuation_cycles=",compuation_cycles)
 
-	# io die : ddr bandwidth
+    #-------------------------------------------------#
+    #----------------- IO-DIE DDR-BW -----------------#
+    #-------------------------------------------------#
     ddr_bandwidth_unit = ddr_bandwidth / 4
     minChipNumIODie = runtimeChipNum % 4
     if minChipNumIODie == 0:
@@ -210,7 +226,9 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
         
         wl1_need = wl1_need * wl1_ratio[id]
+
         cal = cal * all_param[id]
+
         cal_cycles[param] = cal
         OL1_need[param] = ol1_need
         AL1_need[param] = al1_need
@@ -218,16 +236,16 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
         L1_need[param] = wl1_need + al1_need + ol1_need
         if_out_final[param] = out_final[id]
         # L2
-        OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
         al2_need_Qpart = al1_need_Qpart * PQ2 
         al2_need_Ppart = al1_need_Ppart * PP2        
 
         al2_need_Q_final = al2_need_Qpart * stride + al1_need_Spart - stride
         al2_need_P_final = al2_need_Ppart * stride + al1_need_Rpart - stride
-        al2_need = al1_need_CKpart * al2_need_Q_final * al2_need_P_final * PC2
+        al2_need = al1_need_CKpart * PC2 * al2_need_Q_final * al2_need_P_final
         
-        AL2_need[param] = al2_need #这里有点问题
+        AL2_need[param] = al2_need
         WL2_need[param] = wl1_need * PK2  * PC2
+        OL2_need[param] = ol1_need * PK2 * PQ2 * PP2
 
     repeat = 1
     repeat_num = {}
@@ -354,9 +372,13 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     core_neu_num_rd_wgt += WL1_need[inner] * repeat_num[cur]
 
     # 考虑上并行度带来的数据复用机会 (多播)
+    neu_num_wr_ol1 = core_neu_num_rd_opt * CoreNum * ChipNum
+    neu_num_wr_al1 = core_neu_num_rd_act * CoreNum * ChipNum
+    neu_num_wr_wl1 = core_neu_num_rd_wgt * CoreNum * ChipNum
+    neu_num_rd_ol1 = core_neu_num_wr_opt * CoreNum * ChipNum
     if if_multicast == 1:
         core_neu_num_wr_opt = core_neu_num_wr_opt * CoreNum * ChipNum  # 没有机会复用
-        core_neu_num_rd_opt = core_neu_num_rd_opt * CoreNum * ChipNum 
+        core_neu_num_rd_opt = core_neu_num_rd_opt * CoreNum * ChipNum /PC2
         core_neu_num_rd_wgt = core_neu_num_rd_wgt * CoreNum * ChipNum /PP2 / PQ2
         core_neu_num_rd_act = core_neu_num_rd_act * CoreNum * ChipNum /PK2 
     elif if_multicast == 0:
@@ -374,11 +396,17 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
     if (if_out_final[data_flow[ol1_cp_id]]!=1):
         energy_wr_opt_L2 = core_neu_num_wr_opt * energy_l2 * psum_width 
+        energy_rd_opt_L1 = neu_num_rd_ol1 * SRAM_energy(OL1) * psum_width
     else: 
         energy_wr_opt_L2 = core_neu_num_wr_opt * energy_l2 * act_wgt_width 
+        energy_rd_opt_L1 = neu_num_rd_ol1 * SRAM_energy(OL1) * act_wgt_width
     energy_rd_opt_L2 = core_neu_num_rd_opt * energy_l2 * psum_width
     energy_rd_wgt_L2 = core_neu_num_rd_wgt * energy_l2_w * act_wgt_width
     energy_rd_act_L2 = core_neu_num_rd_act * energy_l2 * act_wgt_width
+
+    energy_rd_wgt_L1 += neu_num_wr_wl1 * SRAM_energy(WL1) * act_wgt_width
+    energy_rd_agt_L1 += neu_num_wr_al1 * SRAM_energy(AL1) * act_wgt_width
+    energy_rd_opt_L1 += neu_num_wr_ol1 * SRAM_energy(OL1) * act_wgt_width
 
     # L2 用于统计通信总量 & prediction
     chip_pkt_num_wr_opt = 0; chip_neu_num_wr_opt = 0
@@ -638,7 +666,7 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
     cp_list = [ol1_cp_id, al1_cp_id, wl1_cp_id, ol2_cp_id, al2_cp_id, wl2_cp_id]
     utilization_ratio_list = [ol1_utilization_ratio,al1_utilization_ratio,wl1_utilization_ratio, \
                               ol2_utilization_ratio,al2_utilization_ratio,wl2_utilization_ratio]
-    energy_L1_list = [energy_rd_wgt_L1, energy_rd_act_L1]
+    energy_L1_list = [energy_rd_wgt_L1, energy_rd_act_L1, energy_rd_opt_L1]
     energy_dram_list = [energy_wr_opt_dram, energy_rd_opt_dram, energy_rd_wgt_dram, energy_rd_act_dram]
     energy_L2_list = [energy_wr_opt_L2, energy_rd_opt_L2, energy_rd_wgt_L2, energy_rd_act_L2]
     energy_die2die = 0;	energy_core2core = 0
@@ -687,9 +715,9 @@ def calFitness(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_li
 
 # end 性能测评
 
-def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast):
+def createTaskFile(dir_name, for_list, act_wgt_dict, out_dict, parallel_dim_list, partition_list, network_param, HW_param, memory_param, NoC_param, all_sim_node_num, if_multicast, io_die_tag=1):
     task_name = "single_engine_example"
-    output_folder_name = "./task/"+task_name
+    output_folder_name = "./task/{}/{}".format(dir_name, task_name)
     output_folder_name_start = output_folder_name+"_start"
     output_folder_name_pipe = output_folder_name+"_pipe"
 
@@ -731,15 +759,6 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     PK0 = HW_param["intra_PE"]["K"]
     PC0 = HW_param["intra_PE"]["C"]
 
-	 # io die : ddr bandwidth
-    ddr_bandwidth_io_die_weight = ddr_bandwidth
-    ddr_bandwidth_io_die_input = ddr_bandwidth
-    if PP3 == 16:
-        ddr_bandwidth_io_die_input /= 4
-    if PK3 == 16 or PK3 == 4:
-        ddr_bandwidth_io_die_weight /= 4
-    ddr_bandwidth_io_die_output = ddr_bandwidth / 4
-
     # network parameter
     P = network_param["P"]
     Q = network_param["Q"]
@@ -779,6 +798,37 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
     compuation_cycles = compuation_num/runtimeCoreNum/runtimeChipNum/PC0/PK0
     #print ("compuation_num=",compuation_num)
     #print ("compuation_cycles=",compuation_cycles)
+
+    #-------------------------------------------------#
+    #----------------- IO-DIE DDR-BW -----------------#
+    #-------------------------------------------------#
+    ddr_bandwidth_unit = ddr_bandwidth / 4
+    minChipNumIODie = runtimeChipNum % 4
+    if minChipNumIODie == 0:
+        minChipNumIODie = 4
+    ddr_bandwidth_dict_no_reuse = {"input":ddr_bandwidth_unit, "weight":ddr_bandwidth_unit, "output":ddr_bandwidth_unit}
+    ddr_bandwidth_io_die_method_dict = {}
+    if io_die_tag == 1:
+        PX3_list = [PP3*PQ3,PK3,PC3]
+        PX3_reuse_dim = ["weight","input","output"]
+        for id in range(len(PX3_list)):
+            if PX3_list[id] >= minChipNumIODie:
+                reuse_tag = PX3_reuse_dim[id]
+                ddr_bandwidth_dict = copy.deepcopy(ddr_bandwidth_dict_no_reuse)
+                ddr_bandwidth_dict[reuse_tag] *= minChipNumIODie
+                ddr_bandwidth_io_die_method_dict[reuse_tag] = copy.deepcopy(ddr_bandwidth_dict)
+            else:
+                pass
+        if len(ddr_bandwidth_io_die_method_dict) == 0 and minChipNumIODie == runtimeChipNum:
+            ddr_bandwidth_dict = copy.deepcopy(ddr_bandwidth_dict_no_reuse)
+            ddr_bandwidth_dict["input"] *= PX3_list[1]
+            ddr_bandwidth_dict["weight"] *= PX3_list[0]
+            ddr_bandwidth_dict["output"] *= PX3_list[2]
+            ddr_bandwidth_io_die_method_dict["unique"] = copy.deepcopy(ddr_bandwidth_dict)
+    else:
+        ddr_bandwidth_dict_no_reuse = {"input":ddr_bandwidth, "weight":ddr_bandwidth, "output":ddr_bandwidth}
+    if len(ddr_bandwidth_io_die_method_dict) == 0:
+        ddr_bandwidth_io_die_method_dict["unique"] = copy.deepcopy(ddr_bandwidth_dict_no_reuse)
 
     # storage size
     AL1_mem = AL1*8*1024/act_wgt_width/2 # /2是因为ping-pong
@@ -834,9 +884,9 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
         al2_need_Ppart = al1_need_Ppart * PP2
         al2_need_Q_final = al2_need_Qpart * stride + al2_need_Qpart - stride
         al2_need_P_final = al2_need_Ppart * stride + al2_need_Ppart - stride
-        al2_need = (al1_need_CKpart * al2_need_Qpart * al2_need_Ppart) * PC2
+        al2_need = (al1_need_CKpart * al2_need_Q_final * al2_need_P_final) * PC2
         
-        AL2_need[param] = al2_need #这里有点问题
+        AL2_need[param] = al2_need
         WL2_need[param] = wl1_need * PK2 * PC2
 
     repeat = 1
@@ -1020,21 +1070,40 @@ def createTaskFile(for_list, act_wgt_dict, out_dict, parallel_dim_list, partitio
         for dst in dst_list:					#写output不存在多播可能
             for link in route_table[(dst + 1000, ol2_node+1000)]:
                 F_cur[link] += ( bw_needed / bw_scales[link] )
+    
 
     # 对chip构建通信需求
     dram_to_L2_F_cur = L2_to_DRAM_F_cur = 0
+    bw_needed_io_die = {}
     # 用到的信息: chip_pkt_num_wr_opt; chip_pkt_num_rd_opt; chip_pkt_num_rd_wgt; chip_pkt_num_rd_act
-    bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle 
-    dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_input/noc_bandwidth)
+    bw_needed = (chip_pkt_num_rd_act) * flit_per_pkt  / compuation_cycles # act 带宽需求,单位是flits/cycle
+    bw_needed_io_die["input"] = bw_needed  
+    #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_input/noc_bandwidth)
     
     bw_needed = (chip_pkt_num_rd_wgt) * flit_per_pkt  / compuation_cycles # wgt 带宽需求,单位是flits/cycle 
-    dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_weight/noc_bandwidth)
+    bw_needed_io_die["weight"] = bw_needed  
+    #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_weight/noc_bandwidth)
 
     bw_needed = (chip_pkt_num_rd_opt) * flit_per_pkt  / compuation_cycles # out read带宽需求,单位是flits/cycle 
-    dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
+    bw_needed_io_die["output"] = bw_needed  
+    #dram_to_L2_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
 
     bw_needed = (chip_pkt_num_wr_opt) * flit_per_pkt  / compuation_cycles # out write带宽需求,单位是flits/cycle 
-    L2_to_DRAM_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
+    bw_needed_io_die["output"] = bw_needed  
+    #L2_to_DRAM_F_cur += bw_needed / (ddr_bandwidth_io_die_output/noc_bandwidth)
+    L2_to_DRAM_F_cur = 0 # 读写复用
+
+    bw_needed_io_die_order = sorted(bw_needed_io_die.items(), key = lambda x: x[1])
+    data_type_order = [bw_needed_io_die_order[2][0], bw_needed_io_die_order[1][0], bw_needed_io_die_order[0][0], "unique"]
+    for data_type in data_type_order:
+        if data_type in ddr_bandwidth_io_die_method_dict:
+            ddr_bandwidth_io_die_input = ddr_bandwidth_io_die_method_dict[data_type]["input"]
+            ddr_bandwidth_io_die_weight = ddr_bandwidth_io_die_method_dict[data_type]["weight"]
+            ddr_bandwidth_io_die_output = ddr_bandwidth_io_die_method_dict[data_type]["output"]
+    
+    dram_to_L2_F_cur += bw_needed_io_die["input"] / (ddr_bandwidth_io_die_input/noc_bandwidth)
+    dram_to_L2_F_cur += bw_needed_io_die["weight"] / (ddr_bandwidth_io_die_weight/noc_bandwidth)
+    dram_to_L2_F_cur += bw_needed_io_die["output"] / (ddr_bandwidth_io_die_output/noc_bandwidth)
 
     degrade_ratio = max ( max(F_cur.values()), L2_to_DRAM_F_cur, dram_to_L2_F_cur)
     if (degrade_ratio < 1):
