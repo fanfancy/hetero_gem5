@@ -1,0 +1,6 @@
+PE_dim_x: 16
+PE_dim_y: 16
+PE_array_num: 256
+BW: 112.5
+frequence: 1
+WL2_size: 524288
